@@ -42,7 +42,8 @@ class Puente(QObject):
         self.asistente = Asistente(
             cfg,
             al_proponer_plan=lambda p: self.plan.emit(json.dumps(p, ensure_ascii=False)),
-            al_cambiar_pendientes=self._emitir_pendientes)
+            al_cambiar_pendientes=self._emitir_pendientes,
+            al_reunion=self.reunion_desde_chat)
 
     # ---------- chat ----------
     @Slot(str)
@@ -61,7 +62,10 @@ class Puente(QObject):
                 r = f"Algo falló: {e}"
             self.respuesta.emit(r)
             problema = r.startswith(("Algo falló", "No tengo", "Error", "Claude está saturado", "No pude", "Me falta"))
-            self.estado.emit("preocupado" if problema else "hablando")
+            if self.grabadora.grabando:
+                self.estado.emit("escuchando")  # sigue en modo reunión
+            else:
+                self.estado.emit("preocupado" if problema else "hablando")
 
     # ---------- ventana ----------
     @Slot(int, int)
@@ -128,16 +132,27 @@ class Puente(QObject):
         self.aviso.emit(archivos.deshacer_ultimo())
 
     # ---------- reuniones ----------
+    def reunion_desde_chat(self, accion):
+        """Claude lo usa cuando Elías pide por chat empezar o terminar de escuchar una reunión."""
+        if accion == "iniciar" and self.grabadora.grabando:
+            return "Ya estaba escuchando la reunión."
+        if accion == "terminar" and not self.grabadora.grabando:
+            return "No estaba escuchando ninguna reunión."
+        self.reunion()
+        if accion == "iniciar":
+            return "Escuchando." if self.grabadora.grabando else "No pude empezar a escuchar (revisa el aviso en pantalla)."
+        return "Detenido. La minuta se hará en cuanto termine la transcripción; no hace falta responder más."
+
     @Slot()
     def reunion(self):
         if not reuniones.disponible():
-            self.aviso.emit("Para grabar reuniones corre una vez instalar_reuniones.bat")
+            self.aviso.emit("Para escuchar reuniones corre una vez instalar_reuniones.bat")
             return
         if not self.grabadora.grabando:
             try:
                 n = self.grabadora.iniciar()
-                self.aviso.emit("Grabando reunión (micrófono + audio de la laptop)…" if n == 2
-                                else "Grabando solo micrófono (no encontré el audio del sistema)…")
+                self.aviso.emit("Escuchando la reunión (tu micrófono + audio de Teams)…" if n == 2
+                                else "Escuchando solo tu micrófono (no encontré el audio de la laptop)…")
                 self.estado.emit("escuchando")
             except Exception as e:  # noqa: BLE001
                 self.aviso.emit(f"No pude abrir el micrófono: {e}")
@@ -150,6 +165,8 @@ class Puente(QObject):
         texto = reuniones.Grabadora.transcribir(
             carpeta, self.cfg["modelo_transcripcion"],
             al_avance=lambda p: self.aviso.emit(f"Transcribiendo… {p}%"))
+        if not self.cfg.get("conservar_audio"):
+            reuniones.borrar_audio(carpeta)  # solo se queda el texto
         if not texto.strip():
             return "No escuché nada en la grabación."
         if not self.cfg["api_key"]:

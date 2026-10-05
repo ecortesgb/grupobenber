@@ -22,6 +22,7 @@ CONFIG_DEFECTO = {
     "carpetas_permitidas": ["ESCRITORIO", "DOCUMENTOS", "DESCARGAS"],
     "modelo_transcripcion": "small",
     "recordatorio_minutos": 60,
+    "conservar_audio": False,
 }
 
 

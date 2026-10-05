@@ -12,7 +12,7 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 | Notas | "Anota que…" o "¿qué anoté sobre Elektra?". |
 | Ordenar escritorio / descargas | Analiza la carpeta y **propone** un plan. Nada se mueve hasta que presionas **Aplicar**; **Deshacer** regresa todo. |
 | Revisar código | "Revisa el archivo C:\…\medidas.dax y optimízalo" (lee .dax, .m, .sql, .bas, .py, .csv, .txt…). |
-| Minutas de reuniones | Botón **Reunión** para grabar, otra vez para detener. Graba tu micrófono **y** el audio de Teams/Zoom, transcribe **en tu laptop** y Claude arma la minuta y te registra tus acuerdos como pendientes. |
+| Minutas de reuniones | Solo cuando tú lo pides: botón **Reunión** o escríbele "toma minuta de esta junta" / "ya terminó". Escucha tu micrófono **y** el audio de Teams/Zoom, transcribe **en tu laptop**, arma la minuta y te registra tus acuerdos como pendientes. El audio se borra al terminar; solo quedan la transcripción y la minuta. |
 
 ## Instalar (una vez)
 1. Ten Python 3.10 a 3.13 instalado (el mismo que usas con `py -3`).
@@ -30,6 +30,7 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 | `carpetas_permitidas` | Las únicas carpetas que puede ver y ordenar. `ESCRITORIO`, `DOCUMENTOS` y `DESCARGAS` se ubican solas aunque estén en OneDrive. Puedes agregar rutas, p. ej. `"C:\\ARCHIVOS GB"`. |
 | `modelo_transcripcion` | `small` (equilibrado), `base` (más rápido), `medium` (más preciso, más lento). |
 | `recordatorio_minutos` | Cada cuánto revisa pendientes vencidos. |
+| `conservar_audio` | `false` (recomendado): borra el audio de la reunión después de transcribir. |
 
 ## Dónde quedan tus datos
 Todo en `%USERPROFILE%\GbSaurio\`: `saurio.db` (pendientes y notas), `planes\` (bitácora para deshacer), `reuniones\` (audio y transcripción), y los Excel exportados.

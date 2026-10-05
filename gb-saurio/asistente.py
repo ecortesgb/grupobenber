@@ -21,6 +21,7 @@ Cómo trabajas:
 - Organización de archivos: primero usa analizar_carpeta / listar_carpeta, luego propone con proponer_plan_organizacion.
   NUNCA digas que moviste archivos: solo propones; Elías decide con el botón "Aplicar". No propongas mover accesos directos ni instaladores sin explicar por qué.
 - Sugieres mejoras y automatizaciones con mentalidad de arquitecto de datos (modelos limpios, DAX eficiente, Power Query en vez de pasos manuales).
+- Reuniones: solo empiezas o terminas de escuchar cuando Elías lo pide (herramienta reunion). Nunca por iniciativa propia.
 - Si algo que propones puede dañar algo existente, dilo explícitamente antes.
 """
 
@@ -65,6 +66,12 @@ HERRAMIENTAS = [
     {"name": "leer_archivo",
      "description": "Lee un archivo de texto o código (.txt, .csv, .m, .dax, .sql, .py, .bas, etc.) para revisarlo u optimizarlo.",
      "input_schema": {"type": "object", "properties": {"ruta": {"type": "string"}}, "required": ["ruta"]}},
+    {"name": "reunion",
+     "description": "Empieza o termina de escuchar una reunión (Teams/Zoom/Meet: micrófono + audio de la laptop). "
+                    "Úsala SOLO cuando Elías lo pida explícitamente (p. ej. 'toma minuta de esta junta', 'ya terminó la reunión'). "
+                    "Al terminar, la transcripción y la minuta se hacen solas.",
+     "input_schema": {"type": "object", "properties": {
+         "accion": {"type": "string", "enum": ["iniciar", "terminar"]}}, "required": ["accion"]}},
     {"name": "proponer_plan_organizacion",
      "description": "Muestra a Elías un plan para mover archivos. NO mueve nada: él lo aplica con un botón. "
                     "carpeta_destino puede ser relativa a la carpeta del archivo (ej. 'Excel/2026') o absoluta.",
@@ -81,13 +88,14 @@ HERRAMIENTAS = [
 class Asistente:
     MAX_MENSAJES = 60  # al llegar aquí se inicia conversación nueva (pendientes y notas persisten)
 
-    def __init__(self, cfg, al_proponer_plan=None, al_cambiar_pendientes=None):
+    def __init__(self, cfg, al_proponer_plan=None, al_cambiar_pendientes=None, al_reunion=None):
         self.cfg = cfg
         self.cliente = anthropic.Anthropic(api_key=cfg["api_key"] or None)
         self.mensajes = []
         self.origen = "chat"
         self.al_proponer_plan = al_proponer_plan or (lambda plan: None)
         self.al_cambiar_pendientes = al_cambiar_pendientes or (lambda: None)
+        self.al_reunion = al_reunion or (lambda accion: "No disponible.")
 
     def _sistema(self):
         hoy = date.today()
@@ -116,6 +124,8 @@ class Asistente:
             return archivos.listar_carpeta(cfg, e["carpeta"])
         if nombre == "leer_archivo":
             return archivos.leer_archivo(cfg, e["ruta"])
+        if nombre == "reunion":
+            return {"resultado": self.al_reunion(e["accion"])}
         if nombre == "proponer_plan_organizacion":
             r = archivos.proponer_plan(cfg, e["motivo"], e["movimientos"])
             if archivos.plan_actual():

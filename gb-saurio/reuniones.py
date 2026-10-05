@@ -128,3 +128,7 @@ class Grabadora:
         (carpeta / "transcripcion.txt").write_text(texto, encoding="utf-8")
         return texto
 
+
+def borrar_audio(carpeta):
+    for nombre in ("microfono.wav", "sistema.wav"):
+        (carpeta / nombre).unlink(missing_ok=True)

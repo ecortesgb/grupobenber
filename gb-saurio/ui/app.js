@@ -123,7 +123,7 @@ function conectar(p) {
   p.plan.connect(mostrarPlan);
   p.pendientes.connect(pintarPendientes);
   p.aviso.connect((t) => {
-    if (t.startsWith("Grabando")) $("btnReunion").classList.add("grabando");
+    if (t.startsWith("Escuchando")) $("btnReunion").classList.add("grabando");
     if (t.startsWith("Reunión detenida") || t.startsWith("No pude abrir")) $("btnReunion").classList.remove("grabando");
     if (!t.startsWith("Transcribiendo…") || grande) agregar(t, "aviso");
     if (!grande) decir(t);
