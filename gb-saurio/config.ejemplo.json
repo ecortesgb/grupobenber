@@ -1,0 +1,8 @@
+{
+  "api_key": "PEGA-AQUI-TU-API-KEY-DE-ANTHROPIC",
+  "modelo": "claude-opus-5-5",
+  "esfuerzo": "medium",
+  "carpetas_permitidas": ["ESCRITORIO", "DOCUMENTOS", "DESCARGAS"],
+  "modelo_transcripcion": "small",
+  "recordatorio_minutos": 60
+}
