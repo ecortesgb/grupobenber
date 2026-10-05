@@ -33,6 +33,43 @@ html, body {
   cursor: grab;
 }
 #mascota:active { cursor: grabbing; }
+#sprite {
+  position: absolute; left: 50%; bottom: 4px;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 6px 6px rgba(0,0,0,.25));
+  pointer-events: none;
+}
+#sprite.cuerpo { height: 240px; translate: -50% 0; }
+/* poses de medio cuerpo: tamaño natural y se desvanecen abajo donde termina el recorte */
+#sprite.busto {
+  max-height: 225px; max-width: 220px; translate: -50% 0;
+  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+}
+#sprite.pop { animation: pop .28s ease-out; }
+@keyframes pop { from { opacity: .3; scale: .92; } to { opacity: 1; scale: 1; } }
+
+#mascota[data-anim="respira"] #sprite { animation: respira 3.2s ease-in-out infinite; }
+#mascota[data-anim="habla"]   #sprite { animation: habla .32s ease-in-out infinite; }
+#mascota[data-anim="brinca"]  #sprite { animation: brinca .55s ease-out infinite; }
+#mascota[data-anim="medita"]  #sprite { animation: medita 2.4s ease-in-out infinite; }
+#mascota[data-anim="mece"]    #sprite { animation: mece .5s ease-in-out infinite; }
+@keyframes respira { 0%,100% { transform: scale(1, 1) rotate(0); } 50% { transform: scale(1.01, 1.025) rotate(.6deg); } }
+@keyframes habla   { 0%,100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-3px) scale(1.01, .99); } }
+@keyframes brinca  { 0%,100% { transform: translateY(0) scale(1, 1); } 15% { transform: scale(1.04, .95); } 50% { transform: translateY(-22px) scale(.98, 1.03); } }
+@keyframes medita  { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+@keyframes mece    { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+
+#indicador {
+  position: absolute; right: 22px; top: 6px; z-index: 2;
+  background: #fff; color: #1d2733; border-radius: 12px; padding: 2px 9px;
+  font: 700 15px "Segoe UI", sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  animation: flota 1.4s ease-in-out infinite;
+}
+#indicador[hidden] { display: none; }
+#indicador.rec { color: #d9534f; font-size: 11px; }
+@keyframes flota { 0%,100% { translate: 0 0; } 50% { translate: 0 -4px; } }
+@media (prefers-reduced-motion: reduce) { #sprite, #indicador { animation: none !important; } }
 
 #globo {
   position: fixed; right: 150px; bottom: 175px; max-width: 200px;

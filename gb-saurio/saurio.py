@@ -1,6 +1,6 @@
 """GB Saurio: mascota 3D de escritorio con Claude.
 
-Ventana sin bordes, transparente y siempre encima. La mascota (three.js) y el chat
+Ventana sin bordes, transparente y siempre encima. La mascota (imágenes 2D) y el chat
 viven en ui/index.html; Python hace el trabajo real (Claude, archivos, pendientes, reuniones).
 """
 import json
@@ -60,7 +60,8 @@ class Puente(QObject):
             except Exception as e:  # noqa: BLE001
                 r = f"Algo falló: {e}"
             self.respuesta.emit(r)
-            self.estado.emit("hablando")
+            problema = r.startswith(("Algo falló", "No tengo", "Error", "Claude está saturado", "No pude", "Me falta"))
+            self.estado.emit("preocupado" if problema else "hablando")
 
     # ---------- ventana ----------
     @Slot(int, int)

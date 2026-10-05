@@ -47,11 +47,15 @@ mascota.addEventListener("pointermove", (e) => {
   if (dx || dy) {
     arrastre.movido += Math.abs(dx) + Math.abs(dy);
     arrastre.x = e.screenX; arrastre.y = e.screenY;
-    if (arrastre.movido > 4) puente && puente.mover(dx, dy);
+    if (arrastre.movido > 4) {
+      if (!arrastre.avisado) { window.saurio.estado("arrastrando"); arrastre.avisado = true; }
+      puente && puente.mover(dx, dy);
+    }
   }
 });
 mascota.addEventListener("pointerup", () => {
-  if (arrastre && arrastre.movido <= 4) { window.saurio && window.saurio.saludar(); expandir(!grande); }
+  if (arrastre && arrastre.movido <= 4) { window.saurio.saludar(); expandir(!grande); }
+  else if (arrastre) window.saurio.estado("idle");
   arrastre = null;
 });
 globo.addEventListener("click", () => expandir(true));
