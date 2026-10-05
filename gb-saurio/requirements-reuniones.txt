@@ -1,3 +1,5 @@
 numpy
 PyAudioWPatch
 faster-whisper
+# av 17+ lo bloquea Smart App Control de Windows; 16.1.0 sí pasa
+av==16.1.0
