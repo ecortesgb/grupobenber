@@ -37,7 +37,7 @@ El audio nunca sale de la laptop; a Claude solo se le manda el texto.
 
 ## Cómo está hecho (simple)
 - `saurio.py` abre una ventana transparente sin bordes y la conecta con la página `ui/`.
-- `ui/mascota.js` dibuja al dinosaurio con three.js (incluido en la carpeta, funciona sin internet) y lo anima: respira, parpadea, te sigue con la mirada, piensa, habla, brinca.
+- `ui/mascota.js` dibuja al GB Saurio según la hoja de referencia (gorra azul, camisa blanca con logo GB, pantalón negro) con three.js, incluido en la carpeta y sin internet. Respira, parpadea, te sigue con la mirada y cambia de pose: piensa (mano en la barbilla), escucha (mano en la oreja), avisa (señala), festeja y saluda.
 - `asistente.py` platica con Claude y le da "herramientas": pendientes, notas, ver carpetas, leer archivos y proponer planes.
 - `archivos.py` solo deja leer dentro de las carpetas permitidas; mover archivos solo ocurre con tu clic.
 - `reuniones.py` graba con WASAPI de Windows y transcribe con faster-whisper.
