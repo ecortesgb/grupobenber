@@ -1,7 +1,8 @@
 """Recorta las poses del GB Saurio desde la hoja de referencia y les quita el fondo blanco.
 
-Uso:  py -3 herramientas\\recortar_sprites.py ruta\\a\\gb_saurio_referencia.jpg
-Genera los PNG transparentes en ui\\sprites\\. Si cambias la hoja, ajusta las cajas de RECORTES.
+Uso:  py -3 herramientas\\recortar_sprites.py hoja_referencia.jpg principal
+      py -3 herramientas\\recortar_sprites.py hoja_poses.jpg poses
+Genera los PNG transparentes en ui\\sprites\\. Si cambias una hoja, ajusta sus cajas en HOJAS.
 """
 import sys
 from collections import deque
@@ -10,21 +11,24 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageFilter
 
-# nombre: (x1, y1, x2, y2) en la hoja de 944 x 1112 px
-RECORTES = {
-    "frente":      (292, 18, 668, 684),   # pulgar arriba, cuerpo completo
-    "lado":        (8, 22, 298, 512),
-    "espalda":     (48, 528, 308, 1028),
-    "sorprendido": (722, 34, 912, 196),
-    "preocupado":  (722, 214, 912, 366),
-    "emocionado":  (722, 379, 912, 530),
-    "saludo":      (722, 545, 912, 731),
-    "senalar":     (336, 760, 612, 1016),
-    "pensando":    (606, 785, 776, 1016),
-    "oreja":       (782, 785, 914, 1016),
+# Cajas (x1, y1, x2, y2) por hoja, en px de una hoja de 944 x 1112.
+HOJAS = {
+    # hoja 1 "character reference sheet": de ella solo se usa la pose de frente
+    "principal": {
+        "frente":   (292, 18, 668, 684),   # pulgar arriba, cuerpo completo
+    },
+    # hoja 2: seis poses de cuerpo completo
+    "poses": {
+        "pensando":    (30, 12, 312, 512),
+        "oreja":       (326, 12, 632, 512),
+        "sorprendido": (636, 12, 942, 512),
+        "preocupado":  (16, 522, 304, 1034),
+        "saludo":      (318, 522, 628, 1034),
+        "lado":        (636, 522, 942, 1034),
+    },
 }
 UMBRAL = 238  # más claro que esto y conectado al borde = fondo
-HUECOS = {"oreja": 400}  # fondo atrapado (p. ej. entre mano y cabeza) mayor a N píxeles también se quita
+HUECOS = {"oreja": 400, "pensando": 400, "saludo": 400, "sorprendido": 400}  # fondo atrapado (p. ej. entre mano y cabeza) mayor a N píxeles también se quita
 
 
 def _regiones(mascara):
@@ -88,13 +92,14 @@ def quitar_fondo(img, hueco_min=None):
     return rgba.crop(rgba.getbbox())
 
 
-def main(hoja, destino):
+def main(hoja, cual, destino):
     hoja = Image.open(hoja)
     destino.mkdir(parents=True, exist_ok=True)
-    for nombre, caja in RECORTES.items():
+    for nombre, caja in HOJAS[cual].items():
         quitar_fondo(hoja.crop(caja), HUECOS.get(nombre)).save(destino / f"{nombre}.png", optimize=True)
         print("ok", nombre)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], Path(__file__).resolve().parent.parent / "ui" / "sprites")
+    main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "principal",
+         Path(__file__).resolve().parent.parent / "ui" / "sprites")

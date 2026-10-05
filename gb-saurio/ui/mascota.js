@@ -1,4 +1,4 @@
-// GB Saurio en 2D: usa las poses recortadas de la hoja de referencia (ui/sprites/).
+// GB Saurio en 2D: usa las poses de cuerpo completo recortadas de las hojas de referencia (ui/sprites/).
 // Cada estado muestra una pose; el movimiento es con animaciones CSS (respirar, brincar, mecerse).
 const caja = document.getElementById("mascota");
 caja.innerHTML = `
@@ -19,7 +19,6 @@ const ESTADOS = {
   preocupado:  ["preocupado", "medita", "", 3000],
   arrastrando: ["lado", "", "", 0],
 };
-const CUERPO_COMPLETO = new Set(["frente", "lado", "espalda"]);
 
 // precarga para que el cambio de pose sea instantáneo
 Object.values(ESTADOS).forEach(([img]) => { new Image().src = `sprites/${img}.png`; });
@@ -31,8 +30,6 @@ function poner(nombre) {
   clearTimeout(temporizador);
   if (actual !== img) {
     sprite.src = `sprites/${img}.png`;
-    sprite.classList.toggle("cuerpo", CUERPO_COMPLETO.has(img));
-    sprite.classList.toggle("busto", !CUERPO_COMPLETO.has(img));
     sprite.classList.remove("pop"); void sprite.offsetWidth; sprite.classList.add("pop");
     actual = img;
   }

@@ -39,13 +39,7 @@ html, body {
   filter: drop-shadow(0 6px 6px rgba(0,0,0,.25));
   pointer-events: none;
 }
-#sprite.cuerpo { height: 240px; translate: -50% 0; }
-/* poses de medio cuerpo: tamaño natural y se desvanecen abajo donde termina el recorte */
-#sprite.busto {
-  max-height: 225px; max-width: 220px; translate: -50% 0;
-  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
-          mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
-}
+#sprite { height: 240px; translate: -50% 0; }
 #sprite.pop { animation: pop .28s ease-out; }
 @keyframes pop { from { opacity: .3; scale: .92; } to { opacity: 1; scale: 1; } }
 
