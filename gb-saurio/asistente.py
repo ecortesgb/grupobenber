@@ -146,7 +146,8 @@ class Asistente:
                     system=self._sistema(),
                     tools=HERRAMIENTAS,
                     messages=self.mensajes,
-                    extra_body={"output_config": {"effort": self.cfg["esfuerzo"]}},
+                    # Haiku no acepta el parámetro de esfuerzo
+                    extra_body={} if "haiku" in self.cfg["modelo"] else {"output_config": {"effort": self.cfg["esfuerzo"]}},
                 ) as stream:
                     resp = stream.get_final_message()
             except anthropic.AuthenticationError:

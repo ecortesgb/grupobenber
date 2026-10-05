@@ -25,7 +25,7 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 | Campo | Para qué |
 |---|---|
 | `api_key` | Tu llave de Claude. También puede ir en la variable de entorno `ANTHROPIC_API_KEY`. **Nunca la subas al repo** (`config.json` está en `.gitignore`). |
-| `modelo` | `claude-opus-5-5` (más capaz). Para gastar menos: `claude-sonnet-5-5`. |
+| `modelo` | `claude-opus-5-5` (más capaz). Para gastar menos: `claude-sonnet-5-5`, o `claude-haiku-4-5` (el más barato, ideal para probar). |
 | `esfuerzo` | `low`, `medium` o `high`: cuánto piensa antes de responder (más = mejor y más caro). |
 | `carpetas_permitidas` | Las únicas carpetas que puede ver y ordenar. `ESCRITORIO`, `DOCUMENTOS` y `DESCARGAS` se ubican solas aunque estén en OneDrive. Puedes agregar rutas, p. ej. `"C:\\ARCHIVOS GB"`. |
 | `modelo_transcripcion` | `small` (equilibrado), `base` (más rápido), `medium` (más preciso, más lento). |
