@@ -90,7 +90,14 @@ class Asistente:
 
     def __init__(self, cfg, al_proponer_plan=None, al_cambiar_pendientes=None, al_reunion=None):
         self.cfg = cfg
-        self.cliente = anthropic.Anthropic(api_key=cfg["api_key"] or None)
+        self.local = datos.usa_ollama(cfg)
+        if self.local:
+            # Ollama habla el mismo idioma que la API de Claude, pero corre gratis en la laptop
+            self.cliente = anthropic.Anthropic(base_url=cfg["ollama_url"], api_key="ollama", timeout=600)
+            self.modelo = cfg["ollama_modelo"]
+        else:
+            self.cliente = anthropic.Anthropic(api_key=cfg["api_key"] or None)
+            self.modelo = cfg["modelo"]
         self.mensajes = []
         self.origen = "chat"
         self.al_proponer_plan = al_proponer_plan or (lambda plan: None)
@@ -141,13 +148,14 @@ class Asistente:
         for _ in range(15):  # tope de vueltas por seguridad
             try:
                 with self.cliente.messages.stream(
-                    model=self.cfg["modelo"],
-                    max_tokens=32000,
+                    model=self.modelo,
+                    max_tokens=4096 if self.local else 32000,
                     system=self._sistema(),
                     tools=HERRAMIENTAS,
                     messages=self.mensajes,
-                    # Haiku no acepta el parámetro de esfuerzo
-                    extra_body={} if "haiku" in self.cfg["modelo"] else {"output_config": {"effort": self.cfg["esfuerzo"]}},
+                    # Haiku y Ollama no aceptan el parámetro de esfuerzo
+                    extra_body={} if self.local or "haiku" in self.modelo
+                    else {"output_config": {"effort": self.cfg["esfuerzo"]}},
                 ) as stream:
                     resp = stream.get_final_message()
             except anthropic.AuthenticationError:
@@ -158,7 +166,14 @@ class Asistente:
                 return "Claude está saturado en este momento. Intenta en un minuto."
             except anthropic.APIConnectionError:
                 self.mensajes.pop()
+                if self.local:
+                    return "No encuentro Ollama. Ábrelo (o reinicia la laptop) y vuelve a intentar."
                 return "No tengo conexión a internet o a la API de Claude."
+            except anthropic.NotFoundError:
+                self.mensajes.pop()
+                if self.local:
+                    return f"Ollama no tiene el modelo {self.modelo}. Corre: ollama pull {self.modelo}"
+                return f"El modelo {self.modelo} no existe. Revisa config.json (campo modelo)."
             except anthropic.APIStatusError as err:
                 self.mensajes = []  # se reinicia para no arrastrar un historial inválido
                 return f"Error de la API ({err.status_code}). Reinicié la conversación; vuelve a intentar."

@@ -1,6 +1,9 @@
 {
+  "proveedor": "claude",
   "api_key": "PEGA-AQUI-TU-API-KEY-DE-ANTHROPIC",
   "modelo": "claude-opus-5-5",
+  "ollama_url": "http://localhost:11434",
+  "ollama_modelo": "qwen3:8b",
   "esfuerzo": "medium",
   "carpetas_permitidas": ["ESCRITORIO", "DOCUMENTOS", "DESCARGAS"],
   "modelo_transcripcion": "small",

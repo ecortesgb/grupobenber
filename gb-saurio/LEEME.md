@@ -24,13 +24,23 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 ## Configuración (`config.json`)
 | Campo | Para qué |
 |---|---|
+| `proveedor` | `claude` (API de Anthropic, de paga) u `ollama` (gratis, corre en tu laptop; ver abajo). |
 | `api_key` | Tu llave de Claude. También puede ir en la variable de entorno `ANTHROPIC_API_KEY`. **Nunca la subas al repo** (`config.json` está en `.gitignore`). |
 | `modelo` | `claude-opus-5-5` (más capaz). Para gastar menos: `claude-sonnet-5-5`, o `claude-haiku-4-5` (el más barato, ideal para probar). |
+| `ollama_modelo` | Modelo local de Ollama. `qwen3:8b` (16 GB de RAM o más) o `qwen3:4b` (laptops con 8 GB). |
+| `ollama_url` | Déjalo en `http://localhost:11434`. |
 | `esfuerzo` | `low`, `medium` o `high`: cuánto piensa antes de responder (más = mejor y más caro). |
 | `carpetas_permitidas` | Las únicas carpetas que puede ver y ordenar. `ESCRITORIO`, `DOCUMENTOS` y `DESCARGAS` se ubican solas aunque estén en OneDrive. Puedes agregar rutas, p. ej. `"C:\\ARCHIVOS GB"`. |
 | `modelo_transcripcion` | `small` (equilibrado), `base` (más rápido), `medium` (más preciso, más lento). |
 | `recordatorio_minutos` | Cada cuánto revisa pendientes vencidos. |
 | `conservar_audio` | `false` (recomendado): borra el audio de la reunión después de transcribir. |
+
+## Usarlo gratis con Ollama
+1. Instala Ollama desde ollama.com (o `winget install Ollama.Ollama`). Arranca solo con Windows.
+2. Descarga el modelo: `ollama pull qwen3:8b` (~5 GB, una sola vez).
+3. En `config.json` pon `"proveedor": "ollama"`. No necesitas API key.
+4. Nada sale de tu laptop. A cambio, responde más lento que Claude y se equivoca más con pendientes y archivos.
+   Para volver a Claude, regresa `proveedor` a `claude`.
 
 ## Dónde quedan tus datos
 Todo en `%USERPROFILE%\GbSaurio\`: `saurio.db` (pendientes y notas), `planes\` (bitácora para deshacer), `reuniones\` (audio y transcripción), y los Excel exportados.

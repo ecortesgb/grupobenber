@@ -16,8 +16,11 @@ CARPETA_DATOS.mkdir(parents=True, exist_ok=True)
 (CARPETA_DATOS / "reuniones").mkdir(exist_ok=True)
 
 CONFIG_DEFECTO = {
+    "proveedor": "claude",          # "claude" (API de Anthropic, de paga) u "ollama" (gratis, en tu laptop)
     "api_key": "",
     "modelo": "claude-opus-5-5",
+    "ollama_url": "http://localhost:11434",
+    "ollama_modelo": "qwen3:8b",
     "esfuerzo": "medium",
     "carpetas_permitidas": ["ESCRITORIO", "DOCUMENTOS", "DESCARGAS"],
     "modelo_transcripcion": "small",
@@ -34,6 +37,15 @@ def cargar_config():
     if not cfg.get("api_key"):
         cfg["api_key"] = os.environ.get("ANTHROPIC_API_KEY", "")
     return cfg
+
+
+def usa_ollama(cfg):
+    return cfg.get("proveedor", "claude").lower() == "ollama"
+
+
+def ia_lista(cfg):
+    """Ollama no necesita llave; Claude sí."""
+    return usa_ollama(cfg) or bool(cfg["api_key"])
 
 
 # ---------- Carpetas especiales de Windows (resuelve OneDrive\Escritorio, etc.) ----------

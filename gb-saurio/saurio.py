@@ -48,7 +48,7 @@ class Puente(QObject):
     # ---------- chat ----------
     @Slot(str)
     def enviar(self, texto):
-        if not self.cfg["api_key"]:
+        if not datos.ia_lista(self.cfg):
             self.respuesta.emit("Me falta la API key de Claude. Ponla en config.json (campo api_key) y reiníciame.")
             return
         threading.Thread(target=self._trabajar, args=(self.asistente.preguntar, texto), daemon=True).start()
@@ -169,7 +169,7 @@ class Puente(QObject):
             reuniones.borrar_audio(carpeta)  # solo se queda el texto
         if not texto.strip():
             return "No escuché nada en la grabación."
-        if not self.cfg["api_key"]:
+        if not datos.ia_lista(self.cfg):
             return f"Transcripción guardada en {carpeta}, pero sin API key no puedo hacer la minuta."
         r = self.asistente.procesar_reunion(texto, f"Reunión {carpeta.name}")
         self._emitir_pendientes()
@@ -235,7 +235,7 @@ def main():
     reloj.start(int(cfg["recordatorio_minutos"]) * 60_000)
     vista.loadFinished.connect(lambda ok: QTimer.singleShot(2500, puente.revisar_vencidos))
 
-    if not cfg["api_key"]:
+    if not datos.ia_lista(cfg):
         QTimer.singleShot(3000, lambda: puente.aviso.emit("Falta la API key en config.json"))
 
     sys.exit(app.exec())
