@@ -628,7 +628,7 @@ const VISTAS = [
   { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
   { k: 'vigentes', ic: '🩺', n: 'Ausencias vigentes', mod: 'ausencias', f: vVigentes },
   { k: 'ingresos', ic: '🧑‍💼', n: 'Posibles ingresos', mod: 'posibles_ingresos', f: vIngresos },
-  { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', soon: true },
+  { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
   { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', soon: true }
 ];
 
@@ -1080,6 +1080,164 @@ async function vMovs() {
 }
 function semanaCierre(d) { const W = ventana(); let i = W.findIndex(w => addD(w.ini, 6) >= d && w.ini <= d); if (i < 0) i = W.length - 1; const s = rangoSemanaDe(i); return { w: W[i].w, ...s }; }
 
+/* >>> 07_bajas.js */
+/* ====================================================================== BAJAS Y ENCUESTA DE SALIDA ======================================================================
+   Formulario único de baja (reemplaza el de Google): busca al colaborador, captura fecha, motivo, adeudos y, si RH quiere, la encuesta de salida.
+   Al guardar: alimenta `bajas` (reporte de ingresos y bajas y HC), `movimientos`, marca al colaborador como Baja y cierra su alerta abierta. */
+const BJ = { per: '90', mot: '', tipo: '', enc: '', lista: null, sel: null, res: [], tm: null };
+const FINQ = ['Sin iniciar', 'Calculado', 'Validado RH', 'Documento generado', 'Firmado', 'Autorizado', 'Pagado'];
+const ENC_OPC = {
+  cuando: ['Desde que ingresé', 'Menos de 1 mes', 'De 1 a 3 meses', 'Más de 3 meses', 'Fue una decisión repentina'],
+  gusto: ['Sí', 'Más o menos', 'No'], derechos: ['Sí', 'Parcialmente', 'No'], acoso: ['No', 'Sí', 'Prefiero no decir'],
+  visita: ['Nunca', 'Menos de una vez al mes', 'Una vez al mes', 'Cada 15 días', 'Cada semana', 'Más de una vez por semana'],
+  valora: ['Excelente', 'Buena', 'Regular', 'Mala', 'Muy mala'], apoyo: ['Siempre', 'Casi siempre', 'A veces', 'Nunca'], queja: ['No', 'Sí']
+};
+const selX = (id, ops, ph) => `<select id="${id}"><option value="">${ph || '— elige —'}</option>${ops.map(o => `<option>${esc(o)}</option>`).join('')}</select>`;
+const limpiaQ = q => String(q || '').replace(/[%,()*"\\]/g, ' ').trim();
+const tipoMotivo = m => ((S.cat.motBaja || []).find(x => x.motivo === m) || {}).tipo || '';
+
+/* ----- API real ----- */
+Real.buscarColab = async function (q) {
+  q = limpiaQ(q); if (q.length < 3) return [];
+  const { data, error } = await sb.from('colaboradores').select('usuario_fieldwy,nombre,empresa,idpdv,estatus,fecha_ingreso').or(`nombre.ilike.%${q}%,usuario_fieldwy.ilike.%${q}%`).order('estatus').limit(15);
+  if (error) throw error; return data || [];
+};
+Real.bajasPrevias = async function (usuario) {
+  const { data } = await sb.from('bajas').select('id,fecha_baja,motivo').eq('usuario_fieldwy', usuario).gte('fecha_baja', addD(HOY, -45)); return data || [];
+};
+Real.bajasLista = async function (desde) {
+  let q = () => { let x = sb.from('bajas').select('id,usuario_fieldwy,fecha_baja,ultimo_dia_laborado,motivo,marca_destino,adeudo_monto,adeudo_detalle,finiquito_estatus,idpdv,comentarios,capturado_en,colaboradores(nombre,idpdv,empresa),encuesta_salida(baja_id)').order('fecha_baja', { ascending: false }); if (desde) x = x.gte('fecha_baja', desde); return x; };
+  const r = await todo(q);
+  return r.map(b => ({ id: b.id, usuario: b.usuario_fieldwy, nombre: (b.colaboradores || {}).nombre || b.usuario_fieldwy, empresa: (b.colaboradores || {}).empresa, fecha: b.fecha_baja, ultimo: b.ultimo_dia_laborado, motivo: b.motivo, marca: b.marca_destino, adeudo: +b.adeudo_monto || 0, adeudoDet: b.adeudo_detalle, finq: b.finiquito_estatus, idpdv: b.idpdv || (b.colaboradores || {}).idpdv, com: b.comentarios, cap: b.capturado_en, enc: !!(b.encuesta_salida && (Array.isArray(b.encuesta_salida) ? b.encuesta_salida.length : b.encuesta_salida.baja_id)) }));
+};
+Real.registrarBaja = async function (d) {
+  const ins = await sb.from('bajas').insert({ usuario_fieldwy: d.usuario, fecha_baja: d.fecha, ultimo_dia_laborado: d.ultimo || null, motivo: d.motivo, marca_destino: d.marca || null, adeudo_monto: d.adeudo || 0, adeudo_detalle: d.adeudoDet || null, evidencia_url: d.evidencia || null, comentarios: d.comentarios || null, idpdv: d.idpdv || null }).select('id').single();
+  if (ins.error) throw ins.error;
+  const m = await sb.from('movimientos').insert({ usuario_fieldwy: d.usuario, tipo: 'Baja', fecha: d.fecha, motivo: d.motivo, idpdv: d.idpdv || null, origen: 'app' }); if (m.error) throw m.error;
+  const c = await sb.from('colaboradores').update({ estatus: 'Baja' }).eq('usuario_fieldwy', d.usuario); if (c.error) throw c.error;
+  try { const { data: u } = await sb.auth.getUser(); await sb.from('alertas_asistencia').update({ estatus: 'Baja confirmada', resuelta_por: u.user.id, resuelta_en: new Date().toISOString() }).eq('usuario_fieldwy', d.usuario).eq('estatus', 'Abierta'); } catch (e) { }
+  if (d.enc) await this.guardarEncuesta(ins.data.id, d.enc);
+  return ins.data.id;
+};
+Real.guardarEncuesta = async function (bajaId, e) {
+  const { error } = await sb.from('encuesta_salida').upsert({ baja_id: bajaId, respondida_por: 'rh', ...e }); if (error) throw error;
+};
+Real.actualizarFiniquito = async function (id, est) { const { error } = await sb.from('bajas').update({ finiquito_estatus: est }).eq('id', id); if (error) throw error; };
+Real.anularBaja = async function (b) {
+  let r = await sb.from('bajas').delete().eq('id', b.id); if (r.error) throw r.error;
+  await sb.from('movimientos').delete().eq('usuario_fieldwy', b.usuario).eq('tipo', 'Baja').eq('fecha', b.fecha);
+  await sb.from('colaboradores').update({ estatus: 'Activo' }).eq('usuario_fieldwy', b.usuario);
+};
+
+/* ----- encuesta de salida: campos reutilizables ----- */
+function encuestaCampos(p) {
+  const f = (l, id, ops) => `<div class="fld"><label>${l}</label>${selX(p + id, ops)}</div>`, t = (l, id, ph) => `<div class="fld"><label>${l}</label><input id="${p}${id}" placeholder="${ph || 'Opcional'}"></div>`;
+  return `<div class="enc-box"><div class="note">Complemento del motivo de baja: la versión del promotor. Todo es opcional; si el promotor no la contestó, déjala vacía y se puede capturar después desde la lista.</div>
+    <div class="row2">${f('¿Desde cuándo había pensado en terminar la relación laboral?', 'cuando', ENC_OPC.cuando)}${t('¿Cuál es la razón principal del término?', 'razon', 'En sus palabras')}</div>
+    <div class="row2">${f('¿Le gustó formar parte de Grupo Benber?', 'gusto', ENC_OPC.gusto)}${t('¿Por qué?', 'gustop')}</div>
+    <div class="row2">${f('¿Se respetaron sus derechos laborales?', 'der', ENC_OPC.derechos)}${t('¿Por qué?', 'derp')}</div>
+    <div class="row2">${f('🔒 ¿Sufrió acoso, violencia de género, racismo, discriminación o violación de derechos humanos?', 'acoso', ENC_OPC.acoso)}${t('🔒 ¿Qué pasó?', 'acosop')}</div>
+    <div class="row2">${f('¿Con qué frecuencia lo visitó su supervisor?', 'vis', ENC_OPC.visita)}${f('¿Cómo valora la capacitación y el soporte de su supervisor?', 'val', ENC_OPC.valora)}</div>
+    <div class="row2">${f('¿Recibió apoyo de Recursos Humanos en todo momento?', 'apoyo', ENC_OPC.apoyo)}${f('🔒 ¿Quiere interponer una queja?', 'queja', ENC_OPC.queja)}</div>
+    <div class="row2">${t('🔒 Colaborador o situación', 'quejas')}${t('🔒 Motivos de la queja', 'quejam')}</div>
+    <p class="muted" style="font-size:11px;font-weight:600">🔒 Las respuestas marcadas son confidenciales: solo las ve RH y administración.</p></div>`;
+}
+function leerEncuesta(p) {
+  const v = id => { const x = $(p + id); return x && x.value ? x.value.trim() : null; };
+  const e = { desde_cuando_pensaba_terminar: v('cuando'), razon_principal: v('razon'), le_gusto_grupo_benber: v('gusto'), le_gusto_porque: v('gustop'), derechos_respetados: v('der'), derechos_porque: v('derp'), acoso_discriminacion: v('acoso'), acoso_porque: v('acosop'), frecuencia_visita_supervisor: v('vis'), valoracion_supervisor: v('val'), apoyo_rh: v('apoyo'), desea_queja: v('queja') == null ? null : v('queja') === 'Sí', queja_sobre: v('quejas'), queja_motivos: v('quejam') };
+  return Object.values(e).some(x => x != null) ? e : null;
+}
+
+/* ----- vista ----- */
+async function vBajas() {
+  $('content').innerHTML = cab('Bajas y encuesta de salida', 'Registra aquí las bajas. Alimentan el reporte de Ingresos y bajas, el HC y la rotación; la encuesta de salida complementa el motivo.', 'saltando') + '<div class="loading">Cargando bajas…</div>';
+  const desde = BJ.per === 'all' ? null : addD(HOY, -(+BJ.per));
+  try { BJ.lista = await API.bajasLista(desde); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudieron cargar las bajas: ${esc(e.message || e)}</div>`; return; }
+  const ok = b => okT(tienda(b.idpdv) || null) || (!tienda(b.idpdv) && !Object.values(FL).some(Boolean));
+  const base = BJ.lista.filter(ok), tipoDe = b => tipoMotivo(b.motivo) || 'Sin clasificar';
+  const rows = base.filter(b => (!BJ.mot || b.motivo === BJ.mot) && (!BJ.tipo || tipoDe(b) === BJ.tipo) && (!BJ.enc || (BJ.enc === 'si' ? b.enc : !b.enc)));
+  const vol = base.filter(b => tipoDe(b) === 'Voluntaria').length, inv = base.filter(b => tipoDe(b) === 'Involuntaria').length, conEnc = base.filter(b => b.enc).length, adeudos = base.filter(b => b.adeudo > 0).length, pend = base.filter(b => b.finq !== 'Pagado').length;
+  const motivos = [...new Set(base.map(b => b.motivo))].sort();
+  let h = cab('Bajas y encuesta de salida', 'Registra aquí las bajas. Alimentan el reporte de Ingresos y bajas, el HC y la rotación; la encuesta de salida complementa el motivo.', 'saltando') + barraFiltros('vBajas');
+  h += `<div class="tools"><span>Periodo:</span><select onchange="BJ.per=this.value;vBajas()">${[['30', 'Últimos 30 días'], ['60', 'Últimos 60 días'], ['90', 'Últimos 90 días'], ['365', 'Último año'], ['all', 'Todo el histórico']].map(([v, t]) => `<option value="${v}" ${BJ.per === v ? 'selected' : ''}>${t}</option>`).join('')}</select><select onchange="BJ.mot=this.value;vBajas()"><option value="">Todos los motivos</option>${motivos.map(m => `<option ${BJ.mot === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select><select onchange="BJ.tipo=this.value;vBajas()"><option value="">Voluntaria e involuntaria</option>${['Voluntaria', 'Involuntaria'].map(m => `<option ${BJ.tipo === m ? 'selected' : ''}>${m}</option>`).join('')}</select><select onchange="BJ.enc=this.value;vBajas()"><option value="">Con y sin encuesta</option><option value="si" ${BJ.enc === 'si' ? 'selected' : ''}>Con encuesta</option><option value="no" ${BJ.enc === 'no' ? 'selected' : ''}>Sin encuesta</option></select>${can('bajas', 'crear') ? '<button class="btn primary" style="margin-left:auto" onclick="bajaNueva()">➕ Registrar baja</button>' : ''}</div>`;
+  h += `<div class="kpis">${kp('Bajas', fmt(base.length), 'en el periodo y filtros', C.rd, null, '📤')}${kp('Voluntarias', fmt(vol), pc1(vol, base.length), C.am, null, '🚶')}${kp('Involuntarias', fmt(inv), pc1(inv, base.length), C.dk, null, '⛔')}${kp('Con encuesta', fmt(conEnc), pc1(conEnc, base.length), C.bl, null, '📝')}${kp('Con adeudo', fmt(adeudos), 'monto o detalle por cobrar', C.rd, null, '💸')}${kp('Finiquito pendiente', fmt(pend), 'sin marcar como pagado', C.am, null, '🧾')}</div>`;
+  TB = {};
+  const puedeFin = can('bajas', 'editar');
+  h += sect('Bajas registradas', '🧾') + tbl('t-bj', [
+    { h: 'Fecha de baja', v: b => b.fecha, r: b => fdate(b.fecha), w: 96 }, { h: 'Colaborador', t: 1, v: b => b.nombre, w: 230, r: b => `<b>${esc(b.nombre)}</b><br><small class="muted">${esc(b.usuario)}</small>` },
+    { h: 'Motivo', t: 1, v: b => b.motivo, r: b => pillx(esc(b.motivo) + (b.marca ? ' → ' + esc(b.marca) : ''), tipoDe(b) === 'Involuntaria' ? 'r' : 'a') }, { h: 'Tipo', t: 1, v: b => tipoDe(b) },
+    { h: 'Encuesta', v: b => b.enc ? 1 : 0, r: b => b.enc ? '<span class="pill g">✔ Capturada</span>' : (can('encuesta_salida', 'crear') ? `<button class="rsv" onclick="encuestaDeBaja(${b.id})">Capturar</button>` : '—') },
+    { h: 'Finiquito', t: 1, v: b => FINQ.indexOf(b.finq), r: b => puedeFin ? `<select class="finq" onchange="cambiaFinq(${b.id},this.value)">${FINQ.map(f => `<option ${f === b.finq ? 'selected' : ''}>${f}</option>`).join('')}</select>` : esc(b.finq) },
+    { h: 'Adeudo', v: b => b.adeudo, r: b => b.adeudo ? `<b class="cell-red">$${fmt(b.adeudo)}</b>` : '—' }, { h: 'Tienda', t: 1, v: b => (tienda(b.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: b => (tienda(b.idpdv) || {}).cadena }, { h: 'Región', t: 1, v: b => (tienda(b.idpdv) || {}).region },
+    { h: 'Gerente', t: 1, v: b => (tienda(b.idpdv) || {}).gerente }, { h: 'Supervisor', t: 1, v: b => (tienda(b.idpdv) || {}).supervisor }, { h: 'Comentarios', t: 1, v: b => b.com || '' },
+    ...(can('bajas', 'borrar') ? [{ h: '', v: () => '', r: b => `<button class="rsv" onclick="anularBaja(${b.id})" title="Elimina la baja y deja al colaborador activo">Anular</button>` }] : [])
+  ], rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'bajas', titulo: 'Bajas registradas', sort: 0, dir: -1, maxh: '70vh', lim: 500 });
+  $('content').innerHTML = h; drawAll();
+}
+async function cambiaFinq(id, est) { try { await API.actualizarFiniquito(id, est); const b = BJ.lista.find(x => x.id === id); if (b) b.finq = est; toast('Finiquito: ' + est); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } }
+async function anularBaja(id) {
+  const b = BJ.lista.find(x => x.id === id); if (!b || !confirm(`¿Anular la baja de ${b.nombre} (${fdate(b.fecha)})?\nSe elimina la baja y el colaborador vuelve a quedar activo.`)) return;
+  try { await API.anularBaja(b); MV.loaded = false; R.vivo = false; toast('Baja anulada'); vBajas(); } catch (e) { toast('No se pudo anular: ' + (e.message || e)); }
+}
+
+/* ----- captura de una baja ----- */
+function bajaNueva(pre) {
+  BJ.sel = pre || null; BJ.res = [];
+  const vol = (S.cat.motBaja || []).filter(m => m.tipo === 'Voluntaria'), inv = (S.cat.motBaja || []).filter(m => m.tipo !== 'Voluntaria');
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(820px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>📤 Registrar baja</h3>
+    <div class="fld"><label>Colaborador (usuario Fieldwy o nombre)</label><input id="bj-q" autocomplete="off" placeholder="Escribe al menos 3 letras…" oninput="bajaBuscar(this.value)"></div><div id="bj-res"></div><div id="bj-sel"></div>
+    <div id="bj-resto" hidden>
+      <div class="row2"><div class="fld"><label>Fecha de baja</label><input type="date" id="bj-f" value="${HOY}"></div><div class="fld"><label>Último día laborado</label><input type="date" id="bj-u" value="${addD(HOY, -1)}"></div></div>
+      <div class="fld"><label>Motivo de baja</label><select id="bj-m"><option value="">— elige el motivo —</option><optgroup label="Voluntaria">${vol.map(m => `<option>${esc(m.motivo)}</option>`).join('')}</optgroup><optgroup label="Involuntaria">${inv.map(m => `<option>${esc(m.motivo)}</option>`).join('')}</optgroup></select></div>
+      <div class="fld" id="bj-marca-w" hidden><label>Marca o cadena destino</label><input id="bj-marca" placeholder="Ej. Telcel, Walmart…"></div>
+      <div class="row2"><div class="fld"><label>Adeudo con la agencia ($)</label><input type="number" id="bj-ad" min="0" step="0.01" placeholder="0"></div><div class="fld"><label>Detalle del adeudo</label><input id="bj-adt" placeholder="Equipo, uniforme, faltante…"></div></div>
+      <div class="fld"><label>Enlace a evidencia (opcional)</label><input id="bj-ev" placeholder="https://… carpeta de OneDrive o Drive"></div>
+      <div class="fld"><label>Comentarios</label><textarea id="bj-c"></textarea></div>
+      <details class="enc-d"><summary>📝 Capturar encuesta de salida ahora (opcional)</summary>${encuestaCampos('be-')}</details>
+      <div class="warn" id="bj-warn" hidden></div>
+    </div>
+    <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn danger" id="bj-ok" disabled>Registrar baja</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  const mm = () => { $('bj-marca-w').hidden = $('bj-m').value !== 'Cambio a marca o cadena'; }; $('bj-m').onchange = mm; mm();
+  $('bj-ok').onclick = bajaGuardar;
+  if (pre) bajaElegir(pre); else setTimeout(() => $('bj-q').focus(), 50);
+}
+function bajaBuscar(q) {
+  clearTimeout(BJ.tm); const r = $('bj-res');
+  if (limpiaQ(q).length < 3) { r.innerHTML = ''; return; }
+  BJ.tm = setTimeout(async () => {
+    try { BJ.res = await API.buscarColab(q); } catch (e) { r.innerHTML = `<div class="warn">${esc(e.message || e)}</div>`; return; }
+    r.innerHTML = BJ.res.length ? `<div class="bj-list">${BJ.res.map((c, i) => { const t = tienda(c.idpdv) || {}; return `<div class="bj-it ${c.estatus === 'Baja' ? 'off' : ''}" onclick="bajaElegir(BJ.res[${i}])"><b>${esc(c.nombre)}</b><span>${esc(c.usuario_fieldwy)}</span><span>${esc(t.nombre || 'Sin tienda')}</span>${c.estatus === 'Baja' ? '<span class="pill r">Ya está de baja</span>' : '<span class="pill g">Activo</span>'}</div>`; }).join('')}</div>` : '<div class="muted" style="padding:8px">Sin resultados. Revisa el usuario o el nombre.</div>';
+  }, 280);
+}
+async function bajaElegir(c) {
+  BJ.sel = c; const t = tienda(c.idpdv) || {};
+  $('bj-res').innerHTML = ''; $('bj-q').value = '';
+  $('bj-sel').innerHTML = `<div class="bj-card"><div><b>${esc(c.nombre)}</b><br><small>${esc(c.usuario_fieldwy)} · ${esc(c.empresa || 'sin razón social')}</small></div><div><b>${esc(t.nombre || 'Sin tienda')}</b><br><small>${esc([t.cadena, t.estado, t.supervisor].filter(Boolean).join(' · '))}</small></div><button class="rsv" onclick="BJ.sel=null;$('bj-sel').innerHTML='';$('bj-resto').hidden=true;$('bj-ok').disabled=true">Cambiar</button></div>`;
+  $('bj-resto').hidden = false; $('bj-ok').disabled = false;
+  const w = $('bj-warn'); w.hidden = true;
+  try { const p = await API.bajasPrevias(c.usuario_fieldwy); if (c.estatus === 'Baja' || p.length) { w.hidden = false; w.textContent = c.estatus === 'Baja' ? 'Este colaborador ya aparece como baja.' : ''; if (p.length) w.textContent += ` Ya tiene una baja registrada el ${fdate(p[0].fecha_baja)} (${p[0].motivo}). Si es la misma, no la dupliques.`; } } catch (e) { }
+}
+async function bajaGuardar() {
+  const c = BJ.sel, b = $('bj-ok'); if (!c) return;
+  const f = $('bj-f').value, m = $('bj-m').value, w = $('bj-warn');
+  const err = !f ? 'Falta la fecha de baja.' : f > addD(HOY, 7) ? 'La fecha de baja está muy adelante; revísala.' : !m ? 'Elige el motivo de baja.' : ($('bj-m').value === 'Cambio a marca o cadena' && !$('bj-marca').value.trim()) ? 'Escribe la marca o cadena destino.' : ($('bj-u').value && $('bj-u').value > f) ? 'El último día laborado no puede ser posterior a la fecha de baja.' : '';
+  if (err) { w.hidden = false; w.textContent = err; return; }
+  b.disabled = true; b.textContent = 'Guardando…';
+  try {
+    await API.registrarBaja({ usuario: c.usuario_fieldwy, idpdv: c.idpdv, fecha: f, ultimo: $('bj-u').value, motivo: m, marca: $('bj-marca').value.trim(), adeudo: +$('bj-ad').value || 0, adeudoDet: $('bj-adt').value.trim(), evidencia: $('bj-ev').value.trim(), comentarios: $('bj-c').value.trim(), enc: leerEncuesta('be-') });
+    MV.loaded = false; R.vivo = false; cerrarM(); toast('Baja registrada: ' + c.nombre);
+    if (S.alertas) S.alertas = S.alertas.filter(x => x.usuario !== c.usuario_fieldwy);
+    if (S.view === 'bajas') vBajas(); else if (typeof nav === 'function') { nav(); render(); }
+  } catch (e) { b.disabled = false; b.textContent = 'Reintentar'; w.hidden = false; w.textContent = 'No se pudo guardar: ' + (e.message || e) + (/row-level|policy/i.test(String(e.message || e)) ? ' (este colaborador no está en tu alcance)' : ''); }
+}
+function encuestaDeBaja(id) {
+  const b = BJ.lista.find(x => x.id === id); if (!b) return;
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(820px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>📝 Encuesta de salida</h3><div class="who">${esc(b.nombre)} · ${esc(b.usuario)} · baja ${fdate(b.fecha)} · ${esc(b.motivo)}</div>${encuestaCampos('ee-')}<div class="warn" id="ee-warn" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="ee-ok">Guardar encuesta</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  $('ee-ok').onclick = async () => { const e = leerEncuesta('ee-'); if (!e) { $('ee-warn').hidden = false; $('ee-warn').textContent = 'Contesta al menos una pregunta.'; return; } $('ee-ok').disabled = true; try { await API.guardarEncuesta(id, e); b.enc = true; cerrarM(); toast('Encuesta guardada'); vBajas(); } catch (x) { $('ee-ok').disabled = false; $('ee-warn').hidden = false; $('ee-warn').textContent = 'No se pudo guardar: ' + (x.message || x); } };
+}
+
 /* >>> 08_demo_reportes.js */
 /* ----- datos de ejemplo para reportes, ingresos y movimientos (todo ficticio) ----- */
 (function () {
@@ -1123,6 +1281,21 @@ function semanaCierre(d) { const W = ventana(); let i = W.findIndex(w => addD(w.
       out.push({ id: 'k' + k + f, semana: '', fecha: f, usuario: 'DEMO' + (100 + (k % 60)), nombre: ['Ana Solís', 'Luis Ortega', 'María Cruz', 'José Reyes'][k % 4] + ' ' + (k % 60), idpdv: t.idpdv, rol: 'Promotor', hora_in: '09:' + pad(ri(0, 59)) + ':10', hora_com_in: '13:' + pad(ri(0, 30)) + ':00', hora_com_out: '14:' + pad(ri(0, 30)) + ':00', hora_out: '18:' + pad(ri(0, 59)) + ':00', tiempo_ub: est === 'Tiempo Incompleto' ? ri(300, 470) : ri(480, 560), tiempo_com: ri(10, 60), rango_in: est === 'Check In Fuera Rango' ? 'Fuera de Rango' : 'Dentro de Rango', rango_out: 'Dentro de Rango', equipo_dup: est === 'Equipo Duplicado', estatus_check: est, validacion: v, estatus_final: v, registros: reg, temm: Math.min(reg, 1), porta: reg > 1 ? 1 : 0, pospago: 0, prepago: Math.max(0, reg - 1), check_tel: 0 }); } }); }
     return out;
   };
+
+  /* ----- bajas / encuesta (demo, en memoria) ----- */
+  const DB = { lista: null, colab: null };
+  const iniBajas = () => {
+    if (DB.lista) return; const t = Object.values(S.cat.tiendas), nom = ['Ana Solís', 'Luis Ortega', 'María Cruz', 'José Reyes', 'Daniela Ruiz', 'Carlos Mora', 'Paola Estrada', 'Jorge Lara'], mot = ['Motivos personales', 'Abandono de trabajo', 'Renuncia voluntaria', 'Malas prácticas', 'Baja productividad'];
+    DB.colab = Array.from({ length: 60 }, (_, i) => ({ usuario_fieldwy: 'DEMO' + (300 + i), nombre: nom[i % 8] + ' ' + (i + 1), empresa: ['Benber SS', 'Revelor'][i % 2], idpdv: t[i % t.length].idpdv, estatus: 'Activo', fecha_ingreso: addD(HOY, -ri(20, 600)) }));
+    DB.lista = Array.from({ length: 24 }, (_, i) => { const c = DB.colab[i]; c.estatus = 'Baja'; return { id: i + 1, usuario: c.usuario_fieldwy, nombre: c.nombre, empresa: c.empresa, fecha: addD(HOY, -ri(0, 60)), ultimo: null, motivo: mot[i % 5], marca: null, adeudo: i % 7 === 0 ? 350 : 0, finq: ['Sin iniciar', 'Calculado', 'Pagado'][i % 3], idpdv: c.idpdv, com: '', enc: i % 4 === 0 }; });
+  };
+  Demo.buscarColab = async q => { iniBajas(); q = String(q || '').toLowerCase(); return DB.colab.filter(c => (c.nombre + c.usuario_fieldwy).toLowerCase().includes(q)).slice(0, 15); };
+  Demo.bajasPrevias = async u => { iniBajas(); return DB.lista.filter(b => b.usuario === u && b.fecha >= addD(HOY, -45)).map(b => ({ id: b.id, fecha_baja: b.fecha, motivo: b.motivo })); };
+  Demo.bajasLista = async desde => { iniBajas(); return DB.lista.filter(b => !desde || b.fecha >= desde).slice().sort((a, b) => b.fecha.localeCompare(a.fecha)); };
+  Demo.registrarBaja = async d => { iniBajas(); const c = DB.colab.find(x => x.usuario_fieldwy === d.usuario); if (c) c.estatus = 'Baja'; const id = DB.lista.length + 1; DB.lista.push({ id, usuario: d.usuario, nombre: c ? c.nombre : d.usuario, empresa: c && c.empresa, fecha: d.fecha, ultimo: d.ultimo, motivo: d.motivo, marca: d.marca, adeudo: d.adeudo || 0, finq: 'Sin iniciar', idpdv: d.idpdv, com: d.comentarios, enc: !!d.enc }); return id; };
+  Demo.guardarEncuesta = async () => { };
+  Demo.actualizarFiniquito = async () => { };
+  Demo.anularBaja = async b => { iniBajas(); DB.lista = DB.lista.filter(x => x.id !== b.id); const c = DB.colab.find(x => x.usuario_fieldwy === b.usuario); if (c) c.estatus = 'Activo'; };
 })();
 
 /* >>> 99_init.js */

@@ -269,6 +269,14 @@ table.xl tr.tt td{background:#EE6602;color:#fff;font-weight:800;border-color:#ff
 .ar-c{display:inline-block;width:15px;height:15px;line-height:13px;margin-right:7px;border:1.5px solid #B45309;border-radius:3px;background:#fff;color:#B45309;font-style:normal;font-weight:800;font-size:12px;text-align:center;vertical-align:-2px}
 .ar-c::before{content:'+'}tr.open>td>.ar-c::before{content:'–'}
 .cierre-t{font-size:15px;font-weight:800;margin-bottom:10px}
+/* ====== bajas / encuesta ====== */
+.bj-list{border:1.5px solid var(--orange-soft);border-radius:12px;max-height:240px;overflow:auto;margin-top:6px;background:#fff}
+.bj-it{display:grid;grid-template-columns:1.6fr 1fr 1.6fr auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid #f3ece5;cursor:pointer;font-size:12.5px}.bj-it:hover{background:#FFF4EA}.bj-it.off{opacity:.65}.bj-it span{color:var(--text-muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bj-card{display:grid;grid-template-columns:1fr 1fr auto;gap:14px;align-items:center;background:#FFF4EA;border:1.5px solid var(--orange);border-radius:12px;padding:10px 14px;margin:8px 0 14px;font-size:13px}.bj-card small{color:var(--text-muted);font-weight:600}
+.enc-d{border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;margin:10px 0;background:#fff}.enc-d>summary{cursor:pointer;font-weight:800;color:var(--orange-dark)}
+.enc-box .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+select.finq{border:1.5px solid var(--line);border-radius:8px;padding:4px 6px;font-size:11.5px;font-weight:700;background:#fff}
+@media (max-width:700px){.bj-it{grid-template-columns:1fr 1fr}.bj-card,.enc-box .row2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
