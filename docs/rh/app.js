@@ -1271,8 +1271,8 @@ Real.altasPend = async function () {
   return c.filter(x => !x.usuario_fieldwy || !hechos.has(x.usuario_fieldwy));
 };
 Real.altasUltimas = async function () {
-  const r = await todo(() => sb.from('colaboradores').select('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,tipo_ingreso,estatus').gte('fecha_ingreso', addD(HOY, -45)).order('fecha_ingreso', { ascending: false }).limit(400));
-  return r;
+  const q = cols => todo(() => sb.from('colaboradores').select(cols).gte('fecha_ingreso', addD(HOY, -45)).order('fecha_ingreso', { ascending: false }).limit(400));
+  try { return await q('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,tipo_ingreso,estatus'); } catch (e) { return await q('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,estatus'); } // antes de correr schema_v08 no existe tipo_ingreso
 };
 Real.empresas = async function () { const { data } = await sb.from('colaboradores').select('empresa').not('empresa', 'is', null).limit(3000); return [...new Set((data || []).map(x => x.empresa))].sort(); };
 Real.registrarAlta = async function (d) {
@@ -1280,9 +1280,10 @@ Real.registrarAlta = async function (d) {
   let tipoMov = 'Alta';
   if (ex.data) {
     if (ex.data.estatus !== 'Baja') throw new Error('El usuario ' + d.usuario + ' ya existe y está activo.');
-    const u = await sb.from('colaboradores').update({ nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, estatus: 'Activo', tipo_ingreso: 'Reingreso', candidato_id: d.candidato || null }).eq('usuario_fieldwy', d.usuario); if (u.error) throw u.error; tipoMov = 'Reingreso';
+    const u = await sb.from('colaboradores').update({ nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, estatus: 'Activo', candidato_id: d.candidato || null }).eq('usuario_fieldwy', d.usuario); if (u.error) throw u.error; await sb.from('colaboradores').update({ tipo_ingreso: 'Reingreso' }).eq('usuario_fieldwy', d.usuario); tipoMov = 'Reingreso';
   } else {
-    const i = await sb.from('colaboradores').insert({ usuario_fieldwy: d.usuario, nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, tipo_ingreso: d.tipo || 'Nuevo', candidato_id: d.candidato || null }); if (i.error) throw i.error;
+    const fila = { usuario_fieldwy: d.usuario, nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, tipo_ingreso: d.tipo || 'Nuevo', candidato_id: d.candidato || null };
+    let i = await sb.from('colaboradores').insert(fila); if (i.error && /tipo_ingreso/.test(i.error.message)) { delete fila.tipo_ingreso; i = await sb.from('colaboradores').insert(fila); } if (i.error) throw i.error;
   }
   const m = await sb.from('movimientos').insert({ usuario_fieldwy: d.usuario, tipo: tipoMov, fecha: d.fecha, idpdv: d.idpdv, origen: 'app' }); if (m.error) throw m.error;
   const s = d.sens || {}; if (Object.values(s).some(v => v != null && v !== '')) { const r = await sb.from('datos_sensibles').upsert({ usuario_fieldwy: d.usuario, ...s, actualizado_en: new Date().toISOString() }); if (r.error) throw new Error('Se dio de alta, pero no se guardaron los datos sensibles: ' + r.error.message); }
