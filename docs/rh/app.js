@@ -628,8 +628,9 @@ const VISTAS = [
   { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
   { k: 'vigentes', ic: '🩺', n: 'Ausencias vigentes', mod: 'ausencias', f: vVigentes },
   { k: 'ingresos', ic: '🧑‍💼', n: 'Posibles ingresos', mod: 'posibles_ingresos', f: vIngresos },
+  { k: 'altas', ic: '🆕', n: 'Altas', mod: 'colaboradores', f: vAltas },
   { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
-  { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', soon: true }
+  { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', f: vExpedientes }
 ];
 
 function nav() {
@@ -1238,6 +1239,150 @@ function encuestaDeBaja(id) {
   $('ee-ok').onclick = async () => { const e = leerEncuesta('ee-'); if (!e) { $('ee-warn').hidden = false; $('ee-warn').textContent = 'Contesta al menos una pregunta.'; return; } $('ee-ok').disabled = true; try { await API.guardarEncuesta(id, e); b.enc = true; cerrarM(); toast('Encuesta guardada'); vBajas(); } catch (x) { $('ee-ok').disabled = false; $('ee-warn').hidden = false; $('ee-warn').textContent = 'No se pudo guardar: ' + (x.message || x); } };
 }
 
+/* >>> 07b_altas.js */
+/* ====================================================================== ALTAS (nuevo ingreso) Y EXPEDIENTES ======================================================================
+   Alta: sale de un candidato que "Ingresó" (precargado) o se captura directa. Crea el colaborador, el movimiento de alta, guarda los datos sensibles
+   (tabla aparte: solo RH y administración, nunca en reportes) y abre los pendientes de Expediente, Datos bancarios y CSF a 7 días.
+   Expedientes: semáforo de pendientes por colaborador; cada responsable ve los de su estado. */
+const AL = { pend: null, ult: null, emp: [], pre: null };
+const PLAZO_DOCS = 7;
+const DOCS = ['Expediente', 'Datos bancarios', 'CSF'];
+const ESTADO_CIVIL = ['Soltero(a)', 'Casado(a)', 'Unión libre', 'Divorciado(a)', 'Viudo(a)'], TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+/* ----- validaciones ----- */
+const V = {
+  curp: s => /^[A-Z]{4}\d{6}[HMX][A-Z]{2}[A-Z]{3}[A-Z0-9]\d$/.test(s),
+  rfc: s => /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(s),
+  nss: s => /^\d{11}$/.test(s),
+  tel: s => /^\d{10}$/.test(s),
+  mail: s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s),
+  clabe: s => { if (!/^\d{18}$/.test(s)) return false; const w = [3, 7, 1]; const sum = s.slice(0, 17).split('').reduce((a, d, i) => a + ((+d * w[i % 3]) % 10), 0); return (10 - sum % 10) % 10 === +s[17]; }
+};
+const limpia = s => String(s || '').trim();
+const mayus = s => limpia(s).toUpperCase().replace(/\s+/g, '');
+const digs = s => String(s || '').replace(/\D/g, '');
+
+/* ----- API real ----- */
+Real.altasPend = async function () {
+  const desde = addD(HOY, -60);
+  const c = await todo(() => sb.from('candidatos').select('id,nombre,telefono,idpdv,fecha_programada,reclutador_id,usuario_fieldwy').eq('estatus', 'Ingresó').gte('fecha_programada', desde).order('fecha_programada', { ascending: false }));
+  const us = c.map(x => x.usuario_fieldwy).filter(Boolean); let hechos = new Set();
+  if (us.length) { const r = await todo(() => sb.from('colaboradores').select('usuario_fieldwy').in('usuario_fieldwy', us.slice(0, 400))); hechos = new Set(r.map(x => x.usuario_fieldwy)); }
+  return c.filter(x => !x.usuario_fieldwy || !hechos.has(x.usuario_fieldwy));
+};
+Real.altasUltimas = async function () {
+  const r = await todo(() => sb.from('colaboradores').select('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,tipo_ingreso,estatus').gte('fecha_ingreso', addD(HOY, -45)).order('fecha_ingreso', { ascending: false }).limit(400));
+  return r;
+};
+Real.empresas = async function () { const { data } = await sb.from('colaboradores').select('empresa').not('empresa', 'is', null).limit(3000); return [...new Set((data || []).map(x => x.empresa))].sort(); };
+Real.registrarAlta = async function (d) {
+  const ex = await sb.from('colaboradores').select('usuario_fieldwy,estatus').eq('usuario_fieldwy', d.usuario).maybeSingle(); if (ex.error) throw ex.error;
+  let tipoMov = 'Alta';
+  if (ex.data) {
+    if (ex.data.estatus !== 'Baja') throw new Error('El usuario ' + d.usuario + ' ya existe y está activo.');
+    const u = await sb.from('colaboradores').update({ nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, estatus: 'Activo', tipo_ingreso: 'Reingreso', candidato_id: d.candidato || null }).eq('usuario_fieldwy', d.usuario); if (u.error) throw u.error; tipoMov = 'Reingreso';
+  } else {
+    const i = await sb.from('colaboradores').insert({ usuario_fieldwy: d.usuario, nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, tipo_ingreso: d.tipo || 'Nuevo', candidato_id: d.candidato || null }); if (i.error) throw i.error;
+  }
+  const m = await sb.from('movimientos').insert({ usuario_fieldwy: d.usuario, tipo: tipoMov, fecha: d.fecha, idpdv: d.idpdv, origen: 'app' }); if (m.error) throw m.error;
+  const s = d.sens || {}; if (Object.values(s).some(v => v != null && v !== '')) { const r = await sb.from('datos_sensibles').upsert({ usuario_fieldwy: d.usuario, ...s, actualizado_en: new Date().toISOString() }); if (r.error) throw new Error('Se dio de alta, pero no se guardaron los datos sensibles: ' + r.error.message); }
+  const lim = addD(d.fecha, PLAZO_DOCS), hoy = HOY;
+  const pend = DOCS.map(t => ({ usuario_fieldwy: d.usuario, tipo: t, fecha_limite: lim, estatus: (t === 'Datos bancarios' && s.clabe) ? 'Recibido' : 'Pendiente', recibido_en: (t === 'Datos bancarios' && s.clabe) ? hoy : null }));
+  const p = await sb.from('pendientes_documentos').upsert(pend, { onConflict: 'usuario_fieldwy,tipo' }); if (p.error) throw new Error('Se dio de alta, pero no se crearon los pendientes de expediente: ' + p.error.message);
+  if (d.candidato) await sb.from('candidatos').update({ usuario_fieldwy: d.usuario }).eq('id', d.candidato);
+};
+Real.expedientes = async function () {
+  const r = await todo(() => sb.from('pendientes_documentos').select('id,usuario_fieldwy,tipo,fecha_limite,estatus,enlace_url,colaboradores(nombre,fecha_ingreso,idpdv,empresa,estatus)').eq('estatus', 'Pendiente').order('fecha_limite'));
+  return r.filter(x => x.colaboradores && x.colaboradores.estatus !== 'Baja');
+};
+Real.marcarDoc = async function (id, url) { const { data: u } = await sb.auth.getUser(); const { error } = await sb.from('pendientes_documentos').update({ estatus: 'Recibido', recibido_en: HOY, recibido_por: u.user.id, enlace_url: url || null }).eq('id', id); if (error) throw error; };
+
+/* ----- ALTAS ----- */
+async function vAltas() {
+  $('content').innerHTML = cab('Altas · nuevo ingreso', 'Da de alta a los candidatos que ingresaron: crea el colaborador, guarda sus datos y abre los pendientes de expediente a 7 días.', 'mochila') + '<div class="loading">Cargando…</div>';
+  try { [AL.pend, AL.ult] = await Promise.all([API.altasPend(), API.altasUltimas()]); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudo cargar: ${esc(e.message || e)}</div>`; return; }
+  const puede = can('colaboradores', 'crear'), ok = x => okT(tienda(x.idpdv) || null) || (!tienda(x.idpdv) && !Object.values(FL).some(Boolean));
+  const pend = AL.pend.filter(ok), ult = AL.ult.filter(ok);
+  let h = cab('Altas · nuevo ingreso', 'Da de alta a los candidatos que ingresaron: crea el colaborador, guarda sus datos y abre los pendientes de expediente a 7 días.', 'mochila') + barraFiltros('vAltas');
+  h += `<div class="kpis">${kp('Por dar de alta', fmt(pend.length), 'candidatos que ingresaron (60 días)', pend.length ? C.rd : C.gr, null, '🆕')}${kp('Altas últimos 45 días', fmt(ult.length), 'colaboradores creados', C.gr, null, '✅')}</div>`;
+  h += `<div class="tools">${puede ? '<button class="btn primary" onclick="altaNueva()">➕ Alta sin candidato</button>' : ''}<span class="muted">Los candidatos salen de Posibles ingresos cuando los marcas como "Ingresó".</span></div>`;
+  TB = {};
+  h += sect('Candidatos que ingresaron y no tienen alta', '🆕') + tbl('t-alp', [
+    { h: 'Fecha de ingreso', v: c => c.fecha_programada, r: c => fdate(c.fecha_programada), w: 100 }, { h: 'Candidato', t: 1, v: c => c.nombre, w: 230, r: c => `<b>${esc(c.nombre)}</b>` },
+    { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: c => (tienda(c.idpdv) || {}).cadena }, { h: 'Estado', t: 1, v: c => (tienda(c.idpdv) || {}).estado }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh },
+    { h: '', v: () => '', r: c => puede ? `<button class="rsv" onclick="altaNueva('${c.id}')">Dar de alta ›</button>` : '' }], pend, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_pendientes', titulo: 'Candidatos por dar de alta', sort: 0, dir: -1, maxh: '50vh' });
+  h += sect('Altas recientes', '✅') + tbl('t-alu', [
+    { h: 'Ingreso', v: c => c.fecha_ingreso, r: c => fdate(c.fecha_ingreso), w: 96 }, { h: 'Usuario', t: 1, v: c => c.usuario_fieldwy, w: 130 }, { h: 'Colaborador', t: 1, v: c => c.nombre, r: c => `<b>${esc(c.nombre)}</b>` }, { h: 'Tipo', t: 1, v: c => c.tipo_ingreso || 'Nuevo' }, { h: 'Razón social', t: 1, v: c => c.empresa },
+    { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Región', t: 1, v: c => (tienda(c.idpdv) || {}).region }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh }], ult, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_recientes', titulo: 'Altas recientes', sort: 0, dir: -1, maxh: '50vh' });
+  $('content').innerHTML = h; drawAll();
+}
+function tiendaOpts() { return Object.values(S.cat.tiendas).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es')).map(t => `<option value="${t.idpdv} · ${esc(t.nombre)} (${esc(t.cadena || '')} · ${esc(t.estado || '')})"></option>`).join(''); }
+async function altaNueva(candId) {
+  const c = candId ? AL.pend.find(x => x.id === candId) : null; AL.pre = c;
+  if (!AL.emp.length) { try { AL.emp = await API.empresas(); } catch (e) { } }
+  const t = c ? tienda(c.idpdv) : null, fld = (l, id, ph, ex) => `<div class="fld"><label>${l}</label><input id="al-${id}" ${ex || ''} placeholder="${ph || ''}"></div>`;
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(860px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>🆕 Alta de colaborador</h3>${c ? `<div class="who">Candidato: ${esc(c.nombre)} · ingresó el ${fdate(c.fecha_programada)}</div>` : ''}
+    <div class="row2">${fld('Usuario Fieldwy *', 'us', 'Ej. ABCD010203XYZ', 'autocomplete="off" style="text-transform:uppercase"')}${fld('Nombre completo *', 'nom', '', `value="${esc(c ? c.nombre : '')}"`)}</div>
+    <div class="row2"><div class="fld"><label>Fecha de ingreso *</label><input type="date" id="al-f" value="${c ? c.fecha_programada : HOY}"></div><div class="fld"><label>Tienda *</label><input id="al-t" list="al-tl" placeholder="Escribe IDPDV o nombre…" value="${t ? esc(c.idpdv + ' · ' + t.nombre + ' (' + (t.cadena || '') + ' · ' + (t.estado || '') + ')') : ''}"><datalist id="al-tl">${tiendaOpts()}</datalist></div></div>
+    <div class="row2"><div class="fld"><label>Razón social (empresa)</label><input id="al-emp" list="al-el" placeholder="Ej. Benber SS"><datalist id="al-el">${AL.emp.map(e => `<option value="${esc(e)}">`).join('')}</datalist></div><div class="fld"><label>Tipo de ingreso</label><select id="al-tipo"><option>Nuevo</option><option>Reingreso</option></select></div></div>
+    <details class="enc-d" open><summary>🔒 Datos personales (solo RH y administración)</summary><div class="enc-box">
+      <div class="row2">${fld('CURP', 'curp', '18 caracteres', 'maxlength="18" style="text-transform:uppercase"')}${fld('RFC', 'rfc', '12 o 13 caracteres', 'maxlength="13" style="text-transform:uppercase"')}</div>
+      <div class="row2">${fld('NSS (IMSS)', 'nss', '11 dígitos', 'inputmode="numeric" maxlength="11"')}${fld('Teléfono', 'tel', '10 dígitos', `inputmode="numeric" maxlength="10" value="${esc(c && c.telefono ? digs(c.telefono).slice(-10) : '')}"`)}</div>
+      <div class="row2">${fld('Correo', 'mail', 'nombre@correo.com', 'type="email"')}<div class="fld"><label>Estado civil</label><select id="al-ec"><option value="">—</option>${ESTADO_CIVIL.map(e => `<option>${e}</option>`).join('')}</select></div></div>
+      <div class="row2"><div class="fld"><label>¿Tiene crédito Infonavit?</label><select id="al-inf"><option value="">—</option><option>Sí</option><option>No</option></select></div><div class="fld"><label>Talla de uniforme</label><select id="al-talla"><option value="">—</option>${TALLAS.map(e => `<option>${e}</option>`).join('')}</select></div></div>
+      <div class="row2">${fld('Contacto de emergencia', 'emer', 'Nombre y teléfono')}${fld('Sueldo mensual ($)', 'suel', '', 'type="number" min="0" step="0.01"')}</div></div></details>
+    <details class="enc-d"><summary>💳 Datos bancarios (pueden llegar después)</summary><div class="enc-box"><div class="row2">${fld('Banco', 'banco')}${fld('CLABE interbancaria', 'clabe', '18 dígitos', 'inputmode="numeric" maxlength="18"')}</div><div class="row2">${fld('Número de tarjeta', 'tarj', '', 'inputmode="numeric" maxlength="19"')}${fld('Cuenta', 'cta')}</div></div></details>
+    <div class="note">Al guardar se abren los pendientes <b>Expediente</b>, <b>Datos bancarios</b> y <b>CSF</b> con vencimiento a ${PLAZO_DOCS} días del ingreso. Los documentos se guardan fuera de la app (OneDrive o Drive).</div>
+    <div class="warn" id="al-warn" hidden></div>
+    <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="al-ok">Guardar alta</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  $('al-ok').onclick = altaGuardar; setTimeout(() => $('al-us').focus(), 60);
+}
+async function altaGuardar() {
+  const g = id => limpia($('al-' + id).value), w = $('al-warn'), b = $('al-ok');
+  const us = mayus(g('us')), nom = g('nom'), f = g('f'), tt = g('t'), idp = parseInt(tt, 10), curp = mayus(g('curp')), rfc = mayus(g('rfc')), nss = digs(g('nss')), tel = digs(g('tel')), mail = g('mail').toLowerCase(), clabe = digs(g('clabe')), suel = g('suel');
+  const e = [];
+  if (!us) e.push('Falta el usuario Fieldwy.'); if (!nom) e.push('Falta el nombre.'); if (!f) e.push('Falta la fecha de ingreso.');
+  if (!idp || !tienda(idp)) e.push('Elige una tienda de la lista (empieza con su IDPDV).');
+  if (curp && !V.curp(curp)) e.push('La CURP no tiene un formato válido (18 caracteres).'); if (rfc && !V.rfc(rfc)) e.push('El RFC no tiene un formato válido.');
+  if (nss && !V.nss(nss)) e.push('El NSS debe tener 11 dígitos.'); if (tel && !V.tel(tel)) e.push('El teléfono debe tener 10 dígitos.'); if (mail && !V.mail(mail)) e.push('El correo no es válido.');
+  if (clabe && !V.clabe(clabe)) e.push('La CLABE no es válida (18 dígitos con dígito verificador correcto).');
+  if (e.length) { w.hidden = false; w.innerHTML = e.map(esc).join('<br>'); return; }
+  const tarj = digs(g('tarj'));
+  const sens = { curp: curp || null, rfc: rfc || null, nss: nss || null, correo: mail || null, telefono: tel || null, estado_civil: $('al-ec').value || null, infonavit: $('al-inf').value ? $('al-inf').value === 'Sí' : null, contacto_emergencia: g('emer') || null, talla: $('al-talla').value || null, sueldo: suel ? +suel : null, banco: g('banco') || null, tarjeta: tarj || null, clabe: clabe || null, cuenta: g('cta') || null };
+  b.disabled = true; b.textContent = 'Guardando…';
+  try {
+    await API.registrarAlta({ usuario: us, nombre: nom.toUpperCase(), fecha: f, idpdv: idp, empresa: g('emp'), tipo: $('al-tipo').value, candidato: AL.pre ? AL.pre.id : null, sens });
+    cerrarM(); toast('Alta registrada: ' + nom); vAltas();
+  } catch (x) { b.disabled = false; b.textContent = 'Reintentar'; w.hidden = false; w.textContent = x.message || String(x); }
+}
+
+/* ----- EXPEDIENTES: semáforo de pendientes ----- */
+let EXP = { lista: null };
+async function vExpedientes() {
+  $('content').innerHTML = cab('Expedientes', 'Pendientes de expediente, datos bancarios y CSF por colaborador, con vencimiento a 7 días del ingreso.', 'puno') + '<div class="loading">Cargando…</div>';
+  try { EXP.lista = await API.expedientes(); } catch (e) { $('content').innerHTML += `<div class="warn">${esc(e.message || e)}</div>`; return; }
+  const por = new Map(); EXP.lista.forEach(p => { if (!por.has(p.usuario_fieldwy)) por.set(p.usuario_fieldwy, { usuario: p.usuario_fieldwy, c: p.colaboradores, docs: [] }); por.get(p.usuario_fieldwy).docs.push(p); });
+  const ok = q => okT(tienda(q.c.idpdv) || null) || (!tienda(q.c.idpdv) && !Object.values(FL).some(Boolean));
+  let rows = [...por.values()].filter(ok).map(q => ({ ...q, peor: Math.min(...q.docs.map(d => diffD(d.fecha_limite, HOY))) }));
+  const venc = rows.filter(r => r.peor < 0).length, prox = rows.filter(r => r.peor >= 0 && r.peor <= 2).length, enT = rows.filter(r => r.peor > 2).length;
+  let h = cab('Expedientes', 'Pendientes de expediente, datos bancarios y CSF por colaborador, con vencimiento a 7 días del ingreso.', 'puno') + barraFiltros('vExpedientes');
+  h += `<div class="kpis">${kp('Con pendientes', fmt(rows.length), 'colaboradores activos', C.am, null, '🗂️')}${kp('Vencidos', fmt(venc), 'pasó la fecha límite', venc ? C.rd : C.gr, null, '🔴')}${kp('Vencen en ≤ 2 días', fmt(prox), 'atender hoy', prox ? C.am : C.gr, null, '🟡')}${kp('En tiempo', fmt(enT), 'más de 2 días', C.gr, null, '🟢')}</div>`;
+  const chip = d => { const n = diffD(d.fecha_limite, HOY), k = n < 0 ? 'r' : n <= 2 ? 'a' : 'g'; return `<span class="dchip ${k} dc-doc" title="Vence ${fdate(d.fecha_limite)}">${d.tipo}${can('expedientes', 'editar') ? ` <button class="dc-ok" onclick="docRecibido(${d.id})">✔ Recibido</button>` : ''}</span>`; };
+  TB = {};
+  h += sect('Pendientes por colaborador', '🗂️') + tbl('t-exp', [
+    { h: 'Vence', v: r => r.peor, r: r => r.peor < 0 ? `<span class="dchip r">${-r.peor} d vencido</span>` : `<span class="dchip ${r.peor <= 2 ? 'a' : 'g'}">${r.peor === 0 ? 'hoy' : r.peor + ' d'}</span>`, w: 118 },
+    { h: 'Colaborador', t: 1, v: r => r.c.nombre, w: 230, r: r => `<b>${esc(r.c.nombre)}</b><br><small class="muted">${esc(r.usuario)}</small>` }, { h: 'Ingreso', v: r => r.c.fecha_ingreso, r: r => fdate(r.c.fecha_ingreso) },
+    { h: 'Pendiente', t: 1, v: r => r.docs.map(d => d.tipo).join(', '), r: r => `<div class="dc-wrap">${r.docs.map(chip).join('')}</div>` },
+    { h: 'Tienda', t: 1, v: r => (tienda(r.c.idpdv) || {}).nombre || '' }, { h: 'Estado', t: 1, v: r => (tienda(r.c.idpdv) || {}).estado }, { h: 'Supervisor', t: 1, v: r => (tienda(r.c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: r => (tienda(r.c.idpdv) || {}).rrhh }, { h: 'Razón social', t: 1, v: r => r.c.empresa }
+  ], rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'expedientes_pendientes', titulo: 'Expedientes pendientes', sort: 0, dir: 1, maxh: '72vh' });
+  $('content').innerHTML = h; drawAll();
+}
+async function docRecibido(id) {
+  const url = prompt('Enlace a la carpeta o archivo (opcional). Deja vacío si no hay:', ''); if (url === null) return;
+  try { await API.marcarDoc(id, limpia(url)); EXP.lista = EXP.lista.filter(x => x.id !== id); toast('Marcado como recibido'); vExpedientes(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); }
+}
+
 /* >>> 08_demo_reportes.js */
 /* ----- datos de ejemplo para reportes, ingresos y movimientos (todo ficticio) ----- */
 (function () {
@@ -1296,6 +1441,18 @@ function encuestaDeBaja(id) {
   Demo.guardarEncuesta = async () => { };
   Demo.actualizarFiniquito = async () => { };
   Demo.anularBaja = async b => { iniBajas(); DB.lista = DB.lista.filter(x => x.id !== b.id); const c = DB.colab.find(x => x.usuario_fieldwy === b.usuario); if (c) c.estatus = 'Activo'; };
+
+  /* ----- altas / expedientes (demo) ----- */
+  const DA = { c: null, e: null };
+  const iniAltas = () => { if (DA.c) return; const t = Object.values(S.cat.tiendas), nom = ['Rosa Vidal', 'Iván Rojas', 'Elena Pozos', 'Raúl Mena', 'Sofía Díaz', 'Omar Ceja'];
+    DA.c = nom.map((n, i) => ({ id: 'AC' + i, nombre: n + ' ' + (i + 1), telefono: '55123456' + (10 + i), idpdv: t[(i * 5) % t.length].idpdv, fecha_programada: addD(HOY, -i * 2), reclutador_id: 1, usuario_fieldwy: null }));
+    DA.e = Array.from({ length: 14 }, (_, i) => ({ id: i + 1, usuario_fieldwy: 'DEMO' + (500 + (i >> 1)), tipo: ['Expediente', 'Datos bancarios', 'CSF'][i % 3], fecha_limite: addD(HOY, (i % 6) - 3), estatus: 'Pendiente', colaboradores: { nombre: nom[(i >> 1) % 6] + ' ' + ((i >> 1) + 1), fecha_ingreso: addD(HOY, -7 + (i % 6) - 3), idpdv: t[(i * 3) % t.length].idpdv, empresa: 'Benber SS', estatus: 'Activo' } })); };
+  Demo.altasPend = async () => { iniAltas(); return DA.c.filter(c => !c.usuario_fieldwy); };
+  Demo.altasUltimas = async () => { iniAltas(); return []; };
+  Demo.empresas = async () => ['Benber SS', 'Revelor', 'Doma Legal'];
+  Demo.registrarAlta = async d => { iniAltas(); const c = DA.c.find(x => x.id === d.candidato); if (c) c.usuario_fieldwy = d.usuario; };
+  Demo.expedientes = async () => { iniAltas(); return DA.e.filter(x => x.estatus === 'Pendiente'); };
+  Demo.marcarDoc = async id => { iniAltas(); const x = DA.e.find(e => e.id === id); if (x) x.estatus = 'Recibido'; };
 })();
 
 /* >>> 99_init.js */
