@@ -1247,6 +1247,9 @@ function encuestaDeBaja(id) {
 const AL = { pend: null, ult: null, emp: [], pre: null };
 const PLAZO_DOCS = 7;
 const DOCS = ['Expediente', 'Datos bancarios', 'CSF'];
+/* checklist del expediente: [documento, obligatorio]. Los archivos viven en OneDrive/Drive; aquí se guarda el enlace y la validación */
+const DOCS_EXP = [['INE (frente y vuelta)', 1], ['CURP', 1], ['Acta de nacimiento', 1], ['Comprobante de domicilio', 1], ['NSS / constancia IMSS', 1], ['Contrato firmado', 1], ['Constancia de situación fiscal (CSF)', 0], ['Datos bancarios (carátula)', 0], ['Fotografía', 0], ['Otro documento', 0]];
+const DOC_PEND = { 'Constancia de situación fiscal (CSF)': 'CSF', 'Datos bancarios (carátula)': 'Datos bancarios' };
 const ESTADO_CIVIL = ['Soltero(a)', 'Casado(a)', 'Unión libre', 'Divorciado(a)', 'Viudo(a)'], TALLAS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
 /* ----- validaciones ----- */
@@ -1298,6 +1301,20 @@ Real.expedientes = async function () {
 };
 Real.marcarDoc = async function (id, url) { const { data: u } = await sb.auth.getUser(); const { error } = await sb.from('pendientes_documentos').update({ estatus: 'Recibido', recibido_en: HOY, recibido_por: u.user.id, enlace_url: url || null }).eq('id', id); if (error) throw error; };
 
+
+Real.altasDia = async function (fecha) {
+  const ini = new Date(fecha + 'T00:00:00'), fin = new Date(ini.getTime() + 864e5);
+  const q = cols => todo(() => sb.from('colaboradores').select(cols).gte('creado_en', ini.toISOString()).lt('creado_en', fin.toISOString()).order('creado_en'));
+  const base = 'usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,creado_en';
+  try { return await q(base + ',tipo_ingreso,usuario_creado_en,datos_sensibles(curp,rfc,nss,correo,telefono)'); }
+  catch (e) { try { return await q(base + ',datos_sensibles(curp,rfc,nss,correo,telefono)'); } catch (e2) { return await q(base); } } // antes de correr los SQL v08/v09
+};
+Real.marcarUsuarioCreado = async function (usuario, v) { const { data: u } = await sb.auth.getUser(); const { error } = await sb.from('colaboradores').update(v ? { usuario_creado_en: new Date().toISOString(), usuario_creado_por: u.user.id } : { usuario_creado_en: null, usuario_creado_por: null }).eq('usuario_fieldwy', usuario); if (error) throw error; };
+Real.docsDe = async function (usuario) { const { data, error } = await sb.from('expediente_docs').select('*').eq('usuario_fieldwy', usuario); if (error) throw error; return data || []; };
+Real.guardarDoc = async function (usuario, tipo, url) { const { error } = await sb.from('expediente_docs').upsert({ usuario_fieldwy: usuario, tipo, enlace_url: url, estatus: 'Cargado', nota: null, validado_por: null, validado_en: null, cargado_en: new Date().toISOString() }); if (error) throw error; };
+Real.validarDoc = async function (usuario, tipo, estatus, nota) { const { data: u } = await sb.auth.getUser(); const { error } = await sb.from('expediente_docs').update({ estatus, nota: nota || null, validado_por: u.user.id, validado_en: new Date().toISOString() }).eq('usuario_fieldwy', usuario).eq('tipo', tipo); if (error) throw error; };
+Real.cerrarPendientes = async function (usuario, tipos) { if (!tipos.length) return; const { data: u } = await sb.auth.getUser(); await sb.from('pendientes_documentos').update({ estatus: 'Recibido', recibido_en: HOY, recibido_por: u.user.id }).eq('usuario_fieldwy', usuario).eq('estatus', 'Pendiente').in('tipo', tipos); };
+
 /* ----- ALTAS ----- */
 async function vAltas() {
   $('content').innerHTML = cab('Altas · nuevo ingreso', 'Da de alta a los candidatos que ingresaron: crea el colaborador, guarda sus datos y abre los pendientes de expediente a 7 días.', 'mochila') + '<div class="loading">Cargando…</div>';
@@ -1305,16 +1322,17 @@ async function vAltas() {
   const puede = can('colaboradores', 'crear'), ok = x => okT(tienda(x.idpdv) || null) || (!tienda(x.idpdv) && !Object.values(FL).some(Boolean));
   const pend = AL.pend.filter(ok), ult = AL.ult.filter(ok);
   let h = cab('Altas · nuevo ingreso', 'Da de alta a los candidatos que ingresaron: crea el colaborador, guarda sus datos y abre los pendientes de expediente a 7 días.', 'mochila') + barraFiltros('vAltas');
-  h += `<div class="kpis">${kp('Por dar de alta', fmt(pend.length), 'candidatos que ingresaron (60 días)', pend.length ? C.rd : C.gr, null, '🆕')}${kp('Altas últimos 45 días', fmt(ult.length), 'colaboradores creados', C.gr, null, '✅')}</div>`;
+  h += `<div class="kpis">${(puede ? kp('Por dar de alta', fmt(pend.length), 'candidatos que ingresaron (60 días)', pend.length ? C.rd : C.gr, null, '🆕') : '')}${kp('Altas últimos 45 días', fmt(ult.length), 'colaboradores creados', C.gr, null, '✅')}</div>`;
   h += `<div class="tools">${puede ? '<button class="btn primary" onclick="altaNueva()">➕ Alta sin candidato</button>' : ''}<span class="muted">Los candidatos salen de Posibles ingresos cuando los marcas como "Ingresó".</span></div>`;
   TB = {};
-  h += sect('Candidatos que ingresaron y no tienen alta', '🆕') + tbl('t-alp', [
+  h += await altasDiaHtml();
+  if (puede) h += sect('Candidatos que ingresaron y no tienen alta', '🆕') + tbl('t-alp', [
     { h: 'Fecha de ingreso', v: c => c.fecha_programada, r: c => fdate(c.fecha_programada), w: 100 }, { h: 'Candidato', t: 1, v: c => c.nombre, w: 230, r: c => `<b>${esc(c.nombre)}</b>` },
     { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: c => (tienda(c.idpdv) || {}).cadena }, { h: 'Estado', t: 1, v: c => (tienda(c.idpdv) || {}).estado }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh },
     { h: '', v: () => '', r: c => puede ? `<button class="rsv" onclick="altaNueva('${c.id}')">Dar de alta ›</button>` : '' }], pend, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_pendientes', titulo: 'Candidatos por dar de alta', sort: 0, dir: -1, maxh: '50vh' });
   h += sect('Altas recientes', '✅') + tbl('t-alu', [
     { h: 'Ingreso', v: c => c.fecha_ingreso, r: c => fdate(c.fecha_ingreso), w: 96 }, { h: 'Usuario', t: 1, v: c => c.usuario_fieldwy, w: 130 }, { h: 'Colaborador', t: 1, v: c => c.nombre, r: c => `<b>${esc(c.nombre)}</b>` }, { h: 'Tipo', t: 1, v: c => c.tipo_ingreso || 'Nuevo' }, { h: 'Razón social', t: 1, v: c => c.empresa },
-    { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Región', t: 1, v: c => (tienda(c.idpdv) || {}).region }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh }], ult, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_recientes', titulo: 'Altas recientes', sort: 0, dir: -1, maxh: '50vh' });
+    { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Región', t: 1, v: c => (tienda(c.idpdv) || {}).region }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh }, ...(can('expedientes', 'ver') ? [{ h: '', v: () => '', r: c => `<button class="rsv" onclick="expedienteAbrir('${c.usuario_fieldwy}')">Expediente ›</button>` }] : [])], ult, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_recientes', titulo: 'Altas recientes', sort: 0, dir: -1, maxh: '50vh' });
   $('content').innerHTML = h; drawAll();
 }
 function tiendaOpts() { return Object.values(S.cat.tiendas).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es')).map(t => `<option value="${t.idpdv} · ${esc(t.nombre)} (${esc(t.cadena || '')} · ${esc(t.estado || '')})"></option>`).join(''); }
@@ -1375,13 +1393,63 @@ async function vExpedientes() {
     { h: 'Vence', v: r => r.peor, r: r => r.peor < 0 ? `<span class="dchip r">${-r.peor} d vencido</span>` : `<span class="dchip ${r.peor <= 2 ? 'a' : 'g'}">${r.peor === 0 ? 'hoy' : r.peor + ' d'}</span>`, w: 118 },
     { h: 'Colaborador', t: 1, v: r => r.c.nombre, w: 230, r: r => `<b>${esc(r.c.nombre)}</b><br><small class="muted">${esc(r.usuario)}</small>` }, { h: 'Ingreso', v: r => r.c.fecha_ingreso, r: r => fdate(r.c.fecha_ingreso) },
     { h: 'Pendiente', t: 1, v: r => r.docs.map(d => d.tipo).join(', '), r: r => `<div class="dc-wrap">${r.docs.map(chip).join('')}</div>` },
-    { h: 'Tienda', t: 1, v: r => (tienda(r.c.idpdv) || {}).nombre || '' }, { h: 'Estado', t: 1, v: r => (tienda(r.c.idpdv) || {}).estado }, { h: 'Supervisor', t: 1, v: r => (tienda(r.c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: r => (tienda(r.c.idpdv) || {}).rrhh }, { h: 'Razón social', t: 1, v: r => r.c.empresa }
+    { h: 'Tienda', t: 1, v: r => (tienda(r.c.idpdv) || {}).nombre || '' }, { h: 'Estado', t: 1, v: r => (tienda(r.c.idpdv) || {}).estado }, { h: 'Supervisor', t: 1, v: r => (tienda(r.c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: r => (tienda(r.c.idpdv) || {}).rrhh }, { h: 'Razón social', t: 1, v: r => r.c.empresa },
+    { h: '', v: () => '', r: r => `<button class="rsv" onclick="expedienteAbrir('${r.usuario}')">Expediente ›</button>` }
   ], rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'expedientes_pendientes', titulo: 'Expedientes pendientes', sort: 0, dir: 1, maxh: '72vh' });
   $('content').innerHTML = h; drawAll();
 }
 async function docRecibido(id) {
   const url = prompt('Enlace a la carpeta o archivo (opcional). Deja vacío si no hay:', ''); if (url === null) return;
   try { await API.marcarDoc(id, limpia(url)); EXP.lista = EXP.lista.filter(x => x.id !== id); toast('Marcado como recibido'); vExpedientes(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); }
+}
+
+/* ----- altas del día (para quien crea los usuarios de Fieldwy) ----- */
+let ALD = { dia: null, lista: [] };
+async function altasDiaHtml() {
+  ALD.dia = ALD.dia || HOY; let rows = [];
+  try { rows = await API.altasDia(ALD.dia); } catch (e) { return `<div class="warn">No se pudieron cargar las altas del día: ${esc(e.message || e)}</div>`; }
+  ALD.lista = rows = rows.map(r => ({ ...r, s: (Array.isArray(r.datos_sensibles) ? r.datos_sensibles[0] : r.datos_sensibles) || {} }));
+  const sens = can('datos_sensibles', 'ver'), edita = can('colaboradores', 'editar'), pend = rows.filter(r => !r.usuario_creado_en).length;
+  const cols = [
+    { h: 'Hora', v: r => r.creado_en, r: r => r.creado_en ? new Date(r.creado_en).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—', w: 70 }, { h: 'Usuario Fieldwy', t: 1, v: r => r.usuario_fieldwy, w: 150, r: r => `<b>${esc(r.usuario_fieldwy)}</b>` },
+    { h: 'Nombre', t: 1, v: r => r.nombre, r: r => `<b>${esc(r.nombre)}</b>` }, { h: 'Tipo', t: 1, v: r => r.tipo_ingreso || 'Nuevo' }, { h: 'Tienda', t: 1, v: r => (tienda(r.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: r => (tienda(r.idpdv) || {}).cadena }, { h: 'Estado', t: 1, v: r => (tienda(r.idpdv) || {}).estado },
+    { h: 'Supervisor', t: 1, v: r => (tienda(r.idpdv) || {}).supervisor }, { h: 'Razón social', t: 1, v: r => r.empresa },
+    ...(sens ? [{ h: 'Teléfono', t: 1, v: r => r.s.telefono }, { h: 'Correo', t: 1, v: r => r.s.correo }, { h: 'CURP', t: 1, v: r => r.s.curp }, { h: 'RFC', t: 1, v: r => r.s.rfc }, { h: 'NSS', t: 1, v: r => r.s.nss }] : []),
+    { h: 'Usuario creado', v: r => r.usuario_creado_en ? 1 : 0, r: r => r.usuario_creado_en ? `<span class="pill g">✔ ${fdate(r.usuario_creado_en.slice(0, 10))}</span>${edita ? ` <button class="rsv" onclick="usuarioCreado('${r.usuario_fieldwy}',false)">Deshacer</button>` : ''}` : (edita ? `<button class="rsv" onclick="usuarioCreado('${r.usuario_fieldwy}',true)">Marcar creado</button>` : '—') }];
+  return sect('Altas capturadas del día', '📋') + `<div class="tools"><span>Día:</span><input type="date" max="${HOY}" value="${ALD.dia}" onchange="ALD.dia=this.value;vAltas()"><span class="muted">${fmt(rows.length)} altas · <b>${fmt(pend)}</b> sin usuario creado</span></div>` +
+    tbl('t-ald', cols, rows, { fix: 3, search: 1, csv: 1, png: 1, file: 'altas_del_dia_' + ALD.dia, titulo: 'Altas del ' + fdia(ALD.dia), sort: 0, dir: 1, maxh: '50vh' });
+}
+async function usuarioCreado(u, v) { try { await API.marcarUsuarioCreado(u, v); toast(v ? 'Marcado: usuario creado' : 'Marca quitada'); vAltas(); } catch (e) { toast('No se pudo guardar (¿ya corriste el SQL v09?): ' + (e.message || e)); } }
+
+/* ----- checklist del expediente: enlace por documento + validación ----- */
+async function expedienteAbrir(usuario) {
+  let docs = []; try { docs = await API.docsDe(usuario); } catch (e) { toast('No se pudo cargar (¿ya corriste el SQL v09?): ' + (e.message || e)); return; }
+  const por = Object.fromEntries(docs.map(d => [d.tipo, d])), edita = can('expedientes', 'editar'), crea = can('expedientes', 'crear') || edita;
+  const nom = (ALD.lista.find(x => x.usuario_fieldwy === usuario) || (AL.ult || []).find(x => x.usuario_fieldwy === usuario) || ((EXP.lista || []).find(x => x.usuario_fieldwy === usuario) || {}).colaboradores || {}).nombre || usuario;
+  const oblig = DOCS_EXP.filter(d => d[1]), val = oblig.filter(d => (por[d[0]] || {}).estatus === 'Validado').length;
+  const fila = ([t, req], i) => { const d = por[t] || {}, st = d.estatus || 'Falta', k = st === 'Validado' ? 'g' : st === 'Cargado' ? 'a' : st === 'Rechazado' ? 'r' : 'x';
+    return `<div class="xd-row"><div class="xd-n"><b>${esc(t)}</b>${req ? ' <small class="muted">obligatorio</small>' : ''}<br>${pillx(esc(st), k)}${d.nota ? `<br><small class="muted">${esc(d.nota)}</small>` : ''}</div>
+      <div class="xd-l"><input id="xd-u${i}" placeholder="Pega el enlace de OneDrive / Drive" value="${esc(d.enlace_url || '')}" ${crea ? '' : 'disabled'}>${d.enlace_url ? `<a class="btn sm" href="${esc(d.enlace_url)}" target="_blank" rel="noopener">Abrir</a>` : ''}</div>
+      <div class="xd-a">${crea ? `<button class="btn sm" onclick="docGuardar('${usuario}',${i})">Guardar enlace</button>` : ''}${edita && d.enlace_url && st !== 'Validado' ? `<button class="btn sm primary" onclick="docValidar('${usuario}',${i},'Validado')">✔ Validar</button>` : ''}${edita && d.enlace_url && st !== 'Rechazado' ? `<button class="btn sm" onclick="docValidar('${usuario}',${i},'Rechazado')">✖ Rechazar</button>` : ''}</div></div>`; };
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(980px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>🗂️ Expediente</h3><div class="who">${esc(nom)} · ${esc(usuario)}<br><b>${val} de ${oblig.length}</b> documentos obligatorios validados</div>
+    <div class="note">Los archivos se quedan en OneDrive o Drive; aquí se pega el enlace y se valida. Al validar todos los obligatorios, el pendiente <b>Expediente</b> se cierra solo.</div>${DOCS_EXP.map(fila).join('')}
+    <div class="mfoot"><button class="btn" onclick="cerrarM();if(S.view==='expedientes')vExpedientes()">Cerrar</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') { cerrarM(); if (S.view === 'expedientes') vExpedientes(); } };
+}
+async function docGuardar(u, i) {
+  const url = limpia($('xd-u' + i).value); if (!/^https?:\/\//i.test(url)) { toast('Pega un enlace que empiece con https://'); return; }
+  try { await API.guardarDoc(u, DOCS_EXP[i][0], url); toast('Enlace guardado'); expedienteAbrir(u); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); }
+}
+async function docValidar(u, i, est) {
+  let nota = null; if (est === 'Rechazado') { nota = prompt('¿Por qué se rechaza? (ilegible, vencido, incompleto…)', ''); if (nota === null) return; }
+  try {
+    await API.validarDoc(u, DOCS_EXP[i][0], est, nota);
+    const docs = await API.docsDe(u), ok = t => (docs.find(d => d.tipo === t) || {}).estatus === 'Validado', cerrar = [];
+    if (DOCS_EXP.filter(d => d[1]).every(d => ok(d[0]))) cerrar.push('Expediente');
+    Object.entries(DOC_PEND).forEach(([t, p]) => { if (ok(t)) cerrar.push(p); });
+    await API.cerrarPendientes(u, cerrar);
+    toast(est === 'Validado' ? 'Documento validado' + (cerrar.includes('Expediente') ? ' · expediente completo ✅' : '') : 'Documento rechazado'); expedienteAbrir(u);
+  } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); }
 }
 
 /* >>> 08_demo_reportes.js */
@@ -1454,6 +1522,14 @@ async function docRecibido(id) {
   Demo.registrarAlta = async d => { iniAltas(); const c = DA.c.find(x => x.id === d.candidato); if (c) c.usuario_fieldwy = d.usuario; };
   Demo.expedientes = async () => { iniAltas(); return DA.e.filter(x => x.estatus === 'Pendiente'); };
   Demo.marcarDoc = async id => { iniAltas(); const x = DA.e.find(e => e.id === id); if (x) x.estatus = 'Recibido'; };
+
+  const DD = { docs: {} };
+  Demo.altasDia = async () => { iniAltas(); return DA.c.slice(0, 3).map((c, i) => ({ usuario_fieldwy: 'DEMO9' + i, nombre: c.nombre, empresa: 'Benber SS', idpdv: c.idpdv, fecha_ingreso: HOY, creado_en: new Date().toISOString(), tipo_ingreso: 'Nuevo', usuario_creado_en: i === 0 ? new Date().toISOString() : null, datos_sensibles: [{ curp: 'ABCD010203HDFXXX0' + i, rfc: 'ABCD0102039' + i + '1', nss: '1234567890' + i, correo: 'demo' + i + '@mail.com', telefono: '551234567' + i }] })); };
+  Demo.marcarUsuarioCreado = async () => { };
+  Demo.docsDe = async u => Object.values(DD.docs[u] || {});
+  Demo.guardarDoc = async (u, tipo, url) => { (DD.docs[u] = DD.docs[u] || {})[tipo] = { usuario_fieldwy: u, tipo, enlace_url: url, estatus: 'Cargado' }; };
+  Demo.validarDoc = async (u, tipo, est, nota) => { DD.docs[u][tipo].estatus = est; DD.docs[u][tipo].nota = nota; };
+  Demo.cerrarPendientes = async () => { };
 })();
 
 /* >>> 99_init.js */
