@@ -12,6 +12,7 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 | Notas | "Anota que…" o "¿qué anoté sobre Elektra?". |
 | Ordenar escritorio / descargas | Analiza la carpeta y **propone** un plan. Nada se mueve hasta que presionas **Aplicar**; **Deshacer** regresa todo. |
 | Revisar código | "Revisa el archivo C:\…\medidas.dax y optimízalo" (lee .dax, .m, .sql, .bas, .py, .csv, .txt…). |
+| Avisos de tus automatizaciones | Tus macros, scripts y tareas programadas le avisan a Saurio cuando terminan o fallan; él cambia de pose, te lo dice y puede crear el pendiente. Ver abajo. |
 | Minutas de reuniones | Solo cuando tú lo pides: botón **Reunión** o escríbele "toma minuta de esta junta" / "ya terminó". Escucha tu micrófono **y** el audio de Teams/Zoom, transcribe **en tu laptop**, arma la minuta y te registra tus acuerdos como pendientes. El audio se borra al terminar; solo quedan la transcripción y la minuta. |
 
 ## Instalar (una vez)
@@ -41,6 +42,18 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 3. En `config.json` pon `"proveedor": "ollama"`. No necesitas API key.
 4. Nada sale de tu laptop. A cambio, responde más lento que Claude y se equivoca más con pendientes y archivos.
    Para volver a Claude, regresa `proveedor` a `claude`.
+
+## Buzón de avisos (para tus macros y tareas programadas)
+Saurio escucha avisos solo dentro de tu laptop (puerto `7788`). Cada aviso lleva una contraseña que se crea sola en `%USERPROFILE%\GbSaurio\buzon_token.txt`; así ninguna página web puede mandarle mensajes.
+Cada aviso se guarda como nota, así que luego puedes preguntarle "¿qué falló hoy?".
+
+- **Desde PowerShell o el Programador de tareas:**
+  `powershell -ExecutionPolicy Bypass -File avisos\avisar.ps1 -Texto "Centro de Mando publicado" -Estado feliz -Origen "Pospago"`
+  Con pendiente: agrega `-Pendiente "Revisar carga de BASE" -Fecha 2026-10-08 -Prioridad Alta`.
+- **Desde una macro de Excel:** importa `avisos\AvisarSaurio.bas` (Alt+F11 → Archivo → Importar) y llama
+  `AvisarSaurio "Reporte de ventas listo", "feliz", "Macro Ventas"`.
+- `-Estado` / estado: `feliz` (salió bien), `preocupado` (falló), `alerta` (revisa algo), `hablando` (informativo).
+- Si Saurio está apagado, tu macro o script sigue normal: el aviso se pierde sin error.
 
 ## Dónde quedan tus datos
 Todo en `%USERPROFILE%\GbSaurio\`: `saurio.db` (pendientes y notas), `planes\` (bitácora para deshacer), `reuniones\` (audio y transcripción), y los Excel exportados.

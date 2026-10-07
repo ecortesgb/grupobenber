@@ -8,5 +8,6 @@
   "carpetas_permitidas": ["ESCRITORIO", "DOCUMENTOS", "DESCARGAS"],
   "modelo_transcripcion": "small",
   "recordatorio_minutos": 60,
-  "conservar_audio": false
+  "conservar_audio": false,
+  "buzon_puerto": 7788
 }

@@ -17,6 +17,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 import archivos
+import buzon
 import datos
 import reuniones
 from asistente import Asistente
@@ -131,6 +132,14 @@ class Puente(QObject):
     def deshacer(self):
         self.aviso.emit(archivos.deshacer_ultimo())
 
+    # ---------- buzón de avisos (macros, scripts, tareas programadas) ----------
+    def recibir_aviso(self, aviso):
+        self.aviso.emit(f"{aviso['origen']}: {aviso['texto']}")
+        if aviso["pendiente"]:
+            self._emitir_pendientes()
+        if not self.grabadora.grabando:  # no le quita el "● REC" a una reunión
+            self.estado.emit(aviso["estado"])
+
     # ---------- reuniones ----------
     def reunion_desde_chat(self, accion):
         """Claude lo usa cuando Elías pide por chat empezar o terminar de escuchar una reunión."""
@@ -209,6 +218,11 @@ def main():
     canal.registerObject("puente", puente)
     vista.page().setWebChannel(canal)
     vista.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent / "ui" / "index.html")))
+
+    try:
+        buzon.Buzon(cfg["buzon_puerto"], puente.recibir_aviso).iniciar()
+    except OSError:
+        print(f"El puerto {cfg['buzon_puerto']} está ocupado; el buzón de avisos queda apagado.")
 
     pantalla = app.primaryScreen().availableGeometry()
     vista.setGeometry(pantalla.right() - CHICA[0] - 20, pantalla.bottom() - CHICA[1] - 10, *CHICA)
