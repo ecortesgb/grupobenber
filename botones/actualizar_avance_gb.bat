@@ -2,7 +2,7 @@
 REM Boton manual: genera y publica Avance GB con lo que ya hay en disco (sin descargar; para eso estan los otros botones).
 chcp 65001 >nul
 title Actualizar Avance GB
-cd /d "C:\Users\ecort\OneDrive - Grupo Benber\AUTOMATIZACION\Herramientas\MotorPython"
+cd /d "C:\GB\sistema\Herramientas\MotorPython"
 echo Actualizando Avance GB... (tarda unos minutos, no cierres esta ventana)
 echo.
 py -3 actualizar_dashboard.py hora --sin-descarga

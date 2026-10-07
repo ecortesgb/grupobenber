@@ -2,7 +2,7 @@
 REM Boton manual: descarga recargas de CodigoArix (mismo script que la tarea GB_Descarga_Arix_Manana).
 chcp 65001 >nul
 title Descargar ARIX (recargas)
-cd /d "C:\Users\ecort\OneDrive - Grupo Benber\AUTOMATIZACION\Herramientas\arix"
+cd /d "C:\GB\sistema\Herramientas\arix"
 echo Descargando recargas de ARIX... (no cierres esta ventana)
 echo.
 node descarga_arix.js
