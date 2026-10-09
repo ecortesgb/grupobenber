@@ -72,9 +72,21 @@ def semana(f):
     m = re.search(r'S(\d+)', os.path.basename(f)); return int(m.group(1)) if m else -1
 
 # ====================================================================== CARGA
-def cargar_estructura(R):
+def estructura_vigente(R):
+    """Estructura vigente: por defecto de Maestra/maestra.duckdb (gb_estructura, con el Excel de respaldo adentro).
+    GB_ESTRUCTURA=excel o un fallo de la base -> hoja 'Estructura Actual' de Base Nueva Estructura.xlsx (método anterior)."""
+    if os.environ.get('GB_ESTRUCTURA') != 'excel':
+        try:
+            sys.path.insert(0, r'C:/GB/sistema/Herramientas/Maestra')
+            import gb_estructura
+            return gb_estructura.estructura_actual().astype(object)
+        except Exception as e:
+            log('  aviso: no pude leer la estructura de Maestra (%s); uso el Excel.' % str(e)[:100])
     f = os.path.join(R, 'ESTRUCTURAS', 'Base Nueva Estructura.xlsx')
-    d = xl(f, sheet_name='Estructura Actual', dtype=object)
+    return xl(f, sheet_name='Estructura Actual', dtype=object)
+
+def cargar_estructura(R):
+    d = estructura_vigente(R)
     d['ID PDV'] = nid(d['IDPDV'])
     m = d.rename(columns={'NOMBRE PDV': 'NOMBRE PDV'})
     cols = ['ID PDV', 'NOMBRE PDV', 'CADENA', 'REGION', 'ESTADO'] + STR
