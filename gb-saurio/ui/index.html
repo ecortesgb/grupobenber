@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>GB Saurio</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <!-- Panel de chat (visible solo en modo grande) -->
+  <section id="panel" hidden>
+    <header>
+      <b>GB Saurio</b>
+      <nav>
+        <button class="tab activa" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="pend">Pendientes <span id="nPend"></span></button>
+      </nav>
+      <button id="cerrar" title="Minimizar">–</button>
+    </header>
+
+    <div id="vistaChat" class="vista">
+      <div id="mensajes"></div>
+      <div id="planCaja" hidden>
+        <div id="planTexto"></div>
+        <div class="fila">
+          <button id="aplicar" class="primario">Aplicar</button>
+          <button id="descartar">Descartar</button>
+        </div>
+      </div>
+      <div class="atajos">
+        <button data-pregunta="Analiza mi escritorio y propón cómo organizarlo.">🗂️ Escritorio</button>
+        <button data-pregunta="Analiza mi carpeta de descargas y dime qué puedo limpiar u ordenar.">⬇️ Descargas</button>
+        <button data-pregunta="¿Qué pendientes tengo y cuál me recomiendas atacar primero?">✅ Mi día</button>
+        <button id="btnReunion">🎙️ Reunión</button>
+        <button id="btnDeshacer" title="Regresa los archivos del último plan aplicado">↩️ Deshacer</button>
+      </div>
+      <form id="forma">
+        <textarea id="entrada" rows="2" placeholder="Escríbele a Saurio… (Enter envía, Shift+Enter salto)"></textarea>
+        <button class="primario">➤</button>
+      </form>
+    </div>
+
+    <div id="vistaPend" class="vista" hidden>
+      <ul id="listaPend"></ul>
+      <div class="fila"><button id="excel" class="primario">Exportar a Excel</button></div>
+    </div>
+  </section>
+
+  <!-- Mascota -->
+  <div id="globo" hidden></div>
+  <div id="mascota"></div>
+
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script src="mascota.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
