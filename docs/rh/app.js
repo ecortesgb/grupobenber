@@ -670,26 +670,28 @@ function estadoVivo(h) {
   const d = h.ultimo_check ? diffD(HOY, h.ultimo_check) : null;
   if (d == null) return { e: 'Sin check', det: '' }; if (d <= 0) return { e: 'Activo', det: '' }; if (d === 1) return { e: 'Descanso / falta / error', det: '1 día sin check' }; if (d > 21) return { e: 'Baja', det: d + ' días sin check · sin baja registrada' }; return { e: 'Posible baja', det: d + ' días sin check' };
 }
-const HCF = { est: '', tipo: '', ant: '', emp: '' };
+const HCF = { est: '', tipo: '', ant: '', emp: '', cat: '' };
 async function vHC() {
   await conReporte('HC', 'mochila', async () => {
     if (!R.vivo) { try { S.vigentes = await API.vigentes(); } catch (e) { } R.vivo = true; }
+    await cargarCatPromotores();
     const rp = perRango(), tpor = new Map();   // tiendas donde checó cada promotor en el periodo filtrado
     try { (await checksRango(rp.desde, rp.hasta)).filter(c => c.estatus_final !== 'Otro Check').forEach(c => { if (!tpor.has(c.usuario)) tpor.set(c.usuario, new Map()); const m = tpor.get(c.usuario); m.set(c.idpdv, (m.get(c.idpdv) || 0) + 1); }); } catch (e) { console.warn('tiendas por promotor:', e); }
-    const rows = R.hc.filter(h => okI(h.ultimo_idpdv)).map(h => { const v = estadoVivo(h), u = R.uc[h.usuario] || {}, t = tienda(h.ultimo_idpdv), ant = h.fecha_alta ? diffD(HOY, h.fecha_alta) : null; return { ...h, v, u, t: t || {}, ant, tipo: tipoIngreso(h, ant), antL: antLabel(ant), alerta: S.alertas.find(a => a.usuario === h.usuario), tdas: tpor.get(h.usuario) || new Map() }; });
+    const rows = R.hc.filter(h => okI(h.ultimo_idpdv)).map(h => { const v = estadoVivo(h), u = R.uc[h.usuario] || {}, t = tienda(h.ultimo_idpdv), ant = h.fecha_alta ? diffD(HOY, h.fecha_alta) : null; return { ...h, v, u, t: t || {}, ant, tipo: tipoIngreso(h, ant), antL: antLabel(ant), alerta: S.alertas.find(a => a.usuario === h.usuario), tdas: tpor.get(h.usuario) || new Map(), cat: catActual(h.usuario) }; });
     const vis = rows.filter(q => R.incBaja || q.v.e !== 'Baja'), cnt = {}; vis.forEach(q => cnt[q.v.e] = (cnt[q.v.e] || 0) + 1);
     const ausN = vis.filter(q => !['Activo', 'Descanso / falta / error', 'Posible baja', 'Baja', 'Sin check'].includes(q.v.e)), nuevos = vis.filter(q => q.tipo === 'Nuevo ingreso').length, adap = vis.filter(q => q.tipo === 'Adaptación').length;
     const ests = [...new Set(vis.map(q => q.v.e))].sort(), emps = [...new Set(vis.map(q => q.empresa).filter(Boolean))].sort();
-    const tabla = vis.filter(q => (!HCF.est || q.v.e === HCF.est) && (!HCF.tipo || q.tipo === HCF.tipo) && (!HCF.ant || q.antL === HCF.ant) && (!HCF.emp || q.empresa === HCF.emp));
+    const tabla = vis.filter(q => (!HCF.est || q.v.e === HCF.est) && (!HCF.tipo || q.tipo === HCF.tipo) && (!HCF.ant || q.antL === HCF.ant) && (!HCF.emp || q.empresa === HCF.emp) && (!HCF.cat || (q.cat ? q.cat.categoria : 'Sin categoría') === HCF.cat));
     let h = cab('HC · plantilla de promotoría', 'Promotores y cubre-descansos con su último check y estatus. El estatus se actualiza en vivo con las ausencias y bajas que RH captura en Posibles bajas.', 'mochila') + barraFiltros('vHC');
     h += `<div class="tools"><button class="chip ${R.incBaja ? 'on' : ''}" onclick="R.incBaja=!R.incBaja;vHC()">Incluir bajas</button><span class="muted">${fmt(vis.length)} promotores · publicado ${esc(R.meta.generado)} · las columnas de tiendas usan el periodo de arriba</span></div>`;
     h += `<div class="kpis">${kp('Plantilla', fmt(vis.filter(q => q.v.e !== 'Baja').length), 'sin bajas', null, null, '👥')}${kp('Activos hoy', fmt(cnt['Activo'] || 0), pc1(cnt['Activo'] || 0, vis.length), C.gr, null, '🟢')}${kp('Descanso / falta', fmt(cnt['Descanso / falta / error'] || 0), 'último check ayer', C.am, null, '🟠')}${kp('Posible baja', fmt(cnt['Posible baja'] || 0), '2 o más días sin check', C.rd, "ir('bandeja')", '🔴')}${kp('Con ausencia', fmt(ausN.length), 'vacaciones, incapacidad…', C.bl, "ir('vigentes')", '🏖️')}${kp('Nuevo ingreso', fmt(nuevos), 'menos de 2 semanas · arranque rápido', C.rd, null, '🆕')}${kp('Adaptación', fmt(adap), '2 a 4 semanas', C.am, null, '🌱')}</div>`;
     h += `<div class="grid g2"><div class="card"><h3>🚦 Estatus de la plantilla</h3>${donut(Object.entries(cnt).map(([k, v]) => ({ n: (ACTI[k] || '') + ' ' + k, v, c: k === 'Activo' ? C.gr : k === 'Posible baja' ? C.rd : k === 'Descanso / falta / error' ? C.am : k === 'Baja' ? C.gy : C.bl })), { sub: 'promotores' })}</div>
       <div class="card"><h3>⏳ Antigüedad</h3><p class="note">Menos de 2 semanas = nuevo ingreso: requiere arranque rápido (visita del supervisor, básicos y capacitación práctica).</p>${hbars(ANTB.map(b => ({ n: b[0], v: vis.filter(q => q.ant != null && q.ant >= b[1] && q.ant <= b[2]).length, c: b[3] })), C.pu)}</div></div>`;
     TB = {};
-    h += sect('Promotores', '👥') + `<div class="tools" data-nocap><select onchange="HCF.est=this.value;vHC()"><option value="">Todos los estatus</option>${ests.map(e => `<option ${HCF.est === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select><select onchange="HCF.tipo=this.value;vHC()"><option value="">Todo tipo de ingreso</option>${['Nuevo ingreso', 'Adaptación', 'Reingreso', 'Normal'].map(e => `<option ${HCF.tipo === e ? 'selected' : ''}>${e}</option>`).join('')}</select><select onchange="HCF.ant=this.value;vHC()"><option value="">Toda antigüedad</option>${ANTB.map(b => `<option ${HCF.ant === b[0] ? 'selected' : ''}>${b[0]}</option>`).join('')}</select><select onchange="HCF.emp=this.value;vHC()"><option value="">Toda razón social</option>${emps.map(e => `<option ${HCF.emp === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>`;
+    h += sect('Promotores', '👥') + `<div class="tools" data-nocap><select onchange="HCF.est=this.value;vHC()"><option value="">Todos los estatus</option>${ests.map(e => `<option ${HCF.est === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select><select onchange="HCF.tipo=this.value;vHC()"><option value="">Todo tipo de ingreso</option>${['Nuevo ingreso', 'Adaptación', 'Reingreso', 'Normal'].map(e => `<option ${HCF.tipo === e ? 'selected' : ''}>${e}</option>`).join('')}</select><select onchange="HCF.ant=this.value;vHC()"><option value="">Toda antigüedad</option>${ANTB.map(b => `<option ${HCF.ant === b[0] ? 'selected' : ''}>${b[0]}</option>`).join('')}</select><select onchange="HCF.cat=this.value;vHC()"><option value="">Toda categoría (Avance)</option>${[...CATS, 'Sin categoría'].map(e => `<option ${HCF.cat === e ? 'selected' : ''}>${e}</option>`).join('')}</select><select onchange="HCF.emp=this.value;vHC()"><option value="">Toda razón social</option>${emps.map(e => `<option ${HCF.emp === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>`;
     h += tbl('t-hc', [{ h: 'Usuario', t: 1, v: q => q.usuario, w: 120 }, { h: 'Nombre', t: 1, v: q => q.nombre, w: 230, r: q => `<b>${esc(q.nombre)}</b>` },
       { h: 'Estatus', t: 1, v: q => q.v.e, w: 250, r: q => { const pend = ['Posible baja', 'Descanso / falta / error'].includes(q.v.e) && q.alerta && can('alertas', 'editar'); return `<div class="est-c"><div class="est-r">${pillx((ACTI[q.v.e] || '🔵') + ' ' + esc(q.v.e), ACTC[q.v.e] || 'b')}${pend ? `<button class="rsv" onclick="resolverDesdeHC(${q.alerta.id})">Resolver ›</button>` : ''}</div>${q.v.det ? `<small class="muted">${esc(q.v.det)}</small>` : ''}</div>`; } },
+      { h: 'Categoría Avance GB', t: 1, w: 150, v: q => q.cat ? CATS.indexOf(q.cat.categoria) : 99, r: q => q.cat ? `${catPill(q.cat.categoria)}<br><small class="muted">${esc(q.cat.semana)} · ${catHist(q.usuario)}</small>` : '<span class="muted">Sin dato</span>' },
       { h: 'Tipo de ingreso', t: 1, v: q => q.tipo, r: q => pillx((TIPC[q.tipo][1] + ' ' + q.tipo).trim(), TIPC[q.tipo][0]) }, { h: 'Antigüedad', t: 1, v: q => q.ant, r: q => q.ant == null ? '—' : `<b>${esc(q.antL)}</b><br><small class="muted">${Math.floor(q.ant / 7)} sem · ${q.ant} d</small>` },
       { h: 'Fecha de ingreso', v: q => q.fecha_alta, r: q => fdate(q.fecha_alta) }, { h: 'Baja anterior', v: q => q.tipo_ingreso === 'Reingreso' ? q.baja_final : null, r: q => q.tipo_ingreso === 'Reingreso' ? fdate(q.baja_final) : '—' },
       { h: 'Último check', v: q => q.ultimo_check, r: q => fdate(q.ultimo_check) + (q.u.hora_in ? `<br><small class="muted">${hh(q.u.hora_in)} – ${hh(q.u.hora_out)}</small>` : '') }, { h: 'Tipo de check', t: 1, v: q => q.rol, r: q => esc(q.rol || '—') + (q.u.estatus_check ? `<br><small class="muted">${esc((ERRI[q.u.estatus_check] || '') + ' ' + (ERRN[q.u.estatus_check] || q.u.estatus_check))}</small>` : '') },
@@ -765,6 +767,35 @@ function erroresCsv(que) {
     ...xs.map(x => { const t = tienda(x.idpdv) || {}; return [x.fecha, x.usuario, x.nombre, x.idpdv, t.nombre, t.supervisor, t.gerente, errNom(x.estatus_check), x.registros, justTxt(x), ERRFIX[x.estatus_check] || '']; })]);
 }
 
+/* >>> 03c_categoria.js */
+/* ====================================================================== CATEGORÍA DEL PROMOTOR (de Avance GB) ======================================================================
+   Categoría semanal: Dorado, Verde, Amarillo, Naranja, Rojo, Adaptación (reglas de Avance GB: alcance de cuota total y TEMM, portabilidades y días con/sin venta).
+   Sirve para justificar una baja por productividad y para decidir si un promotor es recontratable. Los datos los publica publicar_reporte.py (datos_avance.py). */
+const CATS = ['Dorado', 'Verde', 'Amarillo', 'Naranja', 'Rojo', 'Adaptación'];
+const CATCOL = { 'Dorado': '#C9A227', 'Verde': '#1E7A1E', 'Amarillo': '#F2C94C', 'Naranja': '#F2790A', 'Rojo': '#DC2626', 'Adaptación': '#00509C' };
+const CATTXT = { 'Dorado': 'Supera su cuota (total y TEMM al 100 % o más y al menos 1 portabilidad)', 'Verde': 'Llega a comisionar (TEMM 90 %, total 85 % o 5+ portabilidades)', 'Amarillo': 'Cerca de cobrar (total 70 %, TEMM 75 % o 2 a 4 portabilidades)',
+  'Naranja': 'Vende poco, pero al menos la mitad de sus días con check tuvo venta', 'Rojo': 'Más de la mitad de sus días con check sin venta, o ninguna venta', 'Adaptación': 'Menos de 2 semanas de antigüedad' };
+const CATP = { loaded: false, por: new Map(), semanas: [] };   // usuario -> [{semana, categoria, ...}] de la más reciente a la más antigua
+
+Real.catPromotores = async function () { return todo(() => sb.from('rep_promotor_semana').select('*')); };
+Demo.catPromotores = async function () {
+  const sem = ['26-S38', '26-S39', '26-S40', '26-S41'], out = [];
+  for (let i = 0; i < 70; i++) sem.forEach((s, k) => out.push({ usuario: 'DEMO' + (100 + i), semana: s, categoria: CATS[(i + k * 2) % 6], alcance_t: .4 + ((i + k) % 7) / 8, alcance_m: .3 + ((i + k) % 6) / 8, portas: (i + k) % 5, dias_check: 5, dias_sin_venta: (i + k) % 4, antig_dias: 100 + i, tiendas: 1 + (i % 3 === 0 ? 1 : 0) }));
+  return out;
+};
+async function cargarCatPromotores() {
+  if (CATP.loaded) return;
+  try {
+    const xs = await API.catPromotores(); CATP.por = new Map();
+    xs.sort((a, b) => b.semana.localeCompare(a.semana)).forEach(x => { if (!CATP.por.has(x.usuario)) CATP.por.set(x.usuario, []); CATP.por.get(x.usuario).push(x); });
+    CATP.semanas = [...new Set(xs.map(x => x.semana))].sort().reverse();
+  } catch (e) { console.warn('categorías de promotor no disponibles:', e); }
+  CATP.loaded = true;
+}
+const catActual = u => (CATP.por.get(u) || [])[0] || null;
+function catPill(c) { return c ? `<span class="prm-pill" style="background:${CATCOL[c] || '#6B7280'};${c === 'Amarillo' ? 'color:#4a3b00' : ''}" title="${esc(CATTXT[c] || '')}">${esc(c)}</span>` : '<span class="muted">—</span>'; }
+const catHist = u => (CATP.por.get(u) || []).slice(0, 4).map(x => `<span class="prm-dot" style="background:${CATCOL[x.categoria] || '#bbb'}" title="${esc(x.semana + ': ' + x.categoria)}"></span>`).join('');
+
 /* >>> 04_gestion.js */
 /* ====================================================================== estado y UI ====================================================================== */
 const S = { me: null, cat: null, alertas: [], vigentes: [], view: 'resumen', f: { q: '', min: 2 } };
@@ -785,6 +816,7 @@ const VISTAS = [
   { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
   { k: 'vigentes', ic: '🩺', n: 'Motivos de ausencia', mod: 'ausencias', f: vVigentes },
   { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
+  { k: 'vacantes', ic: '🏬', n: 'Vacantes', mod: 'vacantes', f: vVacantes, per: true },
   { k: 'finiquitos', ic: '🧾', n: 'Finiquitos', mod: 'finiquitos', f: vFiniquitos },
   { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos, sinFiltros: true },
   { k: 'auditoria', ic: '🧾', n: 'Auditoría', mod: 'auditoria', f: vAuditoria, sinFiltros: true }
@@ -1316,7 +1348,7 @@ function leerEncuesta(p) {
 async function vBajas() {
   $('content').innerHTML = cab('Bajas y encuesta de salida', 'Registra aquí las bajas. Alimentan el reporte de Ingresos y bajas, el HC y la rotación; la encuesta de salida complementa el motivo.', 'saltando') + '<div class="loading">Cargando bajas…</div>';
   const desde = BJ.per === 'all' ? null : addD(HOY, -(+BJ.per));
-  try { BJ.lista = await API.bajasLista(desde); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudieron cargar las bajas: ${esc(e.message || e)}</div>`; return; }
+  try { BJ.lista = await API.bajasLista(desde); PF.lista = new Map((await API.perfilesBaja().catch(() => [])).map(p => [p.usuario_fieldwy + '|' + p.fecha_baja, p])); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudieron cargar las bajas: ${esc(e.message || e)}</div>`; return; }
   const ok = b => okT(tienda(b.idpdv) || null) || (!tienda(b.idpdv) && !Object.values(FL).some(Boolean));
   const base = BJ.lista.filter(ok), tipoDe = b => tipoMotivo(b.motivo) || 'Sin clasificar';
   const rows = base.filter(b => (!BJ.mot || b.motivo === BJ.mot) && (!BJ.tipo || tipoDe(b) === BJ.tipo) && (!BJ.enc || (BJ.enc === 'si' ? b.enc : !b.enc)));
@@ -1332,6 +1364,7 @@ async function vBajas() {
     { h: 'Motivo', t: 1, v: b => b.motivo, r: b => pillx(esc(b.motivo) + (b.marca ? ' → ' + esc(b.marca) : ''), tipoDe(b) === 'Involuntaria' ? 'r' : 'a') }, { h: 'Tipo', t: 1, v: b => tipoDe(b) },
     { h: 'Encuesta', v: b => b.enc ? 1 : 0, r: b => b.enc ? '<span class="pill g">✔ Capturada</span>' : (can('encuesta_salida', 'crear') ? `<button class="rsv" onclick="encuestaDeBaja(${b.id})">Capturar</button>` : '—') },
     { h: 'Finiquito', t: 1, v: b => FINQ.indexOf(b.finq), r: b => puedeFin ? `<select class="finq" onchange="cambiaFinq(${b.id},this.value)">${FINQ.map(f => `<option ${f === b.finq ? 'selected' : ''}>${f}</option>`).join('')}</select>` : esc(b.finq) },
+    { h: 'Recontratable', t: 1, v: b => (PF.lista.get(b.usuario + '|' + b.fecha) || {}).recontratable || '', r: b => { const p = PF.lista.get(b.usuario + '|' + b.fecha); return `${p ? pillx(PF_REC[p.recontratable][1] + ' ' + p.recontratable, PF_REC[p.recontratable][0]) : '<span class="muted">Sin evaluar</span>'} <button class="rsv" onclick="perfilAbrir(${b.id})">Perfil</button>`; } },
     { h: 'Adeudo', v: b => b.adeudo, r: b => b.adeudo ? `<b class="cell-red">$${fmt(b.adeudo)}</b>` : '—' }, { h: 'Tienda', t: 1, v: b => (tienda(b.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: b => (tienda(b.idpdv) || {}).cadena }, { h: 'Región', t: 1, v: b => (tienda(b.idpdv) || {}).region },
     { h: 'Gerente', t: 1, v: b => (tienda(b.idpdv) || {}).gerente }, { h: 'Supervisor', t: 1, v: b => (tienda(b.idpdv) || {}).supervisor }, { h: 'Comentarios', t: 1, v: b => b.com || '' },
     ...(can('bajas', 'borrar') ? [{ h: '', v: () => '', r: b => `<button class="rsv" onclick="anularBaja(${b.id})" title="Marca la baja como anulada (queda guardada con su motivo) y deja al colaborador activo">Anular</button>` }] : [])
@@ -1359,6 +1392,7 @@ function bajaNueva(pre) {
       <div class="fld"><label>Enlace a evidencia (opcional)</label><input id="bj-ev" placeholder="https://… carpeta de OneDrive o Drive"></div>
       <div class="fld"><label>Comentarios</label><textarea id="bj-c"></textarea></div>
       <details class="enc-d"><summary>📝 Capturar encuesta de salida ahora (opcional)</summary>${encuestaCampos('be-')}</details>
+      <div id="bj-perfil"></div>
       <div class="warn" id="bj-warn" hidden></div>
     </div>
     <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn danger" id="bj-ok" disabled>Registrar baja</button></div></div>`;
@@ -1380,6 +1414,7 @@ async function bajaElegir(c) {
   $('bj-res').innerHTML = ''; $('bj-q').value = '';
   $('bj-sel').innerHTML = `<div class="bj-card"><div><b>${esc(c.nombre)}</b><br><small>${esc(c.usuario_fieldwy)} · ${esc(c.empresa || 'sin razón social')}</small></div><div><b>${esc(t.nombre || 'Sin tienda')}</b><br><small>${esc([t.cadena, t.estado, t.supervisor].filter(Boolean).join(' · '))}</small></div><button class="rsv" onclick="BJ.sel=null;$('bj-sel').innerHTML='';$('bj-resto').hidden=true;$('bj-ok').disabled=true">Cambiar</button></div>`;
   $('bj-resto').hidden = false; $('bj-ok').disabled = false;
+  bajaPerfilPanel(c);
   const w = $('bj-warn'); w.hidden = true;
   try { const p = await API.bajasPrevias(c.usuario_fieldwy); if (c.estatus === 'Baja' || p.length) { w.hidden = false; w.textContent = c.estatus === 'Baja' ? 'Este colaborador ya aparece como baja.' : ''; if (p.length) w.textContent += ` Ya tiene una baja registrada el ${fdate(p[0].fecha_baja)} (${p[0].motivo}). Si es la misma, no la dupliques.`; } } catch (e) { }
 }
@@ -1391,6 +1426,7 @@ async function bajaGuardar() {
   b.disabled = true; b.textContent = 'Guardando…';
   try {
     await API.registrarBaja({ usuario: c.usuario_fieldwy, idpdv: c.idpdv, fecha: f, ultimo: $('bj-u').value, motivo: m, marca: $('bj-marca').value.trim(), adeudo: +$('bj-ad').value || 0, adeudoDet: $('bj-adt').value.trim(), evidencia: $('bj-ev').value.trim(), comentarios: $('bj-c').value.trim(), enc: leerEncuesta('be-') });
+    await perfilGuardarDeModal(c, f);
     MV.loaded = false; R.vivo = false; cerrarM(); toast('Baja registrada: ' + c.nombre);
     if (S.alertas) S.alertas = S.alertas.filter(x => x.usuario !== c.usuario_fieldwy);
     if (S.view === 'bajas') vBajas(); else if (typeof nav === 'function') { nav(); render(); }
@@ -1993,6 +2029,219 @@ async function finParametros() {
 }
 async function finParametroOk() {
   try { await API.finRpc('guardar_parametro_finiquito', { p_clave: $('fq-pc').value, p_desde: $('fq-pd').value, p_valor: +$('fq-pv').value, p_nota: limpia($('fq-pn').value) }); toast('Parámetro guardado'); finParametros(); } catch (e) { toast(e.message || e); }
+}
+
+/* >>> 07f_vacantes.js */
+/* ====================================================================== VACANTES ======================================================================
+   Vacante = la medición de cobertura de Avance GB: 2 o más días sin check = Vacante (1 día = Descubierta); en tiendas de más de una posición, Posc Faltante.
+   Regla de RH: una tienda sigue CUBIERTA mientras tenga un promotor cuyo último check fue en esa tienda y todavía no es baja ni tiene una ausencia registrada
+   (Activo, Descanso/falta/error o Posible baja). Cuando se confirma la baja o se registra la ausencia, ese promotor deja de cubrir y la tienda aparece como vacante.
+   RH confirma la vacante (fecha compromiso + motivo) o la marca Cubierta aunque todavía no haya checks. Todo cálculo se hace con los filtros y el periodo de arriba.
+   Prioridad (0-100): cuota TEMM 35 % · venta TEMM (promedio 4 semanas) 25 % · inventario 15 % · posiciones faltantes 10 % · cadena Coppel 10 % · días sin cubrir 5 %. */
+const VC = { tab: 'gestion', est: '', pri: '', tipo: '', ges: new Map(), motivos: [], extra: new Map(), items: [], cargado: false };
+const VC_PESO = { cuota: .35, venta: .25, inv: .15, pos: .10, cad: .10, dias: .05 };
+const VC_INV = { 'Normal': 1, 'Alto': 1, 'Bajo': .7, 'Crítico': .4, 'Sin stock': .1 };
+const VC_ASIG_OK = ['Activo', 'Descanso / falta / error', 'Posible baja'];
+
+Real.vacGestion = async function () { const { data, error } = await sb.from('vacantes_gestion').select('*'); if (error) throw error; return data || []; };
+Real.vacMotivos = async function () { const { data, error } = await sb.from('catalogo_motivos_vacante').select('motivo').eq('activo', true).order('orden'); if (error) throw error; return (data || []).map(x => x.motivo); };
+Real.tiendaExtra = async function () { return todo(() => sb.from('rep_tienda_extra').select('*')); };
+Real.vacHist = async function (idpdv) { const { data, error } = await sb.from('vacantes_historial').select('*').eq('idpdv', idpdv).order('en', { ascending: false }).limit(15); if (error) throw error; return data || []; };
+Real.vacGuardar = async function (a) { return Real.finRpc('guardar_vacante', a); };
+Real.vacQuitar = async function (id, motivo) { return Real.finRpc('quitar_vacante', { p_idpdv: id, p_motivo: motivo }); };
+const DEMO_VAC = [];
+Demo.vacGestion = async () => DEMO_VAC.slice(); Demo.vacMotivos = async () => ['Mal ambiente laboral', 'Falta de inventario', 'Tienda cerrada o en remodelación', 'Problema de acceso a la tienda', 'Sin candidatos', 'Decisión de la cadena', 'Otro'];
+Demo.tiendaExtra = async () => Object.values(S.cat.tiendas).map((t, i) => ({ idpdv: t.idpdv, semana: '26-S41', cuota_temm: 2 + (i * 7) % 15, venta_temm: (i * 3) % 6, alcance_temm: .2 + (i % 8) / 10, prom4_temm: 1 + (i * 5) % 7, inv_estatus: ['Normal', 'Bajo', 'Crítico', 'Alto', 'Sin stock'][i % 5], inv_piezas: 20 + i, inv_semanas: 3 + i % 6 }));
+Demo.vacHist = async () => [];
+Demo.vacGuardar = async a => { const i = DEMO_VAC.findIndex(x => x.idpdv === a.p_idpdv); const f = { idpdv: a.p_idpdv, estado: a.p_estado, posiciones: a.p_posiciones, fecha_compromiso: a.p_fecha_compromiso, motivo: a.p_motivo, nota: a.p_nota, cubierta_desde: HOY, cubierta_por: a.p_cubierta_por }; if (i >= 0) DEMO_VAC[i] = f; else DEMO_VAC.push(f); };
+Demo.vacQuitar = async id => { const i = DEMO_VAC.findIndex(x => x.idpdv === id); if (i >= 0) DEMO_VAC.splice(i, 1); };
+
+async function vacCargar(force) {
+  if (VC.cargado && !force) return;
+  const [g, m, e] = await Promise.all([API.vacGestion(), API.vacMotivos(), API.tiendaExtra().catch(() => [])]);
+  VC.ges = new Map(g.map(x => [x.idpdv, x])); VC.motivos = m; VC.extra = new Map(e.map(x => [x.idpdv, x])); VC.cargado = true;
+}
+function diasSinCheck(x, hasta) { let n = 0; for (let d = hasta; d >= R.meta.cd_desde && n < 120; d = addD(d, -1)) { if (cdv(x, d) > 0) return n; n++; } return n; }
+
+function vacCalcular(r) {
+  const dias = r.dias, xs = xsF().filter(x => (x.t.posiciones || 0) > 0), asig = new Map();
+  R.hc.forEach(h => { if (h.rol !== 'Promotor' || h.ultimo_idpdv == null) return; if (VC_ASIG_OK.includes(estadoVivo(h).e)) asig.set(h.ultimo_idpdv, (asig.get(h.ultimo_idpdv) || 0) + 1); });
+  const ex = id => VC.extra.get(id) || {}, q90 = k => { const v = [...VC.extra.values()].map(e => +e[k] || 0).sort((a, b) => a - b); return v.length ? Math.max(1, v[Math.floor(v.length * .9)]) : 1; };
+  const Q = q90('cuota_temm'), V = q90('prom4_temm'), items = [];
+  xs.forEach(x => {
+    const g = VC.ges.get(x.id), s = estatusTienda(x, dias), ps = posc(x.t), a = asig.get(x.id) || 0, dsc = diasSinCheck(x, r.hasta), e = ex(x.id);
+    let tipo = null, falt = 0;
+    if (s.cob === 'Vacante' && a === 0) { tipo = 'Tienda vacante'; falt = ps; }
+    else if (ps > 1 && s.asi === 'Posc Faltante' && a < ps) { tipo = 'Posiciones faltantes'; falt = ps - a; }
+    else if (s.cob === 'Vacante' || (ps > 1 && s.asi === 'Posc Faltante')) tipo = 'En seguimiento';           // sin checks pero con promotor asignado que todavía no es baja
+    if (!tipo && !g) return;
+    const real = tipo === 'Tienda vacante' || tipo === 'Posiciones faltantes';
+    let estado = g ? (g.estado === 'Cubierta' ? 'Cubierta (RH)' : real ? 'Confirmada' : tipo === 'En seguimiento' ? 'En seguimiento' : 'Resuelta') : (real ? 'Por confirmar' : 'En seguimiento');
+    if (!tipo) tipo = 'Ya cubierta por checks';
+    const vac = real && estado !== 'Cubierta (RH)', faltC = g && g.posiciones != null && estado === 'Confirmada' ? g.posiciones : falt;
+    const sc = (VC_PESO.cuota * Math.min(1, (+e.cuota_temm || 0) / Q) + VC_PESO.venta * Math.min(1, (+e.prom4_temm || 0) / V) + VC_PESO.inv * (VC_INV[e.inv_estatus] != null ? VC_INV[e.inv_estatus] : .5)
+      + VC_PESO.pos * Math.min(1, falt / Math.max(1, ps)) + VC_PESO.cad * (x.t.cadena === 'Coppel' ? 1 : .6) + VC_PESO.dias * Math.min(1, dsc / 10)) * 100;
+    items.push({ x, id: x.id, t: x.t, tipo, estado, vac, ps, asig: a, falt: faltC, dsc, ult: dsc < 120 ? addD(r.hasta, -dsc) : null, g, e, score: sc, pri: sc >= 65 ? 'Alta' : sc >= 45 ? 'Media' : 'Baja', cob: s.cob, asi: s.asi });
+  });
+  return items;
+}
+const VPC = { 'Alta': 'r', 'Media': 'a', 'Baja': 'g' }, VPE = { 'Alta': '🔴', 'Media': '🟠', 'Baja': '🟢' };
+const VEC = { 'Por confirmar': 'a', 'Confirmada': 'r', 'Cubierta (RH)': 'g', 'En seguimiento': 'b', 'Resuelta': 'g' };
+const vencida = i => i.estado === 'Confirmada' && i.g && i.g.fecha_compromiso && i.g.fecha_compromiso < HOY;
+const proxima = i => i.estado === 'Confirmada' && i.g && i.g.fecha_compromiso && i.g.fecha_compromiso >= HOY && diffD(i.g.fecha_compromiso, HOY) <= 3;
+
+async function vVacantes() {
+  await conReporte('Vacantes', 'mochila', async () => {
+    await vacCargar(); if (!R.vivo) { try { S.vigentes = await API.vigentes(); } catch (e) { } R.vivo = true; }
+    const r = perRango(), items = vacCalcular(r); VC.items = items;
+    const vac = items.filter(i => i.vac), puede = can('vacantes', 'editar');
+    const cnt = k => items.filter(i => i.estado === k).length;
+    let h = cab('Vacantes', 'Tiendas y posiciones sin cobertura real. Una tienda sigue cubierta mientras su promotor no sea baja ni tenga ausencia registrada. Confirma la vacante con fecha compromiso y motivo, o márcala cubierta.', 'mochila');
+    h += `<div class="tools" data-nocap>${[['gestion', '📋 Gestión de vacantes'], ['resumen', '📊 Resumen gráfico']].map(([k, n]) => `<button class="chip ${VC.tab === k ? 'on' : ''}" onclick="VC.tab='${k}';vVacantes()">${n}</button>`).join('')}</div>`;
+    h += `<div class="kpis">${kp('Tiendas con vacante', fmt(vac.length), `${fmt(vac.filter(i => i.tipo === 'Tienda vacante').length)} completas · ${fmt(vac.filter(i => i.tipo === 'Posiciones faltantes').length)} con posiciones faltantes`, vac.length ? C.rd : C.gr, null, '🏬')}${kp('Posiciones faltantes', fmt(vac.reduce((a, i) => a + i.falt, 0)), 'suma de posiciones sin cubrir', C.am, null, '🧍')}${kp('Por confirmar', fmt(cnt('Por confirmar')), 'falta fecha compromiso y motivo', C.am, "VC.est='Por confirmar';VC.tab='gestion';vVacantes()", '❓')}${kp('Compromisos vencidos', fmt(items.filter(vencida).length), `${fmt(items.filter(proxima).length)} vencen en 3 días o menos`, items.filter(vencida).length ? C.rd : C.gr, "VC.est='vencidas';VC.tab='gestion';vVacantes()", '⏰')}${kp('En seguimiento', fmt(cnt('En seguimiento')), 'sin checks, pero su promotor aún no es baja', C.bl, "ir('bandeja')", '🔎')}</div>`;
+    h += VC.tab === 'resumen' ? vacResumenHTML(items, r) : vacGestionHTML(items, r, puede);
+    $('content').innerHTML = h; drawAll();
+  });
+}
+
+function vacGestionHTML(items, r, puede) {
+  const cuenta = f => items.filter(f).length;
+  const tabs = [['', 'Todas', items.length], ['Por confirmar', 'Por confirmar', cuenta(i => i.estado === 'Por confirmar')], ['Confirmada', 'Confirmadas', cuenta(i => i.estado === 'Confirmada')], ['vencidas', 'Compromisos vencidos', cuenta(vencida)],
+    ['Cubierta (RH)', 'Cubiertas por RH', cuenta(i => i.estado === 'Cubierta (RH)')], ['En seguimiento', 'En seguimiento', cuenta(i => i.estado === 'En seguimiento')], ['Resuelta', 'Resueltas', cuenta(i => i.estado === 'Resuelta')]];
+  let h = alertasVac(items);
+  h += `<div class="tools" data-nocap>${tabs.map(([k, n, c]) => `<button class="chip ${VC.est === k ? 'on' : ''}" onclick="VC.est='${k}';vVacantes()">${n} (${c})</button>`).join('')}</div>`;
+  h += `<div class="tools" data-nocap><span>Prioridad:</span><select onchange="VC.pri=this.value;vVacantes()"><option value="">Todas</option>${['Alta', 'Media', 'Baja'].map(p => `<option ${VC.pri === p ? 'selected' : ''}>${p}</option>`).join('')}</select><span>Tipo:</span><select onchange="VC.tipo=this.value;vVacantes()"><option value="">Todos</option>${['Tienda vacante', 'Posiciones faltantes'].map(p => `<option ${VC.tipo === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+    <button class="btn sm" onclick="vacCsvReal()">⬇ CSV de vacantes reales</button><span class="muted">Corte al ${fdate(r.hasta)} · la prioridad se explica al pasar el mouse sobre su etiqueta</span></div>`;
+  const rows = items.filter(i => (!VC.est || (VC.est === 'vencidas' ? vencida(i) : i.estado === VC.est)) && (!VC.pri || i.pri === VC.pri) && (!VC.tipo || i.tipo === VC.tipo)).sort((a, b) => b.score - a.score);
+  TB = {};
+  h += tbl('t-vac', [{ h: 'Prioridad', t: 1, v: q => q.score, w: 96, r: q => `<span title="Puntaje ${q.score.toFixed(0)} de 100">${pillx(VPE[q.pri] + ' ' + q.pri, VPC[q.pri])}</span>` }, { h: 'IDPDV', v: q => q.id, w: 86 }, { h: 'Tienda', t: 1, v: q => q.t.nombre, w: 230, r: q => `<b>${esc(q.t.nombre)}</b>` },
+    { h: 'Cadena', t: 1, v: q => q.t.cadena }, { h: 'Class', t: 1, v: q => q.t.clase }, { h: 'Posc.', v: q => q.ps }, { h: 'Tipo', t: 1, v: q => q.tipo, r: q => pillx(q.tipo, q.vac ? 'r' : q.tipo === 'En seguimiento' ? 'b' : 'x') },
+    { h: 'Posiciones faltantes', v: q => q.falt, r: q => q.vac ? `<b>${q.falt}</b>` : '—' }, { h: 'Promotores asignados', v: q => q.asig }, { h: 'Días sin check', v: q => q.dsc, r: q => q.dsc >= 5 ? `<span class="cell-red">${q.dsc}</span>` : q.dsc >= 2 ? `<span class="cell-amber">${q.dsc}</span>` : String(q.dsc) },
+    { h: 'Último check', v: q => q.ult, r: q => q.ult ? fdate(q.ult) : '120+ días' }, { h: 'Cuota TEMM sem.', v: q => +q.e.cuota_temm || 0, r: q => q.e.cuota_temm != null ? fmt1(+q.e.cuota_temm) : '—' }, { h: 'Venta TEMM (prom. 4 sem.)', v: q => +q.e.prom4_temm || 0, r: q => q.e.prom4_temm != null ? fmt1(+q.e.prom4_temm) : '—' },
+    { h: 'Inventario', t: 1, v: q => q.e.inv_estatus || '', r: q => q.e.inv_estatus ? pillx(esc(q.e.inv_estatus), q.e.inv_estatus === 'Normal' || q.e.inv_estatus === 'Alto' ? 'g' : q.e.inv_estatus === 'Bajo' ? 'a' : 'r') : '—' },
+    { h: 'Estatus', t: 1, v: q => q.estado, r: q => pillx(q.estado, VEC[q.estado] || 'x') }, { h: 'Fecha compromiso', v: q => q.g && q.g.fecha_compromiso, r: q => q.g && q.g.fecha_compromiso ? (vencida(q) ? `<span class="cell-red">${fdate(q.g.fecha_compromiso)} ⏰</span>` : fdate(q.g.fecha_compromiso)) : '—' },
+    { h: 'Motivo / nota', t: 1, w: 220, v: q => q.g ? (q.g.motivo || '') + ' ' + (q.g.nota || '') : '', r: q => q.g ? `${esc(q.g.motivo || (q.g.estado === 'Cubierta' ? 'Cubierta' + (q.g.cubierta_por ? ' por ' + q.g.cubierta_por : '') : ''))}${q.g.nota ? `<br><small class="muted">${esc(q.g.nota)}</small>` : ''}` : '—' },
+    { h: 'Supervisor', t: 1, v: q => q.t.supervisor }, { h: 'Gerente', t: 1, v: q => q.t.gerente }, { h: 'RR.HH.', t: 1, v: q => q.t.rrhh },
+    { h: '', t: 1, v: q => 0, r: q => puede ? `<button class="btn sm ${q.estado === 'Por confirmar' ? 'primary' : ''}" data-nocap onclick="vacGestionar(${q.id})">Gestionar</button>` : '' }],
+    rows, { fix: 3, search: 1, csv: 1, png: 1, file: 'vacantes', titulo: 'Vacantes · corte al ' + fdate(r.hasta), sort: 0, dir: -1, maxh: '70vh', lim: 600 });
+  return h;
+}
+function alertasVac(items) {
+  const venc = items.filter(vencida), prox = items.filter(proxima), altas = items.filter(i => i.estado === 'Por confirmar' && i.pri === 'Alta');
+  if (!venc.length && !prox.length && !altas.length) return '';
+  const tarj = (k, ic, t, sub, xs, extra) => xs.length ? `<details class="alc ${k}" ${k === 'r' ? 'open' : ''}><summary><span class="alc-n">${xs.length}</span><div><b>${ic} ${t}</b><small>${sub}</small></div><i>▾</i></summary><div class="tw tw-in"><table class="dt st"><thead><tr><th class="t">Tienda</th><th class="t">Estado</th><th>Compromiso</th><th>Días sin check</th><th class="t">Supervisor</th><th class="t">RR.HH.</th></tr></thead><tbody>${xs.slice(0, 40).map(i => `<tr><td class="t"><b>${esc(i.t.nombre)}</b> <small class="muted">${i.id}</small></td><td class="t">${esc(i.t.estado || '')}</td><td>${i.g && i.g.fecha_compromiso ? fdate(i.g.fecha_compromiso) : '—'}</td><td>${i.dsc}</td><td class="t">${esc(i.t.supervisor || '')}</td><td class="t">${esc(i.t.rrhh || '')}</td></tr>`).join('')}</tbody></table></div></details>` : '';
+  return `<div class="alertas2" id="vac-alertas">${tarj('r', '⏰', 'Compromisos de cobertura vencidos', 'La fecha compromiso ya pasó y la vacante sigue sin cubrirse', venc)}${tarj('a', '🟡', 'Compromisos que vencen en 3 días o menos', 'Dar seguimiento para cumplir la fecha', prox)}${tarj('a', '🔴', 'Prioridad alta sin confirmar', 'Vacantes importantes todavía sin fecha compromiso ni motivo', altas)}</div>
+    <div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('vac-alertas'),'Alertas de vacantes · ${fdate(HOY)}',subFiltros(),'alertas_vacantes')">📸 Imagen de las alertas</button></div>`;
+}
+
+function vacCsvReal() {
+  const xs = VC.items.filter(i => i.vac); if (!xs.length) { toast('No hay vacantes reales con estos filtros'); return; }
+  finBajar('vacantes_reales_' + HOY + '.csv', [['idpdv', 'tienda', 'cadena', 'class', 'estado', 'region', 'gerente', 'supervisor', 'rrhh', 'tipo', 'posiciones_tienda', 'posiciones_faltantes', 'dias_sin_check', 'ultimo_check', 'cuota_temm_semana', 'venta_temm_prom4', 'inventario', 'prioridad', 'estatus', 'fecha_compromiso', 'motivo', 'nota'],
+    ...xs.sort((a, b) => b.score - a.score).map(i => [i.id, i.t.nombre, i.t.cadena, i.t.clase, i.t.estado, i.t.region, i.t.gerente, i.t.supervisor, i.t.rrhh, i.tipo, i.ps, i.falt, i.dsc, i.ult, i.e.cuota_temm, i.e.prom4_temm, i.e.inv_estatus, i.pri, i.estado, i.g && i.g.fecha_compromiso, i.g && i.g.motivo, i.g && i.g.nota])]);
+}
+
+/* ---- gestionar una vacante ---- */
+async function vacGestionar(id) {
+  const i = VC.items.find(x => x.id === id); if (!i) return; let hist = []; try { hist = await API.vacHist(id); } catch (e) { }
+  const g = i.g || {}, esC = g.estado === 'Cubierta';
+  $('modal').innerHTML = `<div class="mbox" style="width:min(600px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>📌 Gestionar vacante</h3><div class="who">${esc(i.t.nombre)} · IDPDV ${id}<br><small>${esc(i.t.cadena || '')} · ${esc(i.t.estado || '')} · ${esc(i.tipo)} · ${i.dsc} días sin check · ${i.asig} de ${i.ps} posición${i.ps === 1 ? "" : "es"} con promotor asignado</small></div>
+    <div class="fld"><label>¿Qué pasa con esta tienda?</label><select id="vc-est" onchange="vacToggle()"><option value="Confirmada" ${!esC ? 'selected' : ''}>Confirmo la vacante (con fecha compromiso)</option><option value="Cubierta" ${esC ? 'selected' : ''}>Ya está cubierta (aunque todavía no tenga checks)</option></select></div>
+    <div id="vc-conf"><div class="row2"><div class="fld"><label>Posiciones vacantes</label><input id="vc-pos" type="number" min="0" max="20" value="${g.posiciones != null ? g.posiciones : i.falt || i.ps}"></div><div class="fld"><label>Fecha compromiso de cobertura</label><input id="vc-fec" type="date" value="${g.fecha_compromiso || ''}"></div></div>
+      <div class="fld"><label>Motivo de la vacante</label><select id="vc-mot"><option value="">— elige —</option>${VC.motivos.map(m => `<option ${g.motivo === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div></div>
+    <div id="vc-cub" hidden><div class="fld"><label>Promotor que la cubre (usuario Fieldway, opcional)</label><input id="vc-por" value="${esc(g.cubierta_por || '')}" placeholder="Ej. ABCD123456"></div></div>
+    <div class="fld"><label>Nota <small class="muted">(obligatoria si el motivo es «Otro»)</small></label><input id="vc-nota" value="${esc(g.nota || '')}" placeholder="Qué se está haciendo, con quién, bloqueos…"></div>
+    ${hist.length ? `<details class="enc-d"><summary>Historial (${hist.length})</summary>${hist.map(h => `<div class="muted" style="font-size:12px;padding:3px 0">${fdate(String(h.en).slice(0, 10))} · <b>${esc(h.estado)}</b>${h.fecha_compromiso ? ' · compromiso ' + fdate(h.fecha_compromiso) : ''}${h.motivo ? ' · ' + esc(h.motivo) : ''}${h.nota ? ' · ' + esc(h.nota) : ''}</div>`).join('')}</details>` : ''}
+    <div class="mfoot">${i.g ? `<button class="btn danger" onclick="vacQuitar(${id})">Quitar gestión</button>` : ''}<button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" onclick="vacGuardar(${id})">Guardar</button></div></div>`;
+  $('modal').hidden = false; vacToggle();
+}
+function vacToggle() { const c = $('vc-est').value === 'Cubierta'; $('vc-conf').hidden = c; $('vc-cub').hidden = !c; }
+async function vacGuardar(id) {
+  const est = $('vc-est').value;
+  try {
+    await API.vacGuardar({ p_idpdv: id, p_estado: est, p_posiciones: est === 'Confirmada' && $('vc-pos').value !== '' ? +$('vc-pos').value : null, p_fecha_compromiso: est === 'Confirmada' ? ($('vc-fec').value || null) : null, p_motivo: est === 'Confirmada' ? ($('vc-mot').value || null) : null, p_nota: limpia($('vc-nota').value) || null, p_cubierta_por: est === 'Cubierta' ? limpia($('vc-por').value) : null });
+    toast(est === 'Cubierta' ? 'Marcada como cubierta' : 'Vacante confirmada'); cerrarM(); await vacCargar(true); vVacantes();
+  } catch (e) { toast(e.message || e); }
+}
+async function vacQuitar(id) {
+  const m = prompt('¿Por qué se quita la gestión? (mínimo 5 caracteres). La tienda vuelve a evaluarse solo por la cobertura medida.', ''); if (m === null) return; if (limpia(m).length < 5) { toast('Escribe el motivo'); return; }
+  try { await API.vacQuitar(id, limpia(m)); toast('Gestión quitada'); cerrarM(); await vacCargar(true); vVacantes(); } catch (e) { toast(e.message || e); }
+}
+
+/* ---- resumen gráfico ---- */
+function vacResumenHTML(items, r) {
+  const vac = items.filter(i => i.vac), W = ventana(), L = limites(), ult = W.slice(-12), xs = xsF().filter(x => (x.t.posiciones || 0) > 0);
+  const sem = ult.map(w => { const fin = addD(w.ini, 6) > L.max ? L.max : addD(w.ini, 6), ds = []; for (let d = w.ini; d <= fin; d = addD(d, 1)) if (d >= R.meta.cd_desde) ds.push(d); let tv = 0, pf = 0; if (ds.length) xs.forEach(x => { const s = estatusTienda(x, ds); if (s.cob === 'Vacante') tv++; else if (s.asi === 'Posc Faltante') pf++; }); return { w: w.w.slice(3), tv, pf }; });
+  const crec = sem.length > 1 ? sem[sem.length - 1].tv + sem[sem.length - 1].pf - (sem[sem.length - 2].tv + sem[sem.length - 2].pf) : 0;
+  let h = sect('Tendencia semanal', '📈') + `<div class="grid g2"><div class="card"><h3>Tiendas vacantes y con posiciones faltantes · últimas ${sem.length} semanas</h3><p class="note">Según la cobertura medida al cierre de cada semana (2 o más días sin check = vacante). ${crec ? `La última semana ${crec > 0 ? 'subió' : 'bajó'} <b>${Math.abs(crec)}</b> contra la anterior.` : ''} El detalle de arriba (con promotor asignado) solo aplica al día de hoy.</p>${legend([['Tiendas vacantes', C.rd], ['Con posiciones faltantes', C.am]])}${chart(sem.map(s => s.w), [{ n: 'Tiendas vacantes', c: C.rd, v: sem.map(s => s.tv) }, { n: 'Con posiciones faltantes', c: C.am, v: sem.map(s => s.pf) }], { bars: 1, vals: 1, h: 300, ticks: 16 })}</div>`;
+  const top = vac.slice().sort((a, b) => b.dsc - a.dsc).slice(0, 12);
+  h += `<div class="card"><h3>⏳ Tiendas con más días sin cubrirse</h3>${hbars(top.map(i => ({ n: i.t.nombre + ' · ' + i.id, v: i.dsc, c: i.dsc >= 10 ? C.rd : C.am, s: (i.g && i.g.motivo) || i.estado })), C.am)}</div></div>`;
+  const mot = {}; items.filter(i => i.g && i.g.motivo && i.estado === 'Confirmada').forEach(i => mot[i.g.motivo] = (mot[i.g.motivo] || 0) + 1);
+  const est = {}; items.forEach(i => est[i.estado] = (est[i.estado] || 0) + 1);
+  h += `<div class="grid g2"><div class="card"><h3>🧩 Motivos de las vacantes confirmadas</h3>${Object.keys(mot).length ? hbars(Object.entries(mot).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ n: k, v, c: k === 'Mal ambiente laboral' || k === 'Sin candidatos' ? C.rd : C.am, s: pc1(v, Object.values(mot).reduce((a, b) => a + b, 0)) })), C.am) : '<p class="note">Todavía no hay vacantes confirmadas con motivo.</p>'}</div>
+    <div class="card"><h3>🚦 Estatus de gestión</h3>${donut(Object.entries(est).map(([k, v]) => ({ n: k, v, c: k === 'Confirmada' ? C.rd : k === 'Por confirmar' ? C.am : k === 'Cubierta (RH)' || k === 'Resuelta' ? C.gr : C.bl })), { sub: 'tiendas' })}</div></div>`;
+  const por = (campo, vacio) => { const m = new Map(); vac.forEach(i => { const k = i.t[campo] || vacio; m.set(k, (m.get(k) || 0) + Math.max(1, i.falt)); }); return [...m].sort((a, b) => b[1] - a[1]).slice(0, 10); };
+  h += `<div class="grid g2"><div class="card"><h3>🧑‍💼 Posiciones faltantes por gerente</h3>${hbars(por('gerente', 'Sin gerente').map(([k, v]) => ({ n: k, v, c: C.rd })), C.rd)}</div><div class="card"><h3>🔗 Posiciones faltantes por cadena</h3>${hbars(por('cadena', 'Sin cadena').map(([k, v]) => ({ n: k, v, c: C.am })), C.am)}</div></div>`;
+  return h;
+}
+
+/* >>> 07g_perfil_baja.js */
+/* ====================================================================== PERFIL DEL PROMOTOR AL CAUSAR BAJA ======================================================================
+   Al registrar una baja se muestra un resumen del promotor (categoría de Avance GB de las últimas semanas, checks, errores, ventas, tiendas donde checó) y RH marca si es
+   recontratable (Sí / Con reservas / No) con una nota. Queda guardado como foto del momento (baja_perfil) para consultarlo después, por ejemplo si pide reingresar.
+   Los datos salen de los reportes publicados (últimas ~13 semanas de checks). La categoría y el desempeño ayudan a justificar bajas por productividad. */
+const PF = { cache: new Map(), lista: new Map() };
+Real.checksDe = async function (u) { return todo(() => sb.from('rep_checks').select('fecha,idpdv,estatus_check,estatus_final,registros').eq('usuario', u)); };
+Real.perfilesBaja = async function () { return todo(() => sb.from('baja_perfil').select('*')); };
+Real.guardarPerfilBaja = async function (a) { return Real.finRpc('guardar_perfil_baja', a); };
+Demo.checksDe = async () => []; Demo.perfilesBaja = async () => []; Demo.guardarPerfilBaja = async () => { };
+const PF_REC = { 'Sí': ['g', '🟢'], 'Con reservas': ['a', '🟠'], 'No': ['r', '🔴'] };
+
+async function perfilCalc(u) {
+  if (PF.cache.has(u)) return PF.cache.get(u);
+  await cargarCatPromotores();
+  const cats = (CATP.por.get(u) || []).slice(0, 6).map(x => ({ semana: x.semana, categoria: x.categoria, alcance_t: x.alcance_t, alcance_m: x.alcance_m, portas: x.portas }));
+  let chk = []; try { chk = (await API.checksDe(u)).filter(x => x.estatus_final !== 'Otro Check'); } catch (e) { }
+  const dias = new Map(); chk.forEach(c => dias.set(c.fecha, (dias.get(c.fecha) || 0) + (c.registros || 0)));
+  const err = chk.filter(esErr), tipos = {}; err.forEach(x => tipos[x.estatus_check] = (tipos[x.estatus_check] || 0) + 1);
+  const ok = chk.filter(x => OKF.includes(x.estatus_final)).length, tiendas = new Set(chk.map(x => x.idpdv)).size, ventas = chk.reduce((a, x) => a + (x.registros || 0), 0), sinVenta = [...dias.values()].filter(v => v === 0).length;
+  const real = cats.filter(c => c.categoria !== 'Adaptación').slice(0, 4), bueno = real.filter(c => c.categoria === 'Dorado' || c.categoria === 'Verde').length, malo = real.filter(c => c.categoria === 'Rojo').length;
+  const veredicto = !real.length ? (cats.length ? 'En adaptación (sin evidencia suficiente)' : 'Sin datos de productividad') : bueno * 2 >= real.length ? 'Productivo' : malo * 2 >= real.length ? 'Bajo desempeño' : 'Desempeño regular';
+  const temas = []; if (dias.size && err.length / dias.size >= .2) temas.push('Errores de check frecuentes (' + err.length + ' en ' + dias.size + ' días)'); if (tiendas >= 3) temas.push('Checó en ' + tiendas + ' tiendas distintas'); if (dias.size && sinVenta / dias.size > .5) temas.push('Más de la mitad de sus días con check sin venta');
+  const o = { categorias: cats, dias_check: dias.size, checks: chk.length, pct_cumple: chk.length ? Math.round(ok / chk.length * 1000) / 10 : null, errores: err.length, tipos_error: tipos, tiendas, ventas, dias_sin_venta: sinVenta, veredicto, temas };
+  PF.cache.set(u, o); return o;
+}
+function perfilHTML(p) {
+  const cats = p.categorias.slice(0, 4).map(c => `<span title="${esc(c.semana)}">${catPill(c.categoria)}</span>`).join(' ') || '<span class="muted">sin categoría publicada</span>';
+  return `<div class="pf-box"><div><b>${esc(p.veredicto)}</b></div><div class="pf-row"><span>Categoría (últimas semanas, de la más reciente):</span> ${cats}</div>
+    <div class="pf-row"><span>${fmt(p.dias_check)} días con check · ${fmt(p.checks)} checks · ${p.pct_cumple == null ? '—' : p.pct_cumple + ' %'} cumplen · ${fmt(p.errores)} con error · ${fmt(p.ventas)} ventas · ${fmt(p.dias_sin_venta)} días sin venta · ${fmt(p.tiendas)} tienda${p.tiendas === 1 ? '' : 's'}</span></div>
+    ${Object.keys(p.tipos_error || {}).length ? `<div class="pf-row">${Object.entries(p.tipos_error).sort((a, b) => b[1] - a[1]).map(([k, v]) => pillx((ERRI[k] || '') + ' ' + v + ' ' + esc((ERRN[k] || k).toLowerCase()), NOJUST.includes(k) ? 'r' : 'a')).join(' ')}</div>` : ''}
+    ${p.temas && p.temas.length ? `<div class="pf-row">${p.temas.map(t => `<span class="pill a">⚠️ ${esc(t)}</span>`).join(' ')}</div>` : ''}</div>`;
+}
+const perfilCampos = (rec, nota) => `<div class="row2"><div class="fld"><label>¿Es recontratable?</label><select id="pf-rec"><option value="">— sin evaluar todavía —</option>${['Sí', 'Con reservas', 'No'].map(v => `<option ${rec === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div><div class="fld"><label>Por qué (obligatorio si no es «Sí»)</label><input id="pf-nota" value="${esc(nota || '')}" placeholder="Desempeño, conducta, adeudos…"></div></div>`;
+
+/* dentro de "Registrar baja" */
+async function bajaPerfilPanel(c) {
+  const box = $('bj-perfil'); if (!box) return; box.innerHTML = '<div class="loading">Armando el perfil del promotor…</div>';
+  try { const p = await perfilCalc(c.usuario_fieldwy); if (BJ.sel !== c) return; box.innerHTML = sect('Perfil del promotor', '🧑‍💼') + perfilHTML(p) + perfilCampos('', ''); } catch (e) { box.innerHTML = ''; }
+}
+async function perfilGuardarDeModal(c, fecha) {   // se llama después de registrar la baja; si no eligió recontratable, queda pendiente en la lista de bajas
+  const rec = $('pf-rec') && $('pf-rec').value; if (!rec) return;
+  try { await API.guardarPerfilBaja({ p_usuario: c.usuario_fieldwy, p_fecha: fecha, p_resumen: await perfilCalc(c.usuario_fieldwy), p_recontratable: rec, p_nota: limpia($('pf-nota').value) || null }); }
+  catch (e) { toast('La baja se guardó, pero el perfil no: ' + (e.message || e) + ' (complétalo desde Bajas y encuesta → Perfil)'); }
+}
+
+/* desde la lista de bajas */
+async function perfilAbrir(id) {
+  const b = BJ.lista.find(x => x.id === id); if (!b) return; const prev = PF.lista.get(b.usuario + '|' + b.fecha); let p = prev ? prev.resumen : null;
+  $('modal').innerHTML = `<div class="mbox" style="width:min(680px,96vw)" role="dialog" aria-modal="true"><h3>🧑‍💼 Perfil del promotor</h3><div class="who">${esc(b.nombre)} · ${esc(b.usuario)} · baja ${fdate(b.fecha)} · ${esc(b.motivo)}</div><div id="pf-cuerpo"><div class="loading">Armando el perfil…</div></div></div>`; $('modal').hidden = false;
+  try { if (!p || !p.veredicto) p = await perfilCalc(b.usuario); } catch (e) { }
+  $('pf-cuerpo').innerHTML = (p ? perfilHTML(p) : '<div class="warn">No se pudo armar el resumen.</div>') + (prev ? `<p class="note">Evaluación guardada el ${fdate(String(prev.en).slice(0, 10))}. El resumen es la foto de ese momento.</p>` : '') +
+    (can('bajas', 'editar') || can('bajas', 'crear') ? perfilCampos(prev && prev.recontratable, prev && prev.nota) : '') + `<div class="mfoot"><button class="btn" onclick="cerrarM()">Cerrar</button>${can('bajas', 'editar') || can('bajas', 'crear') ? `<button class="btn primary" onclick="perfilGuardar(${id})">Guardar</button>` : ''}</div>`;
+}
+async function perfilGuardar(id) {
+  const b = BJ.lista.find(x => x.id === id); const rec = $('pf-rec').value; if (!rec) { toast('Elige si es recontratable'); return; }
+  try { const res = (PF.lista.get(b.usuario + '|' + b.fecha) || {}).resumen; await API.guardarPerfilBaja({ p_usuario: b.usuario, p_fecha: b.fecha, p_resumen: (res && res.veredicto) ? res : await perfilCalc(b.usuario), p_recontratable: rec, p_nota: limpia($('pf-nota').value) || null }); toast('Perfil guardado'); cerrarM(); vBajas(); }
+  catch (e) { toast(e.message || e); }
 }
 
 /* >>> 08_demo_reportes.js */
