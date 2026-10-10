@@ -514,12 +514,19 @@ const ASIC = { 'Cubierta': 'g', 'Posc Adic': 'g', 'Posc Desc': 'a', 'Descubierta
 const ASIE = { 'Cubierta': '🟢', 'Posc Adic': '🔵', 'Posc Desc': '🟠', 'Descubierta': '🟠', 'Posc Faltante': '🔴', 'Vacante': '🔴', 'Sin Definir': '⚪' };
 const colPct = p => p == null ? '' : p >= 90 ? 'ok' : p >= 75 ? 'wa' : 'ko';
 
+/* riesgo de sobredimensionar: checks de la semana contra el tope pagado por Telefónica (6 fijos + 3 adicionales por posición). sem = [estatus, checks, cuota, tope, faltantes, no válidos, proyección, exceso, último] */
+function sobredim(x, wi) {
+  const sd = wi == null ? null : x.sem[wi]; if (!sd) return { tope: null, chk: null, proy: null, exc: 0, nivel: 0 };
+  const tope = sd[3], chk = sd[1], proy = sd[6], exc = Math.max(0, proy - tope);
+  return { tope, chk, proy, exc, nivel: chk > tope ? 2 : exc > 0.05 ? 1 : 0 };   // 2 = ya se pasó del tope, 1 = a este ritmo se pasa
+}
 /* ====================================================================== 1 · RESUMEN ====================================================================== */
 async function vResumen() {
   await conReporte('Resumen', 'pulgares', async () => {
     await cargarMovs();
     const r = perRango(), dias = r.dias, xs = xsF(), cur = medidas(xs, dias), sems = semanasUlt4(r), S4 = sems.map(w => medidas(xs, w.dias)), prev = S4.length > 1 ? S4[S4.length - 2] : null;
     const rot = rotPeriodo(r);
+    const wi = sems.length ? sems[sems.length - 1].i : null, sdm = new Map(xs.map(x => [x.id, sobredim(x, wi)])), nSobre = [...sdm.values()].filter(z => z.nivel > 0).length;
     let h = cab('Resumen', 'Cobertura de PDV, asistencia de promotores y checks contra cuota (misma lógica de Avance GB), más rotación del periodo. Todo responde a los filtros de estructura y al periodo elegido.', 'pulgares') + barraFiltros('vResumen') + barraPeriodo('vResumen');
     h += `<div class="kpis kp-hero">${kp('% Cobertura PDV', cur.pctP == null ? '—' : f1(cur.pctP) + '%', `${fmt1(cur.pP)} tiendas/día vs ${fmt1(cur.dP)} dimensionadas<br>${dl(cur.pctP, prev && prev.pctP)}`, colorPct(cur.pctP), null, '🏬')}
       ${kp('% Asistencia Promotor', cur.pctM == null ? '—' : f1(cur.pctM) + '%', `${fmt1(cur.pM)} promotores/día vs ${fmt1(cur.dM)} dimensionados<br>${dl(cur.pctM, prev && prev.pctM)}`, colorPct(cur.pctM), null, '🧍')}
@@ -539,18 +546,20 @@ async function vResumen() {
     h += `<div class="grid g2"><div class="card"><h3>📈 Tiendas cubiertas, descubiertas y vacantes · últimas 4 semanas</h3><p class="note">Estatus de cada tienda al cierre de la semana (últimos 2 días con datos). La línea es el % de tiendas cubiertas.</p>${legend([['Cubiertas', C.gr], ['Descubiertas', C.am], ['Vacantes', C.rd], ['% cubiertas', C.dk]])}${chart(labs, [{ n: 'Cubiertas', c: C.gr, v: est4.map(e => e.Cubierta) }, { n: 'Descubiertas', c: C.am, v: est4.map(e => e.Descubierta) }, { n: 'Vacantes', c: C.rd, v: est4.map(e => e.Vacante) }], { bars: 1, stack: 1, vals: 1, h: 320, band: 1, lines2: [{ n: '% cubiertas', c: C.dk, v: est4.map(e => pn(e.Cubierta, e.Cubierta + e.Descubierta + e.Vacante)) }], y2: { pct: 1 } })}</div>
       <div class="card"><h3>🔄 Ingresos, bajas y rotación · últimas 4 semanas</h3><p class="note">Rotación del periodo: <b>${rot.rot == null ? '—' : f1(rot.rot) + '%'}</b> (${rot.baj} bajas ÷ ${fmt(rot.hc)} HC promedio). Línea: rotación semanal con su tendencia.</p>${legend([['Ingresos', C.gr], ['Bajas', C.rd], ['Rotación %', C.od], ['Tendencia', C.dk]])}${chart(labs, [{ n: 'Ingresos', c: C.gr, v: sems.map(w => MV.ing.filter(x => x.f >= w.desde && x.f <= w.hasta && okI(x.idpdv)).length) }, { n: 'Bajas', c: C.rd, v: sems.map(w => MV.baj.filter(x => x.f >= w.desde && x.f <= w.hasta && okI(x.idpdv)).length) }], { bars: 1, vals: 1, h: 320, band: 1, lines2: [{ n: 'Rotación %', c: C.od, v: rotS, trend: 1 }], y2: { pct: 1 } })}</div></div>`;
     h += sect('Tiendas: medición de checks, asistencia y cobertura', '🧾') + `<p class="note">Periodo ${fdate(r.desde)} – ${fdate(r.hasta)}. Mueve la tabla a los lados o hacia abajo: encabezados e IDPDV/tienda se quedan fijos.</p>`;
-    h += `<div class="tools" data-nocap><span>Estatus cobertura:</span><select onchange="R.estC=this.value;vResumen()"><option value="">Todos</option>${['Cubierta', 'Descubierta', 'Vacante'].map(e => `<option ${R.estC === e ? 'selected' : ''}>${e} (${ce[e]})</option>`).join('')}</select><span>Estatus asistencia:</span><select onchange="R.estA=this.value;vResumen()"><option value="">Todos</option>${['Cubierta', 'Posc Adic', 'Posc Desc', 'Descubierta', 'Posc Faltante', 'Vacante'].map(e => `<option ${R.estA === e ? 'selected' : ''}>${e}</option>`).join('')}</select></div>`;
-    const rows = st.filter(z => (!R.estC || R.estC.startsWith(z.s.cob + ' (') || R.estC === z.s.cob) && (!R.estA || R.estA === z.s.asi)).map(({ x, s }) => ({ ...x, s, m: medTienda(x, dias), pe: penActual(x) }));
+    h += `<div class="tools" data-nocap><span>Estatus cobertura:</span><select onchange="R.estC=this.value;vResumen()"><option value="">Todos</option>${['Cubierta', 'Descubierta', 'Vacante'].map(e => `<option ${R.estC === e ? 'selected' : ''}>${e} (${ce[e]})</option>`).join('')}</select><span>Estatus asistencia:</span><select onchange="R.estA=this.value;vResumen()"><option value="">Todos</option>${['Cubierta', 'Posc Adic', 'Posc Desc', 'Descubierta', 'Posc Faltante', 'Vacante'].map(e => `<option ${R.estA === e ? 'selected' : ''}>${e}</option>`).join('')}</select><span>Dimensionamiento:</span><select onchange="R.dimz=this.value;vResumen()"><option value="">Todas</option><option value="1" ${R.dimz ? 'selected' : ''}>⚖️ Riesgo de sobredimensionar (${nSobre})</option></select></div>`;
+    const rows = st.filter(z => (!R.estC || R.estC.startsWith(z.s.cob + ' (') || R.estC === z.s.cob) && (!R.estA || R.estA === z.s.asi) && (!R.dimz || sdm.get(z.x.id).nivel > 0)).map(({ x, s }) => ({ ...x, s, m: medTienda(x, dias), pe: penActual(x), sb: sdm.get(x.id) }));
     TB = {};
     const cs = [{ h: 'IDPDV', v: q => q.id, w: 86 }, { h: 'Nombre PDV', t: 1, v: q => q.t.nombre, w: 230, r: q => `<b>${esc(q.t.nombre)}</b>` },
       { h: 'Cadena', t: 1, v: q => q.t.cadena, r: q => `${esc(q.t.cadena)}` }, { h: 'Estado', t: 1, v: q => q.t.estado }, { h: 'Supervisor', t: 1, v: q => q.t.supervisor }, { h: 'Gerente / Líder', t: 1, v: q => q.t.gerente }, { h: 'Posc.', v: q => q.m.ps },
       { h: 'Checks válidos', v: q => q.m.chk, hc: 'hy' }, { h: 'Cuota checks', v: q => q.m.cuota, r: q => fmt1(q.m.cuota), hc: 'hy' }, { h: '% Cobertura checks', v: q => q.m.pctCh, r: q => `<span class="bar-pct ${colPct(q.m.pctCh)}">${f1(q.m.pctCh)}%</span>`, hc: 'hy' }, { h: 'Checks faltantes', v: q => q.m.falt, r: q => q.m.falt ? `<span class="cell-red">${fmt1(q.m.falt)}</span>` : '0', hc: 'hy' }, { h: 'Checks adicionales', v: q => q.m.adic, r: q => q.m.adic ? `<span class="cell-green">+${fmt1(q.m.adic)}</span>` : '0', hc: 'hy' },
       { h: 'Dimens. promotor', v: q => q.m.dimA, r: q => f1(q.m.dimA), hc: 'hg' }, { h: 'Prom. promotor/día', v: q => q.m.promA, r: q => f1(q.m.promA), hc: 'hg' }, { h: '% Asistencia', v: q => q.m.pctA, r: q => `<span class="bar-pct ${colPct(q.m.pctA)}">${f1(q.m.pctA)}%</span>`, hc: 'hg' }, { h: 'Dif. asistencia', v: q => q.m.difA, r: q => `<span class="${q.m.difA < -0.05 ? 'cell-red' : 'cell-green'}">${q.m.difA > 0 ? '+' : ''}${f1(q.m.difA)}</span>`, hc: 'hg' },
       { h: 'Dimens. PDV', v: q => q.m.dimC, r: q => f1(q.m.dimC), hc: 'hd' }, { h: 'Prom. cobertura/día', v: q => q.m.promC, r: q => f1(q.m.promC), hc: 'hd' }, { h: '% Cobertura real', v: q => q.m.pctC, r: q => `<span class="bar-pct ${colPct(q.m.pctC)}">${f1(q.m.pctC)}%</span>`, hc: 'hd' }, { h: 'Dif. cobertura', v: q => q.m.difC, r: q => `<span class="${q.m.difC < -0.05 ? 'cell-red' : 'cell-green'}">${q.m.difC > 0 ? '+' : ''}${f1(q.m.difC)}</span>`, hc: 'hd' },
+      { h: 'Tope checks semana', v: q => q.sb.tope, hc: 'hy' }, { h: 'Checks semana', v: q => q.sb.chk, hc: 'hy' }, { h: 'Proyección semana', v: q => q.sb.proy, r: q => q.sb.proy == null ? '—' : f1(q.sb.proy), hc: 'hy' }, { h: 'Exceso proyectado', v: q => q.sb.exc, r: q => q.sb.exc > 0.05 ? `<span class="cell-red">+${f1(q.sb.exc)}</span>` : '0', hc: 'hy' },
+      { h: 'Riesgo sobredimensionar', t: 1, v: q => q.sb.nivel, r: q => q.sb.nivel === 2 ? pillx('🔴 Ya rebasó el tope', 'r') : q.sb.nivel === 1 ? pillx('🟠 En riesgo', 'a') : pillx('🟢 Sin riesgo', 'g'), hc: 'hy' },
       { h: 'Último check', v: q => q.m.ult, r: q => q.m.ult ? `${fdate(q.m.ult)}${diffD(r.hasta, q.m.ult) >= 2 ? ' <span title="2 o más días sin check">⚠️</span>' : ''}` : '—', hc: 'ho' },
       { h: 'Estatus cobertura', t: 1, v: q => q.s.cob, r: q => pillx((q.s.cob === 'Cubierta' ? '🟢 ' : q.s.cob === 'Vacante' ? '🔴 ' : '🟠 ') + q.s.cob, q.s.cob === 'Cubierta' ? 'g' : q.s.cob === 'Vacante' ? 'r' : 'a'), hc: 'hp' },
       { h: 'Estatus asistencia', t: 1, v: q => q.s.asi, r: q => pillx((ASIE[q.s.asi] || '') + ' ' + q.s.asi, ASIC[q.s.asi] || 'x'), hc: 'hp' }, { h: 'Región', t: 1, v: q => q.t.region }, { h: 'Gerencia RR.HH.', t: 1, v: q => q.t.zona_rrhh }, { h: 'RR.HH.', t: 1, v: q => q.t.rrhh }];
-    const grp = [{ t: '🏪 Tienda', span: 2, cls: 'gt' }, { t: 'Estructura', span: 5, cls: 'gt' }, { t: '✅ Medición de checks', span: 5, cls: 'gy' }, { t: '🧍 Medición de asistencia promotoría', span: 4, cls: 'gg' }, { t: '🏬 Medición de cobertura', span: 4, cls: 'gd' }, { t: '📅 Último día check', span: 1, cls: 'go' }, { t: '🚦 Estatus', span: 2, cls: 'gp' }, { t: 'Estructura', span: 3, cls: 'gt' }];
+    const grp = [{ t: '🏪 Tienda', span: 2, cls: 'gt' }, { t: 'Estructura', span: 5, cls: 'gt' }, { t: '✅ Medición de checks', span: 5, cls: 'gy' }, { t: '🧍 Medición de asistencia promotoría', span: 4, cls: 'gg' }, { t: '🏬 Medición de cobertura', span: 4, cls: 'gd' }, { t: '⚖️ Tope pagado por Telefónica', span: 5, cls: 'gy' }, { t: '📅 Último día check', span: 1, cls: 'go' }, { t: '🚦 Estatus', span: 2, cls: 'gp' }, { t: 'Estructura', span: 3, cls: 'gt' }];
     h += tbl('t-tiendas', cs, rows, { fix: 2, groups: grp, search: 1, csv: 1, png: 1, file: 'resumen_tiendas', titulo: 'Resumen de tiendas · cobertura, asistencia y checks', sort: 18, dir: 1, maxh: '72vh', lim: 600 });
     $('content').innerHTML = h; drawAll();
   });
@@ -574,18 +583,18 @@ async function vPenal() {
     const enJuego = act ? dePen.filter(x => x.p.act && x.p.hoy !== 'C') : [];
     const c5 = enJuego.filter(x => x.p.ra === 4), c4 = enJuego.filter(x => x.p.ra === 3), c3 = enJuego.filter(x => x.p.ra === 2);
     const todasR = []; dePen.forEach(x => rachasConfirmadas(x.p, act).forEach(q => todasR.push({ ...x, ...q })));
-    const rach3 = todasR.filter(q => q.dias >= 3).sort((a, b) => b.dias - a.dias), pen = todasR.filter(q => q.dias >= 5).sort((a, b) => b.dias - a.dias);
+    const rach3 = todasR.filter(q => q.dias >= 3).sort((a, b) => b.dias - a.dias), pen = [...todasR.filter(q => q.dias >= 5).sort((a, b) => a.ini.localeCompare(b.ini)).reduce((m, q) => m.has(q.id) ? m : m.set(q.id, q), new Map()).values()].sort((a, b) => b.dias - a.dias);   // una sola fila por tienda: su primera racha penalizada
     const penT = new Set(pen.map(q => q.id)).size;
     let h = cab('Penalización por falta de cobertura', 'Una tienda se penaliza con 5 días seguidos sin cobertura dentro del mes. Cuenta como cobertura un check dentro de rango con 420 minutos en tienda (300 los domingos con horario diferenciado); el check de un supervisor también rompe la racha. El día 5 todavía se puede salvar si hoy se cubre.', 'puno') + barraFiltros('vPenal');
     h += `<div class="tools"><span>Mes:</span><select onchange="R.mes=this.value;vPenal()">${meses.map(m => `<option value="${m}" ${m === R.mes ? 'selected' : ''}>${mlabel(m)}${m === HOY.slice(0, 7) ? ' (en curso)' : ''}</option>`).join('')}</select><button class="chip ${R.solo ? 'on' : ''}" onclick="R.solo=!R.solo;vPenal()">⭐ Solo Coppel (prioridad)</button><span class="muted">${fmt(dePen.length)} tiendas en el mes</span></div>`;
-    h += `<div class="kpis">${act ? kp('Día 5 · último día', fmt(c5.length), 'si hoy no se cubre, se penaliza', c5.length ? C.rd : C.gr, null, '🔴') + kp('Día 4', fmt(c4.length), 'enviar a cubrir hoy', c4.length ? C.am : C.gr, null, '🟡') + kp('Día 3', fmt(c3.length), 'programar cobertura', C.gr, null, '🟢') : ''}${kp('Penalizadas ' + mlabel(R.mes), fmt(penT), `${fmt(pen.length)} racha${pen.length === 1 ? '' : 's'} de 5 o más días`, penT ? C.rd : C.gr, null, '🚫')}${kp('Rachas de 3+ días', fmt(rach3.length), 'en el mes', C.am, null, '📜')}</div>`;
+    h += `<div class="kpis">${act ? kp('Día 5 · último día', fmt(c5.length), 'si hoy no se cubre, se penaliza', c5.length ? C.rd : C.gr, null, '🔴') + kp('Día 4', fmt(c4.length), 'enviar a cubrir hoy', c4.length ? C.am : C.gr, null, '🟡') + kp('Día 3', fmt(c3.length), 'programar cobertura', C.gr, null, '🟢') : ''}${kp('Penalizadas ' + mlabel(R.mes), fmt(penT), 'tiendas con 5 o más días seguidos sin cobertura', penT ? C.rd : C.gr, null, '🚫')}${kp('Rachas de 3+ días', fmt(rach3.length), 'en el mes', C.am, null, '📜')}</div>`;
     h += `<div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('alertas-wrap'),'Alertas de cobertura · ${fdate(HOY)}',subFiltros(),'alertas_cobertura')">📸 Imagen de todas las alertas</button><button class="btn sm" onclick="capturaCopiar($('alertas-wrap'),'Alertas de cobertura · ${fdate(HOY)}',subFiltros())">📋 Copiar imagen</button><span class="muted">Cada día RH comparte esta imagen. Abre una tarjeta para ver sus tiendas; 📸 captura solo esa tarjeta.</span></div>`;
     h += `<div id="alertas-wrap" class="alertas2">`;
     if (act) h += tarjetaPen({ k: 'r', ic: '🔴', t: 'Día 5 · último día para salvar', sub: 'Hoy es el 5.º día sin cobertura: si no se cubre hoy, queda penalizada', rows: c5.map(x => ({ ...x, per: periodoIni(addD(HOY, -4), addD(HOY, -1)) })), racha: false, abrir: true }) +
       tarjetaPen({ k: 'a', ic: '🟡', t: 'Día 4', sub: 'Hoy es el 4.º día sin cobertura · enviar a cubrir hoy', rows: c4.map(x => ({ ...x, per: periodoIni(addD(HOY, -3), addD(HOY, -1)) })), racha: false }) +
       tarjetaPen({ k: 'g', ic: '🟢', t: 'Día 3', sub: 'Hoy es el 3.er día sin cobertura · todavía hay margen', rows: c3.map(x => ({ ...x, per: periodoIni(addD(HOY, -2), addD(HOY, -1)) })), racha: false });
     h += tarjetaPen({ k: 'neutro', ic: '📜', t: 'Mayores rachas del mes', sub: 'Rachas de 3 o más días consecutivos en el mes (cerradas o en curso)', rows: rach3.map(q => ({ ...q, per: periodoIni(q.ini, q.fin) + (q.enCurso ? ' · en curso' : '') })), racha: true }) +
-      tarjetaPen({ k: 'r', ic: '🚫', t: 'Penalizadas', sub: 'Rachas que ya cumplieron 5 o más días sin cobertura', rows: pen.map(q => ({ ...q, per: periodoIni(q.ini, q.fin) + (q.enCurso ? ' · en curso' : '') })), racha: true }) + '</div>';
+      tarjetaPen({ k: 'r', ic: '🚫', t: 'Penalizadas', sub: 'Una fila por tienda, con su primera racha de 5 o más días sin cobertura', rows: pen.map(q => ({ ...q, per: periodoIni(q.ini, q.fin) + (q.enCurso ? ' · en curso' : '') })), racha: true }) + '</div>';
     $('content').innerHTML = h; drawAll();
   });
 }
@@ -597,7 +606,7 @@ function tarjetaPen(o) {
 }
 
 /* ====================================================================== 3 · DETALLE DE CHECKS ====================================================================== */
-const CKS = { cache: {}, vista: null, just: '', est: '', fin: '', jus: '' };
+const CKS = { cache: {}, vista: null, just: '', est: '', fin: '', jus: '', tab: 'checks', dia: '' };
 const ERRN = { 'Cumple': 'Cumple', 'Check In Fuera Ventana': 'Entrada fuera de horario', 'Check Out Fuera Ventana': 'Salida fuera de horario', 'Error Comida': 'Error de comida', 'Tiempo Incompleto': 'Tiempo incompleto', 'Check In Fuera Rango': 'Entrada fuera de rango', 'Check Out Fuera Rango': 'Salida fuera de rango', 'No Check Salida': 'Sin check de salida', 'Equipo Duplicado': 'Equipo duplicado', 'Abierto': 'Abierto (hoy)' };
 const ERRI = { 'Cumple': '✅', 'Check In Fuera Ventana': '🕘', 'Check Out Fuera Ventana': '🕕', 'Error Comida': '🍽️', 'Tiempo Incompleto': '⏱️', 'Check In Fuera Rango': '📍', 'Check Out Fuera Rango': '📍', 'No Check Salida': '🚪', 'Equipo Duplicado': '📱', 'Abierto': '🟦' };
 const OKF = ['Cumple', 'Cumple Productividad', 'Cumple Telefonica'];
@@ -617,34 +626,22 @@ async function vChecks() {
     const r = perRango(); $('content').innerHTML = cab('Detalle de checks', 'Cargando checks… (los periodos largos tardan unos segundos)', 'sim');
     const vistaSem = CKS.vista ? CKS.vista === 'sem' : r.dias.length > 14, ws4 = semanasUlt4(r), desdeCarga = vistaSem && ws4.length ? (ws4[0].desde < r.desde ? ws4[0].desde : r.desde) : r.desde;
     const todos = (await checksRango(desdeCarga, r.hasta)).filter(x => okI(x.idpdv)), rows = todos.filter(x => x.fecha >= r.desde && x.fecha <= r.hasta);
-    const prim = rows.filter(x => x.estatus_final !== 'Otro Check' && x.estatus_check !== 'Abierto'), ok = prim.filter(x => OKF.includes(x.estatus_final));
+    const prim = rows.filter(x => x.estatus_final !== 'Otro Check'), ok = prim.filter(x => OKF.includes(x.estatus_final));
     const prom = new Set(prim.map(x => x.usuario)).size, prod = prim.filter(x => x.estatus_final === 'Cumple Productividad').length, vtas = prim.reduce((a, x) => a + x.registros, 0);
     const errores = prim.filter(esErr), sinVta = errores.filter(x => justTxt(x) === 'Sin venta').length, conJ = errores.filter(x => justTxt(x) === 'Con venta').length, noAp = errores.filter(x => justTxt(x) === 'No aplica').length;
     const mix = {}; prim.forEach(x => mix[x.estatus_check] = (mix[x.estatus_check] || 0) + 1);
     let h = cab('Detalle de checks', 'Cada check de cada promotor con horarios, tiempos, rangos y resultado, y la venta registrada del día para confirmar la justificación por productividad.', 'sim') + barraFiltros('vChecks') + barraPeriodo('vChecks', { dia: true });
-    h += `<div class="kpis">${kp('Checks evaluados', fmt(prim.length), 'uno por promotor y día', null, null, '🧾')}${kp('Promotores con check', fmt(prom), fdate(r.desde) + ' – ' + fdate(r.hasta), null, null, '🧍')}${kp('Cumplen (regla de pago)', pc1(ok.length, prim.length), fmt(ok.length) + ' checks', colorPct(pn(ok.length, prim.length)), null, '✅')}${kp('Con error', fmt(errores.length), `${fmt(conJ)} con venta · ${fmt(sinVta)} sin venta · ${fmt(noAp)} no justificables`, errores.length ? C.rd : C.gr, null, '⚠️')}${kp('Cumple por productividad', pc1(prod, prim.length), fmt(prod) + ' checks', C.pu, null, '💸')}${kp('Ventas registradas', fmt(vtas), 'en días con check', null, null, '🛒')}</div>`;
+    h += `<div class="tools" data-nocap>${[['checks', '🧾 Checks'], ['errores', '🛠️ Errores de check']].map(([k, n]) => `<button class="chip ${CKS.tab === k ? 'on' : ''}" onclick="CKS.tab='${k}';vChecks()">${n}</button>`).join('')}</div>`;
+    if (CKS.tab === 'errores') { $('content').innerHTML = h + erroresCheckHTML(r, rows, prim, errores); drawAll(); return; }
+    h += `<div class="kpis">${kp('Checks evaluados', fmt(prim.length), 'todos los del periodo, incluidos abiertos', null, null, '🧾')}${kp('Promotores con check', fmt(prom), fdate(r.desde) + ' – ' + fdate(r.hasta), null, null, '🧍')}${kp('Cumplen (regla de pago)', pc1(ok.length, prim.length), fmt(ok.length) + ' checks', colorPct(pn(ok.length, prim.length)), null, '✅')}${kp('Con error', fmt(errores.length), `${fmt(conJ)} con venta · ${fmt(sinVta)} sin venta · ${fmt(noAp)} no justificables`, errores.length ? C.rd : C.gr, null, '⚠️')}${kp('Cumple por productividad', pc1(prod, prim.length), fmt(prod) + ' checks', C.pu, null, '💸')}${kp('Ventas registradas', fmt(vtas), 'en días con check', null, null, '🛒')}</div>`;
     // gráfica: promotores que checaron bien / mal
     const cuenta = x => ({ b: new Set(x.filter(y => OKF.includes(y.estatus_final)).map(y => y.usuario)).size, m: new Set(x.filter(y => !OKF.includes(y.estatus_final)).map(y => y.usuario)).size, n: x.length, c: x.filter(y => OKF.includes(y.estatus_final)).length });
-    const base = x => x.estatus_final !== 'Otro Check' && x.estatus_check !== 'Abierto';
+    const base = x => x.estatus_final !== 'Otro Check';
     let labs, g, tit;
     if (vistaSem) { labs = ws4.map(w => w.w.slice(3)); g = ws4.map(w => cuenta(todos.filter(y => y.fecha >= w.desde && y.fecha <= w.hasta && base(y)))); tit = 'Vista semanal · comparativo de las últimas 4 semanas'; }
     else { labs = r.dias.map(d => d.slice(8) + '/' + d.slice(5, 7)); g = r.dias.map(d => cuenta(prim.filter(y => y.fecha === d))); tit = 'Vista diaria'; }
     h += `<div class="grid g2"><div class="card"><div class="card-h"><h3>👥 Promotores que checaron bien y mal</h3><span class="seg sm" data-nocap><button class="${!vistaSem ? 'on' : ''}" onclick="CKS.vista='dia';vChecks()">Diaria</button><button class="${vistaSem ? 'on' : ''}" onclick="CKS.vista='sem';vChecks()">Semanal</button></span></div><p class="note">${tit}. Cantidad de promotores por resultado; la línea es el % de checks que cumplen, con su tendencia.</p>${legend([['Checaron bien', C.gr], ['Checaron mal', C.rd], ['% checks que cumplen', C.dk]])}${chart(labs, [{ n: 'Checaron bien', c: C.gr, v: g.map(q => q.b) }, { n: 'Checaron mal', c: C.rd, v: g.map(q => q.m) }], { bars: 1, stack: 1, vals: 1, h: 310, ticks: 16, lines2: [{ n: '% cumplen', c: C.dk, v: g.map(q => pn(q.c, q.n)), trend: 1 }], y2: { pct: 1, max: 100 } })}</div>
       <div class="card"><h3>🧩 Resultado del check</h3><p class="note">Antes de aplicar productividad o Telefónica.</p>${hbars(Object.entries(mix).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ n: (ERRI[k] || '') + ' ' + (ERRN[k] || k), v, c: k === 'Cumple' ? C.gr : NOJUST.includes(k) ? C.rd : C.am, s: pc1(v, prim.length) })), C.am)}</div></div>`;
-    // errores a corregir
-    const just = CKS.just, errF = errores.filter(x => !just || (just === 'con' ? justTxt(x) === 'Con venta' : justTxt(x) !== 'Con venta'));
-    h += sect('Promotores con errores a corregir', '🛠️') + `<div class="tools" data-nocap>${[['', 'Todos los errores'], ['sin', '🔴 Sin justificación'], ['con', '🟢 Con justificación (venta)']].map(([k, n]) => `<button class="chip ${just === k ? 'on' : ''}" onclick="CKS.just='${k}';vChecks()">${n}</button>`).join('')}<span class="muted">${r.dias.length === 1 ? 'Día elegido: todos los promotores con error.' : 'Varios días: top 10 con más errores del periodo.'} Fuera de rango, equipo duplicado y sin check de salida no se justifican con venta.</span></div>`;
-    TB = {};
-    if (r.dias.length === 1) {
-      const lst = errF.slice().sort((a, b) => ((tienda(a.idpdv) || {}).supervisor || '').localeCompare((tienda(b.idpdv) || {}).supervisor || '') || a.nombre.localeCompare(b.nombre));
-      h += tbl('t-err', [{ h: 'Usuario', t: 1, v: q => q.usuario, w: 112 }, { h: 'Promotor', t: 1, v: q => q.nombre, w: 230, r: q => `<b>${esc(q.nombre)}</b>` }, { h: 'IDPDV', v: q => q.idpdv }, { h: 'Tienda', t: 1, v: q => (tienda(q.idpdv) || {}).nombre || '' }, { h: 'Resultado', t: 1, v: q => ERRN[q.estatus_check] || q.estatus_check, r: q => pillx((ERRI[q.estatus_check] || '') + ' ' + (ERRN[q.estatus_check] || q.estatus_check), NOJUST.includes(q.estatus_check) ? 'r' : 'a') },
-        { h: 'Ventas', v: q => q.registros, r: q => q.registros ? `<b>${q.registros}</b>` : '0' }, { h: 'Justifica', t: 1, v: q => justTxt(q), r: q => { const p = JUSTP[justTxt(q)]; return pillx(p[1] + (justTxt(q) === 'No aplica' && NOJUST.includes(q.estatus_check) ? ': enviar a otra tienda' : ''), p[0]); } }, { h: 'Supervisor', t: 1, v: q => (tienda(q.idpdv) || {}).supervisor }, { h: 'Gerente', t: 1, v: q => (tienda(q.idpdv) || {}).gerente }], lst, { fix: 2, search: 1, csv: 1, png: 1, file: 'promotores_con_error', titulo: 'Promotores con error · ' + fdate(r.desde), sort: -1, maxh: '60vh', lim: 500 });
-    } else {
-      const gm = new Map(); errF.forEach(x => { if (!gm.has(x.usuario)) gm.set(x.usuario, []); gm.get(x.usuario).push(x); });
-      const dias_ = new Map(); prim.forEach(x => dias_.set(x.usuario, (dias_.get(x.usuario) || 0) + 1));
-      const top = [...gm].map(([u, v]) => { const c = {}; v.forEach(x => c[x.estatus_check] = (c[x.estatus_check] || 0) + 1); return { u, n: v[0].nombre, e: v.length, d: dias_.get(u) || v.length, c, t: v[0].idpdv, j: v.filter(x => justTxt(x) === 'Con venta').length }; }).sort((a, b) => b.e - a.e || b.e / b.d - a.e / a.d).slice(0, 10);
-      h += top.length ? `<div class="toplist" id="top-err">${top.map((q, k) => `<div class="tp-row"><span class="tp-n ${k < 3 ? 'hot' : ''}">${k + 1}</span><div class="tp-m"><b>${esc(q.n)}</b><small>${esc(q.u)} · ${esc((tienda(q.t) || {}).nombre || '')} · ${esc((tienda(q.t) || {}).supervisor || '')}</small><div class="tp-s">${Object.entries(q.c).sort((a, b) => b[1] - a[1]).map(([k2, v]) => `<span class="pill ${NOJUST.includes(k2) ? 'r' : 'a'}">${ERRI[k2] || ''} ${v} ${esc((ERRN[k2] || k2).toLowerCase())}</span>`).join(' ')}${q.j ? ` <span class="pill g">💸 ${q.j} con venta</span>` : ''}</div></div><div class="tp-v"><b>${q.e}/${q.d}</b><small>errores / checks</small></div></div>`).join('')}</div><div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('top-err'),'Top 10 promotores con más errores',subFiltros(),'top_errores')">📸 Imagen</button><button class="btn sm" onclick="capturaCopiar($('top-err'),'Top 10 promotores con más errores',subFiltros())">📋 Copiar</button></div>` : `<div class="card empty"><img src="${img('triunfo')}" alt="">Sin errores en este periodo con ese filtro 🎉</div>`;
-    }
     // detalle
     const sel = rows.slice().sort((a, b) => b.fecha.localeCompare(a.fecha) || (a.hora_in || '').localeCompare(b.hora_in || '')).filter(q => (!CKS.est || q.estatus_check === CKS.est) && (!CKS.fin || q.estatus_final === CKS.fin) && (!CKS.jus || justTxt(q) === CKS.jus));
     h += sect('Detalle de cada check', '🧾') + `<div class="tools" data-nocap><select onchange="CKS.est=this.value;vChecks()"><option value="">Todos los resultados</option>${Object.keys(ERRN).map(k => `<option value="${k}" ${CKS.est === k ? 'selected' : ''}>${ERRI[k]} ${ERRN[k]}</option>`).join('')}</select><select onchange="CKS.fin=this.value;vChecks()"><option value="">Todos los estatus finales</option>${['Cumple', 'Cumple Productividad', 'Cumple Telefonica', 'No Cumple', 'Otro Check'].map(k => `<option ${CKS.fin === k ? 'selected' : ''}>${k}</option>`).join('')}</select><select onchange="CKS.jus=this.value;vChecks()"><option value="">Toda justificación</option>${['Con venta', 'Sin venta', 'No aplica'].map(k => `<option ${CKS.jus === k ? 'selected' : ''}>${k}</option>`).join('')}</select></div>`;
@@ -677,13 +674,15 @@ const HCF = { est: '', tipo: '', ant: '', emp: '' };
 async function vHC() {
   await conReporte('HC', 'mochila', async () => {
     if (!R.vivo) { try { S.vigentes = await API.vigentes(); } catch (e) { } R.vivo = true; }
-    const rows = R.hc.filter(h => okI(h.ultimo_idpdv)).map(h => { const v = estadoVivo(h), u = R.uc[h.usuario] || {}, t = tienda(h.ultimo_idpdv), ant = h.fecha_alta ? diffD(HOY, h.fecha_alta) : null; return { ...h, v, u, t: t || {}, ant, tipo: tipoIngreso(h, ant), antL: antLabel(ant), alerta: S.alertas.find(a => a.usuario === h.usuario) }; });
+    const rp = perRango(), tpor = new Map();   // tiendas donde checó cada promotor en el periodo filtrado
+    try { (await checksRango(rp.desde, rp.hasta)).filter(c => c.estatus_final !== 'Otro Check').forEach(c => { if (!tpor.has(c.usuario)) tpor.set(c.usuario, new Map()); const m = tpor.get(c.usuario); m.set(c.idpdv, (m.get(c.idpdv) || 0) + 1); }); } catch (e) { console.warn('tiendas por promotor:', e); }
+    const rows = R.hc.filter(h => okI(h.ultimo_idpdv)).map(h => { const v = estadoVivo(h), u = R.uc[h.usuario] || {}, t = tienda(h.ultimo_idpdv), ant = h.fecha_alta ? diffD(HOY, h.fecha_alta) : null; return { ...h, v, u, t: t || {}, ant, tipo: tipoIngreso(h, ant), antL: antLabel(ant), alerta: S.alertas.find(a => a.usuario === h.usuario), tdas: tpor.get(h.usuario) || new Map() }; });
     const vis = rows.filter(q => R.incBaja || q.v.e !== 'Baja'), cnt = {}; vis.forEach(q => cnt[q.v.e] = (cnt[q.v.e] || 0) + 1);
     const ausN = vis.filter(q => !['Activo', 'Descanso / falta / error', 'Posible baja', 'Baja', 'Sin check'].includes(q.v.e)), nuevos = vis.filter(q => q.tipo === 'Nuevo ingreso').length, adap = vis.filter(q => q.tipo === 'Adaptación').length;
     const ests = [...new Set(vis.map(q => q.v.e))].sort(), emps = [...new Set(vis.map(q => q.empresa).filter(Boolean))].sort();
     const tabla = vis.filter(q => (!HCF.est || q.v.e === HCF.est) && (!HCF.tipo || q.tipo === HCF.tipo) && (!HCF.ant || q.antL === HCF.ant) && (!HCF.emp || q.empresa === HCF.emp));
     let h = cab('HC · plantilla de promotoría', 'Promotores y cubre-descansos con su último check y estatus. El estatus se actualiza en vivo con las ausencias y bajas que RH captura en Posibles bajas.', 'mochila') + barraFiltros('vHC');
-    h += `<div class="tools"><button class="chip ${R.incBaja ? 'on' : ''}" onclick="R.incBaja=!R.incBaja;vHC()">Incluir bajas</button><span class="muted">${fmt(vis.length)} promotores · publicado ${esc(R.meta.generado)}</span></div>`;
+    h += `<div class="tools"><button class="chip ${R.incBaja ? 'on' : ''}" onclick="R.incBaja=!R.incBaja;vHC()">Incluir bajas</button><span class="muted">${fmt(vis.length)} promotores · publicado ${esc(R.meta.generado)} · las columnas de tiendas usan el periodo de arriba</span></div>`;
     h += `<div class="kpis">${kp('Plantilla', fmt(vis.filter(q => q.v.e !== 'Baja').length), 'sin bajas', null, null, '👥')}${kp('Activos hoy', fmt(cnt['Activo'] || 0), pc1(cnt['Activo'] || 0, vis.length), C.gr, null, '🟢')}${kp('Descanso / falta', fmt(cnt['Descanso / falta / error'] || 0), 'último check ayer', C.am, null, '🟠')}${kp('Posible baja', fmt(cnt['Posible baja'] || 0), '2 o más días sin check', C.rd, "ir('bandeja')", '🔴')}${kp('Con ausencia', fmt(ausN.length), 'vacaciones, incapacidad…', C.bl, "ir('vigentes')", '🏖️')}${kp('Nuevo ingreso', fmt(nuevos), 'menos de 2 semanas · arranque rápido', C.rd, null, '🆕')}${kp('Adaptación', fmt(adap), '2 a 4 semanas', C.am, null, '🌱')}</div>`;
     h += `<div class="grid g2"><div class="card"><h3>🚦 Estatus de la plantilla</h3>${donut(Object.entries(cnt).map(([k, v]) => ({ n: (ACTI[k] || '') + ' ' + k, v, c: k === 'Activo' ? C.gr : k === 'Posible baja' ? C.rd : k === 'Descanso / falta / error' ? C.am : k === 'Baja' ? C.gy : C.bl })), { sub: 'promotores' })}</div>
       <div class="card"><h3>⏳ Antigüedad</h3><p class="note">Menos de 2 semanas = nuevo ingreso: requiere arranque rápido (visita del supervisor, básicos y capacitación práctica).</p>${hbars(ANTB.map(b => ({ n: b[0], v: vis.filter(q => q.ant != null && q.ant >= b[1] && q.ant <= b[2]).length, c: b[3] })), C.pu)}</div></div>`;
@@ -694,12 +693,77 @@ async function vHC() {
       { h: 'Tipo de ingreso', t: 1, v: q => q.tipo, r: q => pillx((TIPC[q.tipo][1] + ' ' + q.tipo).trim(), TIPC[q.tipo][0]) }, { h: 'Antigüedad', t: 1, v: q => q.ant, r: q => q.ant == null ? '—' : `<b>${esc(q.antL)}</b><br><small class="muted">${Math.floor(q.ant / 7)} sem · ${q.ant} d</small>` },
       { h: 'Fecha de ingreso', v: q => q.fecha_alta, r: q => fdate(q.fecha_alta) }, { h: 'Baja anterior', v: q => q.tipo_ingreso === 'Reingreso' ? q.baja_final : null, r: q => q.tipo_ingreso === 'Reingreso' ? fdate(q.baja_final) : '—' },
       { h: 'Último check', v: q => q.ultimo_check, r: q => fdate(q.ultimo_check) + (q.u.hora_in ? `<br><small class="muted">${hh(q.u.hora_in)} – ${hh(q.u.hora_out)}</small>` : '') }, { h: 'Tipo de check', t: 1, v: q => q.rol, r: q => esc(q.rol || '—') + (q.u.estatus_check ? `<br><small class="muted">${esc((ERRI[q.u.estatus_check] || '') + ' ' + (ERRN[q.u.estatus_check] || q.u.estatus_check))}</small>` : '') },
+      { h: 'Tiendas en el periodo', v: q => q.tdas.size, r: q => q.tdas.size > 1 ? `<span class="cell-amber"><b>${q.tdas.size}</b> 🔀</span>` : String(q.tdas.size || 0) }, { h: 'Dónde checó (periodo)', t: 1, w: 320, v: q => [...q.tdas.keys()].map(i => (tienda(i) || {}).nombre || i).join(' · '), r: q => [...q.tdas].sort((a, b) => b[1] - a[1]).map(([i, n]) => `${esc((tienda(i) || {}).nombre || 'IDPDV ' + i)} <small class="muted">(${n})</small>`).join('<br>') || '—' },
       { h: 'Tienda (último check)', t: 1, v: q => q.t.nombre || '', r: q => esc(q.t.nombre || '—') }, { h: 'Cadena', t: 1, v: q => q.t.cadena }, { h: 'Estado', t: 1, v: q => q.t.estado }, { h: 'Región', t: 1, v: q => q.t.region }, { h: 'Gerente', t: 1, v: q => q.t.gerente }, { h: 'Supervisor', t: 1, v: q => q.t.supervisor }, { h: 'RR.HH.', t: 1, v: q => q.t.rrhh }, { h: 'Razón social', t: 1, v: q => q.empresa }],
       tabla, { fix: 3, search: 1, csv: 1, png: 1, file: 'hc_promotores', titulo: 'HC · promotores', sort: 2, dir: 1, maxh: '72vh', lim: 600 });
     $('content').innerHTML = h; drawAll();
   });
 }
 function resolverDesdeHC(id) { S.view = 'bandeja'; nav(); render(); setTimeout(() => abrir('aus', id), 80); }
+
+/* >>> 03b_errores_check.js */
+/* ====================================================================== DETALLE DE CHECKS · ERRORES DE CHECK ======================================================================
+   Subsección de Detalle de checks. Por día: tarjetas por promotor con el tipo de error, su tienda y supervisor y la forma sugerida de corregirlo, para mandar como imagen por WhatsApp
+   mientras todavía se puede corregir. Por periodo: acumulado de errores por promotor, tipo de error y supervisor. La venta justifica los errores de tiempo/horario/comida,
+   no los de rango, equipo duplicado ni salida sin check (misma regla de la sección de checks). */
+const ERRFIX = {
+  'Check In Fuera Ventana': 'Hacer el check de entrada dentro de la ventana de horario de la tienda. Si ya pasó, avisar al supervisor para dejar nota.',
+  'Check Out Fuera Ventana': 'Hacer el check de salida dentro de la ventana de horario de la tienda. Si ya pasó, avisar al supervisor para dejar nota.',
+  'Error Comida': 'Registrar la salida y el regreso de comida dentro del horario permitido. Pedir al supervisor revisar el registro del día.',
+  'Tiempo Incompleto': 'Completar el tiempo mínimo en tienda (420 min; 300 los domingos con horario diferenciado). Si hubo venta, queda justificado.',
+  'Check In Fuera Rango': 'Hacer el check de entrada estando en la tienda (dentro del rango de ubicación). Si estuvo en otra tienda, reasignar o enviarlo a la correcta.',
+  'Check Out Fuera Rango': 'Hacer el check de salida estando en la tienda (dentro del rango). Si salió de otra tienda, reasignar o enviarlo a la correcta.',
+  'No Check Salida': 'Cerrar siempre la jornada con su check de salida. Pedir al promotor que lo registre y avisar al supervisor.',
+  'Equipo Duplicado': 'Cada promotor debe checar con su propio equipo. Revisar con el supervisor quién usó el mismo celular.'
+};
+const ERR_TIPOS = Object.keys(ERRFIX);
+const ERR_JUST = [['', 'Todos los errores'], ['sin', '🔴 Sin justificación'], ['con', '🟢 Con justificación (venta)']];
+const errFiltra = (xs, just) => xs.filter(x => !just || (just === 'con' ? justTxt(x) === 'Con venta' : justTxt(x) !== 'Con venta'));
+const errNom = k => ERRN[k] || k;
+
+function erroresCheckHTML(r, rows, prim, errores) {
+  const just = CKS.just, errF = errFiltra(errores, just), dias = [...new Set(prim.map(x => x.fecha))].sort();
+  const dia = CKS.dia && dias.includes(CKS.dia) ? CKS.dia : (dias[dias.length - 1] || r.hasta);
+  const delDia = errF.filter(x => x.fecha === dia), evalDia = prim.filter(x => x.fecha === dia);
+  const sup = x => (tienda(x.idpdv) || {}).supervisor || 'Sin supervisor';
+  let h = `<div class="tools" data-nocap>${ERR_JUST.map(([k, n]) => `<button class="chip ${just === k ? 'on' : ''}" onclick="CKS.just='${k}';vChecks()">${n}</button>`).join('')}<span class="muted">Fuera de rango, equipo duplicado y sin check de salida no se justifican con venta.</span></div>`;
+  h += `<div class="kpis">${kp('Errores del día', fmt(delDia.length), `${fdate(dia)} · ${fmt(evalDia.length)} checks evaluados`, delDia.length ? C.rd : C.gr, null, '🛠️')}${kp('Promotores con error (día)', fmt(new Set(delDia.map(x => x.usuario)).size), 'a corregir hoy si es el día actual', null, null, '🧍')}${kp('Errores del periodo', fmt(errF.length), `${fdate(r.desde)} – ${fdate(r.hasta)}`, null, null, '📅')}${kp('Promotores con error (periodo)', fmt(new Set(errF.map(x => x.usuario)).size), `de ${fmt(new Set(prim.map(x => x.usuario)).size)} que checaron`, null, null, '👥')}</div>`;
+
+  /* ---- del día: tarjetas para WhatsApp ---- */
+  const hoy = dia === HOY;
+  h += sect('Errores del día · ' + fdate(dia), '📲') + `<div class="tools" data-nocap><span>Día:</span><select onchange="CKS.dia=this.value;vChecks()">${dias.slice().reverse().map(d => `<option value="${d}" ${d === dia ? 'selected' : ''}>${fdate(d)}${d === HOY ? ' (hoy)' : ''}</option>`).join('')}</select>
+    <button class="btn sm" onclick="capturaDescargar($('err-dia'),'Errores de check · ${fdate(dia)}',subFiltros(),'errores_check_${dia}')">📸 Imagen para WhatsApp</button><button class="btn sm" onclick="capturaCopiar($('err-dia'),'Errores de check · ${fdate(dia)}',subFiltros())">📋 Copiar imagen</button><button class="btn sm" onclick="erroresCsv('dia')">⬇ CSV del día</button>
+    <span class="muted">${hoy ? 'Es el día de hoy: todavía se pueden corregir.' : 'No es el día de hoy: sirve de seguimiento.'}</span></div>`;
+  const porSup = new Map(); delDia.forEach(x => { const k = sup(x); if (!porSup.has(k)) porSup.set(k, []); porSup.get(k).push(x); });
+  h += `<div id="err-dia" class="err-dia">${delDia.length ? [...porSup].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([s, xs]) => `<div class="err-sup"><h4>🧭 ${esc(s)} <small>${xs.length} error${xs.length === 1 ? '' : 'es'}</small></h4>${xs.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(x => {
+    const t = tienda(x.idpdv) || {}, jt = justTxt(x), p = JUSTP[jt];
+    return `<div class="err-card"><div class="err-h"><b>${esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(t.nombre || 'IDPDV ' + x.idpdv)}</small></div><div>${pillx((ERRI[x.estatus_check] || '') + ' ' + errNom(x.estatus_check), NOJUST.includes(x.estatus_check) ? 'r' : 'a')} ${pillx(p[1], p[0])}${x.registros ? ` <small class="muted">${x.registros} venta${x.registros === 1 ? '' : 's'}</small>` : ''}</div><div class="err-fix">💡 ${esc(ERRFIX[x.estatus_check] || 'Revisar el check con el supervisor.')}</div></div>`;
+  }).join('')}</div>`).join('') : '<div class="card empty"><img src="' + img('triunfo') + '" alt="">Sin errores de check ese día con este filtro.</div>'}</div>`;
+
+  /* ---- del periodo: acumulado ---- */
+  h += sect('Acumulado del periodo', '📊') + `<p class="note">${fdate(r.desde)} – ${fdate(r.hasta)}. Cambia el periodo arriba para ver otra semana o mes.</p>`;
+  const tipos = {}; errF.forEach(x => tipos[x.estatus_check] = (tipos[x.estatus_check] || 0) + 1);
+  h += `<div class="grid g2"><div class="card"><h3>🧩 Tipos de error</h3>${hbars(Object.entries(tipos).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ n: (ERRI[k] || '') + ' ' + errNom(k), v, c: NOJUST.includes(k) ? C.rd : C.am, s: pc1(v, errF.length) })), C.am)}</div>`;
+  const gs = new Map(); errF.forEach(x => { const k = sup(x); if (!gs.has(k)) gs.set(k, { s: k, e: 0, u: new Set() }); const g = gs.get(k); g.e++; g.u.add(x.usuario); });
+  h += `<div class="card"><h3>🧭 Supervisores con más errores</h3>${hbars([...gs.values()].sort((a, b) => b.e - a.e).slice(0, 10).map(g => ({ n: g.s, v: g.e, c: C.am, s: g.u.size + ' promotores' })), C.am)}</div></div>`;
+  const checksPor = new Map(); prim.forEach(x => checksPor.set(x.usuario, (checksPor.get(x.usuario) || 0) + 1));
+  const gp = new Map(); errF.forEach(x => { if (!gp.has(x.usuario)) gp.set(x.usuario, { u: x.usuario, n: x.nombre, id: x.idpdv, tipos: {}, e: 0, j: 0 }); const g = gp.get(x.usuario); g.e++; g.tipos[x.estatus_check] = (g.tipos[x.estatus_check] || 0) + 1; if (justTxt(x) === 'Con venta') g.j++; g.id = x.idpdv; });
+  const lista = [...gp.values()].map(g => ({ ...g, d: checksPor.get(g.u) || g.e, top: Object.entries(g.tipos).sort((a, b) => b[1] - a[1])[0][0] }));
+  TB = {};
+  const cols = [{ h: 'Usuario', t: 1, v: q => q.u, w: 112 }, { h: 'Promotor', t: 1, v: q => q.n, w: 230, r: q => `<b>${esc(q.n)}</b>` }, { h: 'Tienda (último error)', t: 1, v: q => (tienda(q.id) || {}).nombre || '' }, { h: 'Supervisor', t: 1, v: q => (tienda(q.id) || {}).supervisor },
+    { h: 'Checks', v: q => q.d }, { h: 'Errores', v: q => q.e, r: q => `<b>${q.e}</b>` }, { h: '% con error', v: q => q.e / q.d * 100, r: q => f1(q.e / q.d * 100) + '%' }, { h: 'Con venta', v: q => q.j }, { h: 'Sin venta', v: q => q.e - q.j },
+    { h: 'Error más frecuente', t: 1, v: q => errNom(q.top), r: q => pillx((ERRI[q.top] || '') + ' ' + errNom(q.top), NOJUST.includes(q.top) ? 'r' : 'a') },
+    ...ERR_TIPOS.map(k => ({ h: (ERRI[k] || '') + ' ' + errNom(k), v: q => q.tipos[k] || 0, r: q => q.tipos[k] ? `<b>${q.tipos[k]}</b>` : '' })), { h: 'Cómo corregirlo (error más frecuente)', t: 1, v: q => ERRFIX[q.top] || '', w: 360 }];
+  h += sect('Errores por promotor', '🧍') + tbl('t-err-per', cols, lista, { fix: 2, search: 1, csv: 1, png: 1, file: 'errores_check_periodo', titulo: 'Errores de check por promotor · ' + fdate(r.desde) + ' al ' + fdate(r.hasta), sort: 5, dir: -1, maxh: '60vh', lim: 500 });
+  ERR_CTX = { dia, delDia, errF };
+  return h;
+}
+let ERR_CTX = null;
+function erroresCsv(que) {
+  if (!ERR_CTX) return; const xs = que === 'dia' ? ERR_CTX.delDia : ERR_CTX.errF;
+  finBajar('errores_check_' + (que === 'dia' ? ERR_CTX.dia : 'periodo') + '.csv', [['fecha', 'usuario', 'promotor', 'idpdv', 'tienda', 'supervisor', 'gerente', 'error', 'ventas', 'justifica', 'como_corregirlo'],
+    ...xs.map(x => { const t = tienda(x.idpdv) || {}; return [x.fecha, x.usuario, x.nombre, x.idpdv, t.nombre, t.supervisor, t.gerente, errNom(x.estatus_check), x.registros, justTxt(x), ERRFIX[x.estatus_check] || '']; })]);
+}
 
 /* >>> 04_gestion.js */
 /* ====================================================================== estado y UI ====================================================================== */
@@ -712,7 +776,7 @@ const VISTAS = [
   { k: 'resumen', ic: '📊', n: 'Resumen', mod: 'reportes', f: vResumen, per: true },
   { k: 'penal', ic: '⚠️', n: 'Penalización', mod: 'reportes', f: vPenal },
   { k: 'checks', ic: '✅', n: 'Detalle de checks', mod: 'reportes', f: vChecks, per: 'dia' },
-  { k: 'hc', ic: '👥', n: 'HC', mod: 'reportes', f: vHC },
+  { k: 'hc', ic: '👥', n: 'HC', mod: 'reportes', f: vHC, per: true },
   { k: 'movs', ic: '🔄', n: 'Ingresos y bajas', mod: 'reportes', f: vMovs, per: 'dia' },
   { k: 'sep', n: 'Gestión', sep: true },
   { k: 'ingresos', ic: '🧑‍💼', n: 'Posibles ingresos', mod: 'posibles_ingresos', f: vIngresos },
@@ -754,11 +818,17 @@ function vBandeja() {
     <div class="kpi"><div class="l">Por conciliar</div><div class="v" style="color:var(--purple)">${fmt(todas.filter(a => a.origen === 'conciliacion').length)}</div><div class="s">baja sin registro: confirmar con históricos</div></div>
     <div class="kpi"><div class="l">Con ausencia vigente</div><div class="v" style="color:var(--blue)">${fmt(S.vigentes.length)}</div><div class="s">${fmt(reg)} regresan en ≤ 3 días</div></div></div>`;
   h += barraFiltros('vBandeja', S.alertas.map(a => tienda(a.idpdv)).filter(Boolean), ['zona_rrhh', 'rrhh', 'supervisor', 'region', 'cadena']);
-  h += `<div class="tools"><input type="search" id="q" placeholder="🔎 Buscar nombre, usuario, tienda o supervisor…" value="${esc(S.f.q)}"><span class="muted">${fmt(f.length)} caso${f.length === 1 ? '' : 's'}</span></div>`;
+  h += `<div class="tools"><input type="search" id="q" placeholder="🔎 Buscar nombre, usuario, tienda o supervisor…" value="${esc(S.f.q)}"><span class="muted">${fmt(f.length)} caso${f.length === 1 ? '' : 's'}</span><span data-nocap><button class="btn sm" onclick="bandejaPng()">📸 Imagen</button> <button class="btn sm" onclick="bandejaCsv()">⬇ CSV</button></span></div>`;
   if (!f.length) h += `<div class="card empty"><img src="${img('triunfo')}" alt="">Sin casos pendientes con estos filtros. ¡Todo al día!</div>`;
-  else h += `<div class="list"><div class="al head"><span>Promotor</span><span>Tienda</span><span>Sin check</span><span>Último check</span><span>Últimos 90 días</span><span></span></div>${f.slice(0, 300).map(filaAlerta).join('')}</div>${f.length > 300 ? '<p class="muted">Mostrando 300; usa los filtros para acotar.</p>' : ''}`;
+  else h += `<div class="list" id="baj-lista"><div class="al head"><span>Promotor</span><span>Tienda</span><span>Sin check</span><span>Último check</span><span>Últimos 90 días</span><span></span></div>${f.slice(0, 300).map(filaAlerta).join('')}</div>${f.length > 300 ? '<p class="muted">Mostrando 300; usa los filtros para acotar.</p>' : ''}`;
   $('content').innerHTML = h;
   $('q').oninput = e => { S.f.q = e.target.value; clearTimeout(vBandeja.t); vBandeja.t = setTimeout(() => { const p = e.target.selectionStart; vBandeja(); const q = $('q'); q.focus(); q.setSelectionRange(p, p); }, 250); };
+}
+function bandejaPng() { const n = filtradas().length; if (n > 40 && !confirm('La imagen tendrá ' + n + ' casos y saldrá muy larga. ¿Continuar? (el CSV trae todos)')) return; capturaDescargar($('baj-lista'), 'Posibles bajas · ' + fdate(HOY), subFiltros() + ' · mínimo ' + S.f.min + ' días sin check', 'posibles_bajas'); }
+function bandejaCsv() {
+  const f = filtradas(); if (!f.length) { toast('No hay casos que exportar'); return; }
+  finBajar('posibles_bajas_' + HOY + '.csv', [['usuario', 'nombre', 'idpdv', 'tienda', 'cadena', 'estado', 'region', 'gerente', 'supervisor', 'rrhh', 'dias_sin_check', 'ultimo_check', 'origen', 'ausencias_90d', 'dias_ausencia_90d', 'razon_social'],
+    ...f.map(a => { const t = tienda(a.idpdv) || {}; return [a.usuario, a.nombre, a.idpdv, t.nombre, t.cadena, t.estado, t.region, t.gerente, t.supervisor, t.rrhh, a.dias == null ? 'sin check' : a.dias, a.ultimo, a.origen === 'conciliacion' ? 'Por conciliar' : 'Alerta', a.aus.length, a.aus.reduce((x, y) => x + y.dias, 0), a.empresa]; })]);
 }
 function filaAlerta(a) {
   const t = tienda(a.idpdv), ant = a.ingreso ? diffD(HOY, a.ingreso) : null;
@@ -771,7 +841,7 @@ function filaAlerta(a) {
     <div class="a-days">${a.dias == null ? '<span class="days d5" title="Sin check en las últimas 10 semanas">sin check</span>' : `<span class="days ${colorDias(a.dias)}">${a.dias} d</span>`}</div>
     <div class="muted a-last">${fdate(a.ultimo)}</div>
     <div class="hist a-hist">${hist}</div>
-    <div class="acts a-acts">
+    <div class="acts a-acts" data-nocap>
       ${can('ausencias', 'crear') ? `<button class="btn sm primary" onclick="abrir('aus',${a.id})">Registrar ausencia</button>` : ''}
       ${can('bajas', 'crear') ? `<button class="btn sm danger" onclick="abrir('baja',${a.id})">Confirmar baja</button>` : ''}
       ${can('alertas', 'editar') ? `<button class="btn sm" onclick="abrir('err',${a.id})" title="Marcar como error de asistencia">Error</button>` : ''}
