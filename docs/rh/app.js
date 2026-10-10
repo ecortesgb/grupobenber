@@ -34,7 +34,7 @@ const Real = {
     const { data: p, error } = await sb.from('perfiles').select('*').eq('id', id).maybeSingle();
     if (error || !p) throw new Error('Tu usuario existe pero no tiene perfil asignado. Pide a un administrador que lo active.');
     const { data: pm } = await sb.from('permisos').select('*').eq('rol', p.rol);
-    return { id, nombre: p.nombre, rol: p.rol, rrhh: p.rrhh_nombre, zona: p.zona_rrhh, reclutador_id: p.reclutador_id, permisos: Object.fromEntries((pm || []).map(x => [x.modulo, x])) };
+    return { id, debeCambiar: !!p.debe_cambiar_clave, nombre: p.nombre, rol: p.rol, rrhh: p.rrhh_nombre, zona: p.zona_rrhh, reclutador_id: p.reclutador_id, permisos: Object.fromEntries((pm || []).map(x => [x.modulo, x])) };
   },
   async catalogos() {
     const [t, ma, mb] = await Promise.all([todo(() => sb.from('tiendas').select('idpdv,nombre,cadena,estado,region,gerente,supervisor,rrhh,posiciones,zona_rrhh,clase,tipo_ekt,subdireccion_gb,sub_terr,lider')),
@@ -852,6 +852,7 @@ const VISTAS = [
   { k: 'finiquitos', ic: '🧾', n: 'Finiquitos', mod: 'finiquitos', f: vFiniquitos },
   { k: 'nomina', ic: '💵', n: 'Nómina', mod: 'nomina', f: vNomina, sinFiltros: true },
   { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos, sinFiltros: true, oculto: true },
+  { k: 'usuarios', ic: '👤', n: 'Usuarios y acceso', mod: 'usuarios', f: vUsuarios, sinFiltros: true },
   { k: 'auditoria', ic: '🧾', n: 'Auditoría', mod: 'auditoria', f: vAuditoria, sinFiltros: true }
 ];
 
@@ -2760,6 +2761,61 @@ async function bancFaltanHTML() {
       { h: 'Tienda', t: 1, v: x => (tienda(x.idpdv) || {}).nombre || '' }, { h: 'Supervisor', t: 1, v: x => (tienda(x.idpdv) || {}).supervisor }, { h: '', v: () => '', r: x => `<button class="rsv" onclick="bancElegir({usuario_fieldwy:'${x.usuario}',nombre:'${String(x.nombre).replace(/['"\\]/g, '')}',idpdv:${x.idpdv || 'null'},estatus:'Activo'})">Capturar ›</button>` }], f, { fix: 2, search: 1, csv: 1, file: 'faltan_bancarios', titulo: 'Faltan datos bancarios', sort: 0, dir: 1, maxh: '40vh' }) : '<p class="muted">Nadie de las altas nuevas está sin datos bancarios.</p>');
 }
 
+/* >>> 07l_usuarios.js */
+/* ====================================================================== USUARIOS Y ACCESO ======================================================================
+   Acceso con USUARIO corto (no el correo) y contraseña. Las cuentas nuevas traen una clave temporal y la app obliga a cambiarla al primer ingreso (hasta entonces la base no deja leer datos).
+   Administración y analista pueden reiniciar una contraseña (sale una temporal nueva que también obliga a cambiarse), quitar o devolver el acceso. Las cuentas nuevas se crean con crear_usuario.py. */
+function ponerOjo(inputId) {   // envuelve un input de contraseña existente con su botón de ojo
+  const i = $(inputId); if (!i || i.dataset.ojo) return; i.dataset.ojo = '1'; const w = document.createElement('span'); w.className = 'pw-wrap'; i.parentNode.insertBefore(w, i); w.appendChild(i);
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'pw-eye'; b.tabIndex = -1; b.title = 'Mostrar u ocultar'; b.setAttribute('aria-label', 'Mostrar u ocultar la contraseña'); b.textContent = '👁';
+  b.onclick = () => { i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? '👁' : '🙈'; }; w.appendChild(b);
+}
+const claveValida = (c, temp) => c.length >= 10 && /[a-z]/.test(c) && /[A-Z]/.test(c) && /\d/.test(c) && c !== temp;
+const claveTemporal = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', r = crypto.getRandomValues(new Uint8Array(9)); return 'GB-' + [...r].map(x => A[x % A.length]).join(''); };
+
+/* primer ingreso (o clave reiniciada): elegir contraseña propia antes de entrar */
+function cambiarClaveObligatoria(temp) {
+  return new Promise(res => {
+    $('modal').innerHTML = `<div class="mbox" style="width:min(460px,96vw)" role="dialog" aria-modal="true"><h3>🔐 Elige tu contraseña</h3><div class="note">Tu contraseña actual es temporal. Escribe una propia para seguir: mínimo 10 caracteres con mayúsculas, minúsculas y números.</div>
+      <div class="fld"><label>Nueva contraseña</label><input id="cc-1" type="password" autocomplete="new-password"></div><div class="fld"><label>Repite la nueva contraseña</label><input id="cc-2" type="password" autocomplete="new-password"></div>
+      <div class="warn" id="cc-w" hidden></div><div class="mfoot"><button class="btn primary" id="cc-ok">Guardar y entrar</button></div></div>`; $('modal').hidden = false; $('modal').onclick = null; ponerOjo('cc-1'); ponerOjo('cc-2'); $('cc-1').focus();
+    $('cc-ok').onclick = async () => {
+      const a = $('cc-1').value, b = $('cc-2').value, w = $('cc-w'); w.hidden = false;
+      if (!claveValida(a, temp)) { w.textContent = 'Mínimo 10 caracteres, con mayúsculas, minúsculas y números (y distinta de la temporal).'; return; } if (a !== b) { w.textContent = 'Las dos contraseñas no coinciden.'; return; }
+      $('cc-ok').disabled = true;
+      try { const { error } = await sb.auth.updateUser({ password: a }); if (error) throw error; const r = await sb.rpc('clave_cambiada'); if (r.error) throw r.error; cerrarM(); toast('Contraseña actualizada'); res(); }
+      catch (e) { $('cc-ok').disabled = false; w.textContent = 'No se pudo cambiar: ' + (e.message || e); }
+    };
+  });
+}
+
+Real.usuariosLista = async function () { const { data, error } = await sb.rpc('usuarios_lista'); if (error) throw new Error(error.message); return data || []; };
+Real.usuarioReiniciar = async function (id, clave) { return Real.finRpc('usuario_reiniciar_clave', { p_id: id, p_clave: clave }); };
+Real.usuarioActivar = async function (id, act) { return Real.finRpc('usuario_activar', { p_id: id, p_activo: act }); };
+Demo.usuariosLista = async () => [{ id: 'd1', nombre: 'Usuario de ejemplo', rol: 'rh', activo: true, usuario: 'ejemplo', email: 'ejemplo@usuarios.rhgb.app', ultimo_acceso: null, debe_cambiar_clave: false }]; Demo.usuarioReiniciar = async () => { }; Demo.usuarioActivar = async () => { };
+const NIVEL_USR = { admin: 'Administrador', analista: 'Analista', nomina: 'Nómina', rh: 'RR.HH.', gerente: 'Gerente', direccion: 'Dirección', reclutador: 'Reclutador', altas: 'Altas' };
+async function vUsuarios() {
+  $('content').innerHTML = cab('Usuarios y acceso', 'Quién puede entrar. El acceso es con usuario y contraseña; las claves temporales se cambian al primer ingreso. Desactiva el acceso cuando alguien se va.', 'mochila') + '<div class="loading">Cargando…</div>';
+  let us; try { us = await API.usuariosLista(); } catch (e) { $('content').innerHTML += `<div class="warn">${esc(e.message || e)}</div>`; return; }
+  const edita = can('usuarios', 'editar'); TB = {};
+  let h = cab('Usuarios y acceso', 'Quién puede entrar. El acceso es con usuario y contraseña; las claves temporales se cambian al primer ingreso. Desactiva el acceso cuando alguien se va.', 'mochila');
+  h += `<div class="kpis">${kp('Con acceso', fmt(us.filter(u => u.activo).length), 'activos', C.gr, null, '🔓')}${kp('Sin acceso', fmt(us.filter(u => !u.activo).length), 'desactivados', C.gy, null, '🔒')}${kp('Falta cambiar clave', fmt(us.filter(u => u.activo && u.debe_cambiar_clave).length), 'todavía con clave temporal', C.am, null, '🔐')}</div>`;
+  h += tbl('t-usr', [{ h: 'Usuario', t: 1, v: u => u.usuario, w: 160, r: u => `<b>${esc(u.usuario)}</b>` }, { h: 'Nombre', t: 1, v: u => u.nombre, w: 260 }, { h: 'Rol', t: 1, v: u => NIVEL_USR[u.rol] || u.rol }, { h: 'Alcance', t: 1, v: u => u.rrhh_nombre || u.zona_rrhh || 'General' },
+    { h: 'Último acceso', v: u => u.ultimo_acceso || '', r: u => u.ultimo_acceso ? fdate(String(u.ultimo_acceso).slice(0, 10)) : '<span class="muted">nunca</span>' }, { h: 'Estatus', t: 1, v: u => u.activo ? (u.debe_cambiar_clave ? 1 : 2) : 0, r: u => !u.activo ? pillx('🔒 Sin acceso', 'x') : u.debe_cambiar_clave ? pillx('🔐 Clave temporal', 'a') : pillx('🟢 Activo', 'g') },
+    ...(edita ? [{ h: '', v: () => '', r: u => `<button class="rsv" onclick="usrReiniciar('${u.id}','${esc(u.nombre).replace(/'/g, '')}')">🔑 Reiniciar clave</button> <button class="rsv" onclick="usrActivar('${u.id}',${!u.activo},'${esc(u.nombre).replace(/'/g, '')}')">${u.activo ? '🔒 Quitar acceso' : '🔓 Devolver acceso'}</button>` }] : [])],
+    us, { fix: 2, search: 1, csv: 1, file: 'usuarios', titulo: 'Usuarios', sort: 2, dir: 1, maxh: '70vh' });
+  $('content').innerHTML = h; drawAll();
+}
+async function usrReiniciar(id, nombre) {
+  if (!confirm('¿Reiniciar la contraseña de ' + nombre + '? Se cerrará su sesión y tendrá que elegir una nueva al entrar.')) return;
+  const t = claveTemporal(); try { await API.usuarioReiniciar(id, t); } catch (e) { toast(e.message || e); return; }
+  $('modal').innerHTML = `<div class="mbox" style="width:min(460px,96vw)" role="dialog" aria-modal="true"><h3>🔑 Clave temporal</h3><div class="who">${esc(nombre)}</div><div class="note">Entrégala por un medio seguro. Se muestra solo ahora; al entrar, la persona elige la suya.</div><div class="fld"><input id="rt-c" readonly value="${t}" style="font:700 18px monospace"></div><div class="mfoot"><button class="btn" onclick="navigator.clipboard.writeText('${t}').then(()=>toast('Copiada'))">📋 Copiar</button><button class="btn primary" onclick="cerrarM();vUsuarios()">Listo</button></div></div>`; $('modal').hidden = false;
+}
+async function usrActivar(id, act, nombre) {
+  if (!confirm((act ? '¿Devolver el acceso a ' : '¿Quitar el acceso a ') + nombre + '?')) return;
+  try { await API.usuarioActivar(id, act); toast(act ? 'Acceso devuelto' : 'Acceso quitado'); vUsuarios(); } catch (e) { toast(e.message || e); }
+}
+
 /* >>> 08_demo_reportes.js */
 /* ----- datos de ejemplo para reportes, ingresos y movimientos (todo ficticio) ----- */
 (function () {
@@ -2844,7 +2900,9 @@ async function bancFaltanHTML() {
 /* ====================================================================== arranque ====================================================================== */
 async function entrar() {
   try {
-    S.me = await API.me(); S.cat = await API.catalogos();
+    S.me = await API.me();
+    if (S.me.debeCambiar) { await cambiarClaveObligatoria(($('lg-p') || {}).value || ''); S.me = await API.me(); }   // clave temporal: se elige una propia antes de ver datos
+    S.cat = await API.catalogos();
     $('login').hidden = true; $('app').hidden = false;
     $('u-nombre').textContent = S.me.nombre; $('u-rol').textContent = NIVEL[S.me.rol] || S.me.rol;
     const alc = S.me.permisos.alertas; $('u-alc').textContent = S.me.rol === 'rh' && S.me.rrhh ? 'Estados de ' + S.me.rrhh : alc && alc.alcance === 'todo' ? 'Acceso general' : alc ? 'Alcance: ' + alc.alcance : '';
@@ -2860,7 +2918,7 @@ function mostrarLogin(msg) { $('app').hidden = true; $('login').hidden = false; 
   ['sb-logo', 'tb-logo'].forEach(i => $(i).src = img('logo_gb')); $('lg-mascot').src = img('mochila');
   $('u-salir').onclick = () => API.logout().then(() => mostrarLogin());
   $('tb-menu').onclick = () => $('sidebar').classList.toggle('open');
-  $('lg-form').onsubmit = async e => { e.preventDefault(); $('lg-msg').textContent = ''; const b = $('lg-btn'); b.disabled = true; b.textContent = 'Entrando…'; try { await API.login($('lg-u').value, $('lg-p').value); await entrar(); } catch (x) { $('lg-msg').textContent = x.message; } b.disabled = false; b.textContent = 'Entrar'; };
+  ponerOjo('lg-p'); $('lg-form').onsubmit = async e => { e.preventDefault(); $('lg-msg').textContent = ''; const b = $('lg-btn'); b.disabled = true; b.textContent = 'Entrando…'; try { await API.login($('lg-u').value, $('lg-p').value); await entrar(); } catch (x) { $('lg-msg').textContent = x.message; } b.disabled = false; b.textContent = 'Entrar'; };
   if (DEMO) { await entrar(); return; }
   try { if (await API.init()) await entrar(); else mostrarLogin(); } catch (e) { mostrarLogin('No se pudo conectar: ' + e.message); }
 })();
