@@ -630,7 +630,9 @@ const VISTAS = [
   { k: 'ingresos', ic: '🧑‍💼', n: 'Posibles ingresos', mod: 'posibles_ingresos', f: vIngresos },
   { k: 'altas', ic: '🆕', n: 'Altas', mod: 'colaboradores', f: vAltas },
   { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
-  { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', f: vExpedientes }
+  { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', f: vExpedientes },
+  { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos },
+  { k: 'auditoria', ic: '🧾', n: 'Auditoría', mod: 'auditoria', f: vAuditoria }
 ];
 
 function nav() {
@@ -1262,6 +1264,7 @@ const V = {
   clabe: s => { if (!/^\d{18}$/.test(s)) return false; const w = [3, 7, 1]; const sum = s.slice(0, 17).split('').reduce((a, d, i) => a + ((+d * w[i % 3]) % 10), 0); return (10 - sum % 10) % 10 === +s[17]; }
 };
 const limpia = s => String(s || '').trim();
+const urlSegura = u => /^https?:\/\//i.test(limpia(u)) ? limpia(u) : '';   // solo http/https (evita javascript: en enlaces guardados)
 const mayus = s => limpia(s).toUpperCase().replace(/\s+/g, '');
 const digs = s => String(s || '').replace(/\D/g, '');
 
@@ -1289,9 +1292,12 @@ Real.registrarAlta = async function (d) {
     let i = await sb.from('colaboradores').insert(fila); if (i.error && /tipo_ingreso/.test(i.error.message)) { delete fila.tipo_ingreso; i = await sb.from('colaboradores').insert(fila); } if (i.error) throw i.error;
   }
   const m = await sb.from('movimientos').insert({ usuario_fieldwy: d.usuario, tipo: tipoMov, fecha: d.fecha, idpdv: d.idpdv, origen: 'app' }); if (m.error) throw m.error;
-  const s = d.sens || {}; if (Object.values(s).some(v => v != null && v !== '')) { const r = await sb.from('datos_sensibles').upsert({ usuario_fieldwy: d.usuario, ...s, actualizado_en: new Date().toISOString() }); if (r.error) throw new Error('Se dio de alta, pero no se guardaron los datos sensibles: ' + r.error.message); }
+  const s = d.sens || {}; if (Object.values(s).some(v => v != null && v !== '')) { const r = await sb.from('datos_sensibles').upsert({ usuario_fieldwy: d.usuario, ...s, actualizado_en: new Date().toISOString() }); if (r.error) throw new Error('Se dio de alta, pero no se guardaron los datos personales: ' + r.error.message); }
+  const bc = d.banc || {}; let bancOk = false;
+  if (Object.values(bc).some(v => v)) { const r = await sb.rpc('guardar_bancarios', { p_usuario: d.usuario, p_banco: bc.banco || null, p_titular: bc.titular || null, p_clabe: bc.clabe || null, p_cuenta: bc.cuenta || null, p_cuenta2: bc.cuenta2 || null, p_tarjeta: bc.tarjeta || null }); if (r.error) throw new Error('Se dio de alta, pero no se guardaron los datos bancarios: ' + r.error.message); bancOk = !!bc.clabe; }
+  if (d.sueldo) { const r = await sb.rpc('cambiar_sueldo', { p_usuario: d.usuario, p_monto: d.sueldo.monto, p_bono: d.sueldo.bono, p_desde: d.fecha, p_motivo: 'Alta' }); if (r.error) throw new Error('Se dio de alta, pero no se guardó el sueldo: ' + r.error.message); }
   const lim = addD(d.fecha, PLAZO_DOCS), hoy = HOY;
-  const pend = DOCS.map(t => ({ usuario_fieldwy: d.usuario, tipo: t, fecha_limite: lim, estatus: (t === 'Datos bancarios' && s.clabe) ? 'Recibido' : 'Pendiente', recibido_en: (t === 'Datos bancarios' && s.clabe) ? hoy : null }));
+  const pend = DOCS.map(t => ({ usuario_fieldwy: d.usuario, tipo: t, fecha_limite: lim, estatus: (t === 'Datos bancarios' && bancOk) ? 'Recibido' : 'Pendiente', recibido_en: (t === 'Datos bancarios' && bancOk) ? hoy : null }));
   const p = await sb.from('pendientes_documentos').upsert(pend, { onConflict: 'usuario_fieldwy,tipo' }); if (p.error) throw new Error('Se dio de alta, pero no se crearon los pendientes de expediente: ' + p.error.message);
   if (d.candidato) await sb.from('candidatos').update({ usuario_fieldwy: d.usuario }).eq('id', d.candidato);
 };
@@ -1341,16 +1347,19 @@ async function altaNueva(candId) {
   if (!AL.emp.length) { try { AL.emp = await API.empresas(); } catch (e) { } }
   const t = c ? tienda(c.idpdv) : null, fld = (l, id, ph, ex) => `<div class="fld"><label>${l}</label><input id="al-${id}" ${ex || ''} placeholder="${ph || ''}"></div>`;
   $('modal').innerHTML = `<div class="mbox wide" style="width:min(860px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>🆕 Alta de colaborador</h3>${c ? `<div class="who">Candidato: ${esc(c.nombre)} · ingresó el ${fdate(c.fecha_programada)}</div>` : ''}
-    <div class="row2">${fld('Usuario Fieldwy *', 'us', 'Ej. ABCD010203XYZ', 'autocomplete="off" style="text-transform:uppercase"')}${fld('Nombre completo *', 'nom', '', `value="${esc(c ? c.nombre : '')}"`)}</div>
+    <div class="row2">${fld('Usuario Fieldwy *', 'us', 'Ej. ABCD010203XYZ', 'autocomplete="off" style="text-transform:uppercase"')}${fld('Nombre(s) *', 'nom', '', '')}</div>
+    <div class="row2">${fld('Apellido paterno *', 'ap')}${fld('Apellido materno', 'am')}</div>
     <div class="row2"><div class="fld"><label>Fecha de ingreso *</label><input type="date" id="al-f" value="${c ? c.fecha_programada : HOY}"></div><div class="fld"><label>Tienda *</label><input id="al-t" list="al-tl" placeholder="Escribe IDPDV o nombre…" value="${t ? esc(c.idpdv + ' · ' + t.nombre + ' (' + (t.cadena || '') + ' · ' + (t.estado || '') + ')') : ''}"><datalist id="al-tl">${tiendaOpts()}</datalist></div></div>
     <div class="row2"><div class="fld"><label>Razón social (empresa)</label><input id="al-emp" list="al-el" placeholder="Ej. Benber SS"><datalist id="al-el">${AL.emp.map(e => `<option value="${esc(e)}">`).join('')}</datalist></div><div class="fld"><label>Tipo de ingreso</label><select id="al-tipo"><option>Nuevo</option><option>Reingreso</option></select></div></div>
     <details class="enc-d" open><summary>🔒 Datos personales (solo RH y administración)</summary><div class="enc-box">
       <div class="row2">${fld('CURP', 'curp', '18 caracteres', 'maxlength="18" style="text-transform:uppercase"')}${fld('RFC', 'rfc', '12 o 13 caracteres', 'maxlength="13" style="text-transform:uppercase"')}</div>
       <div class="row2">${fld('NSS (IMSS)', 'nss', '11 dígitos', 'inputmode="numeric" maxlength="11"')}${fld('Teléfono', 'tel', '10 dígitos', `inputmode="numeric" maxlength="10" value="${esc(c && c.telefono ? digs(c.telefono).slice(-10) : '')}"`)}</div>
       <div class="row2">${fld('Correo', 'mail', 'nombre@correo.com', 'type="email"')}<div class="fld"><label>Estado civil</label><select id="al-ec"><option value="">—</option>${ESTADO_CIVIL.map(e => `<option>${e}</option>`).join('')}</select></div></div>
-      <div class="row2"><div class="fld"><label>¿Tiene crédito Infonavit?</label><select id="al-inf"><option value="">—</option><option>Sí</option><option>No</option></select></div><div class="fld"><label>Talla de uniforme</label><select id="al-talla"><option value="">—</option>${TALLAS.map(e => `<option>${e}</option>`).join('')}</select></div></div>
-      <div class="row2">${fld('Contacto de emergencia', 'emer', 'Nombre y teléfono')}${fld('Sueldo mensual ($)', 'suel', '', 'type="number" min="0" step="0.01"')}</div></div></details>
-    <details class="enc-d"><summary>💳 Datos bancarios (pueden llegar después)</summary><div class="enc-box"><div class="row2">${fld('Banco', 'banco')}${fld('CLABE interbancaria', 'clabe', '18 dígitos', 'inputmode="numeric" maxlength="18"')}</div><div class="row2">${fld('Número de tarjeta', 'tarj', '', 'inputmode="numeric" maxlength="19"')}${fld('Cuenta', 'cta')}</div></div></details>
+      <div class="row2"><div class="fld"><label>¿Tiene crédito Infonavit?</label><select id="al-inf"><option value="">—</option><option>Sí</option><option>No</option></select></div>${fld('Monto Infonavit ($)', 'minf', '', 'type="number" min="0" step="0.01"')}<div class="fld"><label>Talla de uniforme</label><select id="al-talla"><option value="">—</option>${TALLAS.map(e => `<option>${e}</option>`).join('')}</select></div></div>
+      <div class="row2">${fld('Contacto de emergencia', 'emer', 'Nombre y teléfono')}${can('sueldos', 'editar') ? fld('Sueldo mensual ($)', 'suel', '', 'type="number" min="0" step="0.01"') : ''}</div>
+      <div class="row2"><div class="fld"><label>¿Asegurado (IMSS)?</label><select id="al-aseg"><option value="">—</option><option>Sí</option><option>No</option></select></div>${can('sueldos', 'editar') ? fld('Bono fijo ($)', 'bono', '', 'type="number" min="0" step="0.01"') : ''}</div>
+      <div class="row2">${fld('Canal', 'canal', 'Ej. Autoservicio')}</div></div></details>
+    ${can('datos_bancarios', 'crear') ? `<details class="enc-d"><summary>💳 Datos bancarios (pueden llegar después)</summary><div class="enc-box"><div class="row2">${fld('Banco', 'banco')}${fld('CLABE interbancaria', 'clabe', '18 dígitos', 'inputmode="numeric" maxlength="18"')}</div><div class="row2">${fld('Número de tarjeta', 'tarj', '', 'inputmode="numeric" maxlength="19"')}${fld('Cuenta', 'cta')}</div><div class="row2">${fld('Titular de la cuenta', 'titu', 'Si es otra persona')}${fld('Cuenta 2', 'cta2')}</div></div></details>` : '<div class="note">Los datos bancarios los captura personal autorizado desde <b>Sueldos y bancarios</b>.</div>'}
     <div class="note">Al guardar se abren los pendientes <b>Expediente</b>, <b>Datos bancarios</b> y <b>CSF</b> con vencimiento a ${PLAZO_DOCS} días del ingreso. Los documentos se guardan fuera de la app (OneDrive o Drive).</div>
     <div class="warn" id="al-warn" hidden></div>
     <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="al-ok">Guardar alta</button></div></div>`;
@@ -1358,20 +1367,23 @@ async function altaNueva(candId) {
   $('al-ok').onclick = altaGuardar; setTimeout(() => $('al-us').focus(), 60);
 }
 async function altaGuardar() {
-  const g = id => limpia($('al-' + id).value), w = $('al-warn'), b = $('al-ok');
+  const g = id => { const e = $('al-' + id); return e ? limpia(e.value) : ''; }, w = $('al-warn'), b = $('al-ok');
   const us = mayus(g('us')), nom = g('nom'), f = g('f'), tt = g('t'), idp = parseInt(tt, 10), curp = mayus(g('curp')), rfc = mayus(g('rfc')), nss = digs(g('nss')), tel = digs(g('tel')), mail = g('mail').toLowerCase(), clabe = digs(g('clabe')), suel = g('suel');
   const e = [];
-  if (!us) e.push('Falta el usuario Fieldwy.'); if (!nom) e.push('Falta el nombre.'); if (!f) e.push('Falta la fecha de ingreso.');
+  if (!us) e.push('Falta el usuario Fieldwy.'); if (!nom) e.push('Falta el nombre.'); if (!g('ap')) e.push('Falta el apellido paterno.'); if (!f) e.push('Falta la fecha de ingreso.');
   if (!idp || !tienda(idp)) e.push('Elige una tienda de la lista (empieza con su IDPDV).');
   if (curp && !V.curp(curp)) e.push('La CURP no tiene un formato válido (18 caracteres).'); if (rfc && !V.rfc(rfc)) e.push('El RFC no tiene un formato válido.');
   if (nss && !V.nss(nss)) e.push('El NSS debe tener 11 dígitos.'); if (tel && !V.tel(tel)) e.push('El teléfono debe tener 10 dígitos.'); if (mail && !V.mail(mail)) e.push('El correo no es válido.');
   if (clabe && !V.clabe(clabe)) e.push('La CLABE no es válida (18 dígitos con dígito verificador correcto).');
   if (e.length) { w.hidden = false; w.innerHTML = e.map(esc).join('<br>'); return; }
-  const tarj = digs(g('tarj'));
-  const sens = { curp: curp || null, rfc: rfc || null, nss: nss || null, correo: mail || null, telefono: tel || null, estado_civil: $('al-ec').value || null, infonavit: $('al-inf').value ? $('al-inf').value === 'Sí' : null, contacto_emergencia: g('emer') || null, talla: $('al-talla').value || null, sueldo: suel ? +suel : null, banco: g('banco') || null, tarjeta: tarj || null, clabe: clabe || null, cuenta: g('cta') || null };
+  const tarj = digs(g('tarj')), ap = mayus(g('ap')), am = mayus(g('am')), npila = mayus(nom), minf = g('minf'), bono = g('bono');
+  const sens = { curp: curp || null, rfc: rfc || null, nss: nss || null, correo: mail || null, telefono: tel || null, estado_civil: $('al-ec').value || null, infonavit: $('al-inf').value ? $('al-inf').value === 'Sí' : null, contacto_emergencia: g('emer') || null, talla: $('al-talla').value || null,
+    apellido_p: ap || null, apellido_m: am || null, nombre_pila: npila || null, monto_infonavit: minf ? +minf : null, asegurado: $('al-aseg').value ? $('al-aseg').value === 'Sí' : null, canal: g('canal') || null };
+  const banc = { banco: g('banco'), titular: g('titu'), clabe, cuenta: digs(g('cta')), cuenta2: digs(g('cta2')), tarjeta: tarj };   // van a datos_bancarios (función con validación y permisos)
+  const sueldo = suel !== '' ? { monto: +suel, bono: bono !== '' ? +bono : null } : null;                                          // va a sueldos_historial (solo quien puede editar sueldos)
   b.disabled = true; b.textContent = 'Guardando…';
   try {
-    await API.registrarAlta({ usuario: us, nombre: nom.toUpperCase(), fecha: f, idpdv: idp, empresa: g('emp'), tipo: $('al-tipo').value, candidato: AL.pre ? AL.pre.id : null, sens });
+    await API.registrarAlta({ usuario: us, nombre: [npila, ap, am].filter(Boolean).join(' '), fecha: f, idpdv: idp, empresa: g('emp'), tipo: $('al-tipo').value, candidato: AL.pre ? AL.pre.id : null, sens, banc, sueldo });
     cerrarM(); toast('Alta registrada: ' + nom); vAltas();
   } catch (x) { b.disabled = false; b.textContent = 'Reintentar'; w.hidden = false; w.textContent = x.message || String(x); }
 }
@@ -1400,6 +1412,7 @@ async function vExpedientes() {
 }
 async function docRecibido(id) {
   const url = prompt('Enlace a la carpeta o archivo (opcional). Deja vacío si no hay:', ''); if (url === null) return;
+  if (limpia(url) && !urlSegura(url)) { toast('El enlace debe empezar con https://'); return; }
   try { await API.marcarDoc(id, limpia(url)); EXP.lista = EXP.lista.filter(x => x.id !== id); toast('Marcado como recibido'); vExpedientes(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); }
 }
 
@@ -1429,7 +1442,7 @@ async function expedienteAbrir(usuario) {
   const oblig = DOCS_EXP.filter(d => d[1]), val = oblig.filter(d => (por[d[0]] || {}).estatus === 'Validado').length;
   const fila = ([t, req], i) => { const d = por[t] || {}, st = d.estatus || 'Falta', k = st === 'Validado' ? 'g' : st === 'Cargado' ? 'a' : st === 'Rechazado' ? 'r' : 'x';
     return `<div class="xd-row"><div class="xd-n"><b>${esc(t)}</b>${req ? ' <small class="muted">obligatorio</small>' : ''}<br>${pillx(esc(st), k)}${d.nota ? `<br><small class="muted">${esc(d.nota)}</small>` : ''}</div>
-      <div class="xd-l"><input id="xd-u${i}" placeholder="Pega el enlace de OneDrive / Drive" value="${esc(d.enlace_url || '')}" ${crea ? '' : 'disabled'}>${d.enlace_url ? `<a class="btn sm" href="${esc(d.enlace_url)}" target="_blank" rel="noopener">Abrir</a>` : ''}</div>
+      <div class="xd-l"><input id="xd-u${i}" placeholder="Pega el enlace de OneDrive / Drive" value="${esc(d.enlace_url || '')}" ${crea ? '' : 'disabled'}>${urlSegura(d.enlace_url) ? `<a class="btn sm" href="${esc(urlSegura(d.enlace_url))}" target="_blank" rel="noopener">Abrir</a>` : ''}</div>
       <div class="xd-a">${crea ? `<button class="btn sm" onclick="docGuardar('${usuario}',${i})">Guardar enlace</button>` : ''}${edita && d.enlace_url && st !== 'Validado' ? `<button class="btn sm primary" onclick="docValidar('${usuario}',${i},'Validado')">✔ Validar</button>` : ''}${edita && d.enlace_url && st !== 'Rechazado' ? `<button class="btn sm" onclick="docValidar('${usuario}',${i},'Rechazado')">✖ Rechazar</button>` : ''}</div></div>`; };
   $('modal').innerHTML = `<div class="mbox wide" style="width:min(980px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>🗂️ Expediente</h3><div class="who">${esc(nom)} · ${esc(usuario)}<br><b>${val} de ${oblig.length}</b> documentos obligatorios validados</div>
     <div class="note">Los archivos se quedan en OneDrive o Drive; aquí se pega el enlace y se valida. Al validar todos los obligatorios, el pendiente <b>Expediente</b> se cierra solo.</div>${DOCS_EXP.map(fila).join('')}
@@ -1450,6 +1463,128 @@ async function docValidar(u, i, est) {
     await API.cerrarPendientes(u, cerrar);
     toast(est === 'Validado' ? 'Documento validado' + (cerrar.includes('Expediente') ? ' · expediente completo ✅' : '') : 'Documento rechazado'); expedienteAbrir(u);
   } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); }
+}
+
+/* >>> 07c_sueldos.js */
+/* ====================================================================== SUELDOS Y DATOS BANCARIOS · AUDITORÍA ======================================================================
+   Sueldos: historial por colaborador; solo administrador, analista y nómina los cambian (función cambiar_sueldo en la base).
+   Datos bancarios: administrador, analista y nómina los ven completos; RH los captura una vez y los ve enmascarados (••••1234), sin poder cambiarlos.
+   Los permisos reales los aplica la base de datos (RLS y funciones); aquí solo se muestra u oculta lo que corresponde.
+   Auditoría: quién cambió qué y cuándo (los valores de datos bancarios y personales no se guardan, solo el nombre del campo). */
+const SB = { sel: null, res: [], tm: null, su: [], ba: null };
+const dinero = n => n == null || n === '' ? '—' : '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+Real.sueldosDe = async function (u) { const { data, error } = await sb.from('sueldos_historial').select('*').eq('usuario_fieldwy', u).order('vigente_desde', { ascending: false }); if (error) throw error; return data || []; };
+Real.bancariosDe = async function (u) {
+  if (can('datos_bancarios', 'ver')) { const { data, error } = await sb.from('datos_bancarios').select('*').eq('usuario_fieldwy', u).maybeSingle(); if (error) throw error; return { completo: true, d: data }; }
+  const { data, error } = await sb.rpc('bancarios_enmascarados', { p_usuario: u }); if (error) throw new Error(error.message);
+  return { completo: false, d: (data || [])[0] || null };
+};
+Real.guardarBancarios = async function (u, b) {
+  const { error } = await sb.rpc('guardar_bancarios', { p_usuario: u, p_banco: b.banco || null, p_titular: b.titular || null, p_clabe: b.clabe || null, p_cuenta: b.cuenta || null, p_cuenta2: b.cuenta2 || null, p_tarjeta: b.tarjeta || null });
+  if (error) throw new Error(error.message);
+};
+Real.cambiarSueldo = async function (u, d) {
+  const { error } = await sb.rpc('cambiar_sueldo', { p_usuario: u, p_monto: d.monto, p_bono: d.bono, p_desde: d.desde, p_motivo: d.motivo || null });
+  if (error) throw new Error(error.message);
+};
+Real.auditoria = async function () {
+  const { data, error } = await sb.from('auditoria').select('id,tabla,registro,accion,cambios,usuario,en').order('en', { ascending: false }).limit(500); if (error) throw error;
+  const { data: ps } = await sb.from('perfiles').select('id,nombre'); const nom = Object.fromEntries((ps || []).map(p => [p.id, p.nombre]));
+  return (data || []).map(r => ({ ...r, quien: r.usuario ? (nom[r.usuario] || 'usuario') : 'sistema' }));
+};
+Demo.sueldosDe = async () => []; Demo.bancariosDe = async () => ({ completo: false, d: null }); Demo.guardarBancarios = async () => { }; Demo.cambiarSueldo = async () => { }; Demo.auditoria = async () => [];
+
+/* ----- pantalla ----- */
+function vSueldos() {
+  $('content').innerHTML = cab('Sueldos y datos bancarios', 'Busca un colaborador para consultar su sueldo y sus datos bancarios. Cada cambio queda en la auditoría.', 'mochila') +
+    `<div class="tools"><input id="sb-q" type="search" placeholder="Nombre o usuario Fieldwy (mínimo 3 letras)…" oninput="sbBuscar(this.value)" style="flex:1;min-width:240px"></div><div id="sb-res"></div><div id="sb-det"></div>`;
+  if (SB.sel) sbElegir(SB.sel); else setTimeout(() => { const q = $('sb-q'); if (q) q.focus(); }, 50);
+}
+function sbBuscar(q) {
+  clearTimeout(SB.tm); const r = $('sb-res');
+  if (limpiaQ(q).length < 3) { r.innerHTML = ''; return; }
+  SB.tm = setTimeout(async () => {
+    try { SB.res = await API.buscarColab(q); } catch (e) { r.innerHTML = `<div class="warn">${esc(e.message || e)}</div>`; return; }
+    r.innerHTML = SB.res.length ? `<div class="bj-list">${SB.res.map((c, i) => { const t = tienda(c.idpdv) || {}; return `<div class="bj-it ${c.estatus === 'Baja' ? 'off' : ''}" onclick="sbElegir(SB.res[${i}])"><b>${esc(c.nombre)}</b><span>${esc(c.usuario_fieldwy)}</span><span>${esc(t.nombre || 'Sin tienda')}</span><span>${esc(c.estatus || '')}</span></div>`; }).join('')}</div>` : '<div class="note">Sin coincidencias.</div>';
+  }, 280);
+}
+async function sbElegir(c) {
+  SB.sel = c; const rs = $('sb-res'), det = $('sb-det'); if (!det) return; rs.innerHTML = ''; const q = $('sb-q'); if (q) q.value = '';
+  det.innerHTML = '<div class="loading">Cargando…</div>';
+  const u = c.usuario_fieldwy, t = tienda(c.idpdv) || {}, errs = [];
+  SB.su = []; SB.ba = null;
+  if (can('sueldos', 'ver')) { try { SB.su = await API.sueldosDe(u); } catch (e) { errs.push('Sueldos: ' + (e.message || e)); } }
+  if (can('datos_bancarios', 'ver') || can('bancarios_vista', 'ver')) { try { SB.ba = await API.bancariosDe(u); } catch (e) { errs.push('Datos bancarios: ' + (e.message || e)); } }
+  const vig = SB.su.find(x => !x.vigente_hasta);
+  let h = `<div class="bj-card"><div><b>${esc(c.nombre)}</b><br><small>${esc(u)} · ${esc(c.empresa || 'sin razón social')} · ${esc(c.estatus || '')}</small></div><div><b>${esc(t.nombre || 'Sin tienda')}</b><br><small>${esc([t.cadena, t.estado, t.supervisor].filter(Boolean).join(' · '))}</small></div></div>`;
+  h += errs.map(e => `<div class="warn">${esc(e)}</div>`).join('');
+  if (can('sueldos', 'ver')) {
+    h += sect('Sueldo', '💵') + `<div class="kpis">${kp('Sueldo mensual vigente', vig ? dinero(vig.sueldo_mensual) : '—', vig ? 'desde ' + fdate(vig.vigente_desde) : 'sin sueldo capturado', vig ? C.gr : C.gy, null, '💵')}${kp('Bono fijo', vig ? dinero(vig.bono_fijo) : '—', 'vigente', C.gy, null, '🎯')}</div>`;
+    h += `<div class="tools">${can('sueldos', 'editar') ? '<button class="btn primary" onclick="sbSueldoForm()">✏️ Cambiar sueldo</button>' : '<span class="muted">Solo administrador, analista y nómina pueden cambiar sueldos.</span>'}</div>`;
+    h += SB.su.length ? `<div class="tw"><table class="dt"><thead><tr><th>Desde</th><th>Hasta</th><th>Sueldo mensual</th><th>Bono fijo</th><th class="t">Motivo</th></tr></thead><tbody>${SB.su.map(x => `<tr><td>${fdate(x.vigente_desde)}</td><td>${x.vigente_hasta ? fdate(x.vigente_hasta) : '<b>vigente</b>'}</td><td>${dinero(x.sueldo_mensual)}</td><td>${dinero(x.bono_fijo)}</td><td class="t">${esc(x.motivo || '')}</td></tr>`).join('')}</tbody></table></div>` : '';
+  }
+  if (SB.ba !== null || can('datos_bancarios', 'crear')) {
+    h += sect('Datos bancarios', '💳'); const b = SB.ba && SB.ba.d;
+    if (b) {
+      h += `<div class="tw"><table class="dt"><tbody>${[['Banco', b.banco], ['Titular', b.titular], ['CLABE', b.clabe], ['Cuenta', b.cuenta], ['Cuenta 2', b.cuenta2], ['Tarjeta', b.tarjeta]].map(([k, v]) => `<tr><td class="t"><b>${k}</b></td><td class="t">${esc(v || '—')}</td></tr>`).join('')}</tbody></table></div>`;
+      h += `<div class="note">${SB.ba.completo ? 'Capturado el ' + fdate((b.capturado_en || '').slice(0, 10)) + '.' : 'Datos enmascarados: sirven para confirmar que ya están capturados. No se pueden ver completos ni modificar con tu usuario.'}</div>`;
+      if (can('datos_bancarios', 'editar')) h += '<div class="tools"><button class="btn" onclick="sbBancForm()">✏️ Corregir datos bancarios</button></div>';
+    } else {
+      h += '<div class="note">Todavía no hay datos bancarios capturados.</div>';
+      if (can('datos_bancarios', 'crear')) h += '<div class="tools"><button class="btn primary" onclick="sbBancForm()">➕ Capturar datos bancarios</button></div>';
+    }
+  }
+  if (!can('sueldos', 'ver') && SB.ba === null && !can('datos_bancarios', 'crear')) h += '<div class="warn">Tu usuario no tiene acceso a sueldos ni a datos bancarios.</div>';
+  det.innerHTML = h;
+}
+function sbSueldoForm() {
+  const c = SB.sel, vig = SB.su.find(x => !x.vigente_hasta), fld = (l, id, ex, v) => `<div class="fld"><label>${l}</label><input id="sb-${id}" ${ex || ''} value="${esc(v == null ? '' : v)}"></div>`;
+  $('modal').innerHTML = `<div class="mbox" role="dialog" aria-modal="true"><h3>✏️ Cambiar sueldo</h3><div class="who">${esc(c.nombre)} · ${esc(c.usuario_fieldwy)}</div>
+    <div class="row2">${fld('Sueldo mensual ($) *', 'monto', 'type="number" min="0" step="0.01"', vig ? vig.sueldo_mensual : '')}${fld('Bono fijo ($)', 'bono', 'type="number" min="0" step="0.01"', vig ? vig.bono_fijo : '')}</div>
+    <div class="row2">${fld('Aplica desde *', 'desde', 'type="date"', HOY)}${fld('Motivo', 'motivo', 'placeholder="Ej. ajuste anual"', '')}</div>
+    <div class="note">El sueldo anterior se cierra un día antes de la fecha elegida y queda en el historial.</div><div class="warn" id="sb-warn" hidden></div>
+    <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="sb-ok">Guardar</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  $('sb-ok').onclick = async () => {
+    const m = $('sb-monto').value, bn = $('sb-bono').value, d = $('sb-desde').value, w = $('sb-warn'), b = $('sb-ok');
+    if (m === '' || +m < 0) { w.hidden = false; w.textContent = 'Escribe el sueldo mensual.'; return; } if (!d) { w.hidden = false; w.textContent = 'Elige desde cuándo aplica.'; return; }
+    b.disabled = true; b.textContent = 'Guardando…';
+    try { await API.cambiarSueldo(c.usuario_fieldwy, { monto: +m, bono: bn === '' ? null : +bn, desde: d, motivo: limpia($('sb-motivo').value) }); cerrarM(); toast('Sueldo actualizado'); sbElegir(c); }
+    catch (e) { b.disabled = false; b.textContent = 'Reintentar'; w.hidden = false; w.textContent = e.message || String(e); }
+  };
+}
+function sbBancForm() {
+  const c = SB.sel, d = (SB.ba && SB.ba.completo && SB.ba.d) || {}, fld = (l, id, ex, v) => `<div class="fld"><label>${l}</label><input id="sb-${id}" ${ex || ''} value="${esc(v == null ? '' : v)}"></div>`;
+  const edit = !!(SB.ba && SB.ba.d);
+  $('modal').innerHTML = `<div class="mbox" role="dialog" aria-modal="true"><h3>💳 ${edit ? 'Corregir' : 'Capturar'} datos bancarios</h3><div class="who">${esc(c.nombre)} · ${esc(c.usuario_fieldwy)}</div>
+    <div class="row2">${fld('Banco', 'banco', '', d.banco)}${fld('CLABE interbancaria', 'clabe', 'inputmode="numeric" maxlength="18" placeholder="18 dígitos"', d.clabe)}</div>
+    <div class="row2">${fld('Cuenta', 'cuenta', 'inputmode="numeric"', d.cuenta)}${fld('Cuenta 2', 'cuenta2', 'inputmode="numeric"', d.cuenta2)}</div>
+    <div class="row2">${fld('Tarjeta', 'tarjeta', 'inputmode="numeric" maxlength="16"', d.tarjeta)}${fld('Titular (si es otra persona)', 'titular', '', d.titular)}</div>
+    <div class="note">${edit ? 'Los campos que dejes vacíos conservan su valor actual.' : 'Una vez capturados, RH ya no puede modificarlos; solo administración, analista o nómina.'}</div><div class="warn" id="sb-warn" hidden></div>
+    <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="sb-ok">Guardar</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  $('sb-ok').onclick = async () => {
+    const g = id => limpia($('sb-' + id).value), w = $('sb-warn'), b = $('sb-ok'), clabe = digs(g('clabe'));
+    if (clabe && !V.clabe(clabe)) { w.hidden = false; w.textContent = 'La CLABE no es válida (18 dígitos con dígito verificador correcto).'; return; }
+    if (!edit && !(g('banco') || clabe || g('cuenta') || g('tarjeta'))) { w.hidden = false; w.textContent = 'Captura al menos el banco y la CLABE o la cuenta.'; return; }
+    b.disabled = true; b.textContent = 'Guardando…';
+    try { await API.guardarBancarios(c.usuario_fieldwy, { banco: g('banco'), titular: g('titular'), clabe, cuenta: digs(g('cuenta')), cuenta2: digs(g('cuenta2')), tarjeta: digs(g('tarjeta')) }); cerrarM(); toast('Datos bancarios guardados'); sbElegir(c); }
+    catch (e) { b.disabled = false; b.textContent = 'Reintentar'; w.hidden = false; w.textContent = e.message || String(e); }
+  };
+}
+
+/* ----- auditoría ----- */
+async function vAuditoria() {
+  $('content').innerHTML = cab('Auditoría', 'Últimos 500 cambios en colaboradores, bajas, usuarios, permisos, sueldos y datos sensibles. En datos bancarios y personales solo se guarda qué campo cambió, nunca su valor.', 'mochila') + '<div class="loading">Cargando…</div>';
+  let rows; try { rows = await API.auditoria(); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudo cargar: ${esc(e.message || e)}</div>`; return; }
+  const resumen = c => { if (!c) return ''; const t = Object.entries(c).map(([k, v]) => v && typeof v === 'object' && 'antes' in v ? `${k}: ${String(v.antes)} → ${String(v.despues)}` : (typeof v === 'string' ? `${k} (${v})` : k)).join(' · '); return t.length > 160 ? t.slice(0, 157) + '…' : t; };
+  TB = {};
+  $('content').innerHTML = cab('Auditoría', 'Últimos 500 cambios. En datos bancarios y personales solo se guarda qué campo cambió, nunca su valor.', 'mochila') + tbl('t-aud', [
+    { h: 'Fecha y hora', v: r => r.en, r: r => fdate(String(r.en).slice(0, 10)) + ' ' + String(r.en).slice(11, 16), w: 130 }, { h: 'Quién', t: 1, v: r => r.quien }, { h: 'Tabla', t: 1, v: r => r.tabla }, { h: 'Registro', t: 1, v: r => r.registro || '' },
+    { h: 'Acción', t: 1, v: r => r.accion }, { h: 'Cambios', t: 1, v: r => resumen(r.cambios), r: r => `<small>${esc(resumen(r.cambios))}</small>` }
+  ], rows, { fix: 0, search: 1, csv: 1, file: 'auditoria', titulo: 'Auditoría', sort: 0, dir: -1, maxh: '72vh' });
+  drawAll();
 }
 
 /* >>> 08_demo_reportes.js */
