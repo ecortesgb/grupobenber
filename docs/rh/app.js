@@ -371,13 +371,18 @@ async function conReporte(titulo, mascota, fn) {
 const xsF = () => R.T.filter(x => okT(x.t));
 
 /* ----- movimientos (ingresos reales por candidatos + bajas) para rotación ----- */
-const MV = { loaded: false, ing: [], baj: [] };
+const MV = { loaded: false, ing: [], baj: [], reing: [], vinc: {}, revisar: 0 };
 Real.movs = async function () {
   const desde = addD(HOY, -125);
-  const [i, b] = await Promise.all([todo(() => sb.from('candidatos').select('id,fecha_programada,idpdv,reclutador_id,fuente_id').eq('estatus', 'Ingresó').gte('fecha_programada', desde)), todo(() => sb.from('bajas').select('usuario_fieldwy,fecha_baja,idpdv,motivo').gte('fecha_baja', desde))]);
-  return { ing: i.map(x => ({ f: x.fecha_programada, idpdv: x.idpdv, rec: x.reclutador_id, fu: x.fuente_id })), baj: b.map(x => ({ f: x.fecha_baja, idpdv: x.idpdv, mot: x.motivo, u: x.usuario_fieldwy })) };
+  const [i, b] = await Promise.all([todo(() => sb.from('candidatos').select('id,fecha_programada,idpdv,reclutador_id,fuente_id,usuario_fieldwy').eq('estatus', 'Ingresó').gte('fecha_programada', desde)), todo(() => sb.from('bajas').select('usuario_fieldwy,fecha_baja,idpdv,motivo').gte('fecha_baja', desde))]);
+  // del historial laboral (opcional: si falla, el reporte sigue igual): reingresos, usuarios vinculados como una misma persona y cuántos periodos están por revisar
+  let reing = [], vinc = {}, revisar = 0;
+  try { reing = (await todo(() => sb.from('v_eventos_laborales').select('fecha,idpdv,usuario_fieldwy,persona').eq('evento', 'Reingreso').gte('fecha', desde))).map(x => ({ f: x.fecha, idpdv: x.idpdv, u: x.usuario_fieldwy })); } catch (e) { }
+  try { (await todo(() => sb.from('vinculos_usuario').select('usuario_a,usuario_b'))).forEach(x => { vinc[x.usuario_b] = x.usuario_a; }); } catch (e) { }
+  try { const r = await sb.from('relaciones_laborales').select('id', { count: 'exact', head: true }).eq('calidad', 'revisar'); revisar = r.count || 0; } catch (e) { }
+  return { ing: i.map(x => ({ f: x.fecha_programada, idpdv: x.idpdv, rec: x.reclutador_id, fu: x.fuente_id, u: x.usuario_fieldwy })), baj: b.map(x => ({ f: x.fecha_baja, idpdv: x.idpdv, mot: x.motivo, u: x.usuario_fieldwy })), reing, vinc, revisar };
 };
-async function cargarMovs(force) { if (MV.loaded && !force) return; const d = await API.movs(); MV.ing = d.ing; MV.baj = d.baj; MV.loaded = true; }
+async function cargarMovs(force) { if (MV.loaded && !force) return; const d = await API.movs(); MV.ing = d.ing; MV.baj = d.baj; MV.reing = d.reing || []; MV.vinc = d.vinc || {}; MV.revisar = d.revisar || 0; MV.loaded = true; }
 function hcProm(r) { // promedio de promotores con check por semana dentro del periodo (estructura filtrada)
   const sa = R.meta.semanas_anio, xs = xsF(); let tot = [], n = 0;
   sa.forEach((s, i) => { const fin = addD(s.ini, 6); if (fin < r.desde || s.ini > r.hasta) return; tot.push(xs.reduce((a, x) => a + (x.hc[i] || 0), 0)); });
@@ -1050,6 +1055,9 @@ async function vMovs() {
     const si = semanas.map(s => enR(MV.ing, s.d, s.h).length), sb_ = semanas.map(s => enR(MV.baj, s.d, s.h).length);
     let h = cab('Ingresos y bajas', 'Ingresos (candidatos que ingresaron) y bajas registradas, con rotación, comparativos por semana y por cadena. Sirve de base para los cierres diarios y semanales.', 'saltando') + barraFiltros('vMovs') + barraPeriodo('vMovs', { dia: true });
     h += `<div class="kpis kp-hero">${kp('Ingresos', fmt(ing.length), `${dl(ing.length, ingP, 0).replace('pts', '')}`.replace('vs ant.', 'vs periodo anterior (' + ingP + ')'), C.gr, null, '🙌')}${kp('Bajas', fmt(baj.length), `${dl(baj.length, bajP, 0).replace('pts', '').replace('vs ant.', 'vs periodo anterior (' + bajP + ')')}`, C.rd, null, '📤')}${kp('Neto', (ing.length - baj.length >= 0 ? '+' : '') + (ing.length - baj.length), 'ingresos − bajas', ing.length - baj.length >= 0 ? C.gr : C.rd, null, '⚖️')}${kp('Rotación del periodo', hc ? f1(baj.length / hc * 100) + '%' : '—', `${baj.length} bajas ÷ ${fmt(hc)} HC promedio`, C.am, null, '🔄')}</div>`;
+    // del historial laboral: reingresos y personas únicas (un usuario con GB vinculado a su original cuenta como una sola persona)
+    const reing = enR(MV.reing || [], r.desde, r.hasta), personaDe = u => (MV.vinc && MV.vinc[u]) || u, pers = new Set(ing.filter(x => x.u).map(x => personaDe(x.u)));
+    h += `<div class="kpis">${kp('Reingresos', fmt(reing.length), 'personas que ya habían trabajado y regresaron (historial laboral)', C.pu, null, '🔁')}${kp('Personas únicas que ingresaron', fmt(pers.size), `${fmt(ing.length)} ingresos de candidatos · ${fmt(ing.length - pers.size)} repetidos o sin usuario`, C.bl, null, '🧍')}${kp('Historial por revisar', fmt(MV.revisar || 0), 'periodos laborales con datos dudosos; se corrigen con los archivos históricos', C.am, null, '🧾')}</div>`;
     const rotS = semanas.map(s => { const hcS = hcPromX({ desde: s.d, hasta: s.h }, () => true); return hcS ? enR(MV.baj, s.d, s.h).length / hcS * 100 : null; });
     h += `<div class="grid g2"><div class="card"><h3>📊 Ingresos, bajas y rotación por ${dias <= 10 ? 'día' : 'semana'}</h3><p class="note">Barras: cantidad. Línea naranja: % de rotación (eje derecho) con su tendencia punteada.</p>${legend([['Ingresos', C.gr], ['Bajas', C.rd], ['Rotación %', C.od], ['Tendencia', C.dk]])}${chart(semanas.map(s => s.l), [{ n: 'Ingresos', c: C.gr, v: si }, { n: 'Bajas', c: C.rd, v: sb_ }], { bars: 1, vals: 1, h: 320, ticks: 16, band: 1, lines2: [{ n: 'Rotación %', c: C.od, v: rotS, trend: 1 }], y2: { pct: 1 } })}</div>
       <div class="card"><h3>🔄 Rotación ${dias <= 10 ? 'diaria' : 'semanal'} y tendencia</h3><p class="note">Bajas ÷ promotores con check (HC promedio). Si la línea punteada baja, la rotación va mejorando.</p>${chart(semanas.map(s => s.l), [{ n: 'Rotación %', c: C.od, v: rotS }], { pct: 1, h: 320, vals: 1, ticks: 16 })}</div></div>`;
