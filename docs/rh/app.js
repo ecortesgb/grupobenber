@@ -1984,7 +1984,7 @@ async function expedienteAbrir(usuario) {
   try { if (can('expediente_archivos', 'ver')) uso = await API.almacenUso(); } catch (e) { }
   EXPD.cat = cat; EXPD.archivos = arch;
   const sube = can('expediente_archivos', 'crear'), revisa = can('expediente_archivos', 'editar');
-  const nom = (ALD.lista.find(x => x.usuario_fieldwy === usuario) || (AL.ult || []).find(x => x.usuario_fieldwy === usuario) || ((EXP.lista || []).find(x => x.usuario_fieldwy === usuario) || {}).colaboradores || {}).nombre || usuario;
+  const nom = ((AL.fases || []).find(x => x.usuario === usuario) || {}).nombre || ((AL.ult || []).find(x => x.usuario_fieldwy === usuario) || {}).nombre || (((EXP.lista || []).find(x => x.usuario_fieldwy === usuario) || {}).colaboradores || {}).nombre || usuario;
   const vigente = t => arch.filter(a => a.tipo === t && a.estado !== 'Reemplazado').sort((x, y) => y.version - x.version)[0];
   const oblig = cat.filter(c => c.obligatorio), ok = oblig.filter(c => (vigente(c.tipo) || {}).estado === 'Aprobado').length;
   const pill = st => pillx(esc(st), st === 'Aprobado' ? 'g' : st === 'En revisión' ? 'a' : st === 'Pendiente de corrección' ? 'r' : 'x');
