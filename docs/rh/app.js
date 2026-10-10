@@ -17,12 +17,13 @@ const NIVEL = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Geren
 
 /* ====================================================================== capa de datos ====================================================================== */
 let sb = null;
-async function todo(q) { // pagina de 1000 en 1000, con reintentos si la red falla
-  let out = [], i = 0;
-  for (;;) {
-    let data, error;
-    for (let k = 0; k < 4; k++) { try { ({ data, error } = await q().range(i, i + 999)); if (!error) break; } catch (e) { error = e; } await new Promise(r => setTimeout(r, 700 * (k + 1))); }
-    if (error) throw error; out = out.concat(data); if (data.length < 1000) return out; i += 1000;
+async function todo(q) { // pagina de 1000 en 1000 (las páginas siguientes se piden en paralelo), con reintentos si la red falla
+  const pag = async i => { let data, error; for (let k = 0; k < 4; k++) { try { ({ data, error } = await q().range(i, i + 999)); if (!error) break; } catch (e) { error = e; } await new Promise(r => setTimeout(r, 700 * (k + 1))); } if (error) throw error; return data; };
+  let out = await pag(0); if (out.length < 1000) return out;
+  for (let i = 1000; ;) {
+    const lote = await Promise.all([0, 1, 2, 3].map(k => pag(i + k * 1000))); let fin = false;
+    for (const d of lote) { out = out.concat(d); if (d.length < 1000) { fin = true; break; } }
+    if (fin) return out; i += 4000;
   }
 }
 const Real = {
@@ -635,7 +636,8 @@ const VALC = { 'Cumple': 'g', 'Cumple Productividad': 'b', 'Cumple Telefonica': 
 const NOJUST = ['Check In Fuera Rango', 'Check Out Fuera Rango', 'Equipo Duplicado', 'No Check Salida'];   // la venta no los justifica (regla del modelo): hay que enviarlos a otra tienda o corregir
 async function checksRango(d, h) { // se piden por semana (con reintentos) y se guardan en memoria
   const W = ventana(), blocks = W.filter(w => addD(w.ini, 6) >= d && w.ini <= h), out = [];
-  for (const w of blocks) { if (!CKS.cache[w.ini]) CKS.cache[w.ini] = await API.checks(w.ini, addD(w.ini, 6)); out.push(...CKS.cache[w.ini]); }
+  await Promise.all(blocks.filter(w => !CKS.cache[w.ini]).map(async w => { CKS.cache[w.ini] = await API.checks(w.ini, addD(w.ini, 6)); }));   // las semanas que faltan se piden juntas
+  blocks.forEach(w => out.push(...CKS.cache[w.ini]));
   return out.filter(r => r.fecha >= d && r.fecha <= h);
 }
 const esErr = r => r.estatus_check !== 'Cumple' && r.estatus_check !== 'Abierto' && r.estatus_final !== 'Otro Check';
@@ -749,23 +751,20 @@ const errFiltra = (xs, just) => xs.filter(x => !just || (just === 'con' ? justTx
 const errNom = k => ERRN[k] || k;
 
 function erroresCheckHTML(r, rows, prim, errores) {
-  const just = CKS.just, errF = errFiltra(errores, just), dias = [...new Set(prim.map(x => x.fecha))].sort();
-  const dia = CKS.dia && dias.includes(CKS.dia) ? CKS.dia : (dias[dias.length - 1] || r.hasta);
-  const delDia = errF.filter(x => x.fecha === dia), evalDia = prim.filter(x => x.fecha === dia);
-  const sup = x => (tienda(x.idpdv) || {}).supervisor || 'Sin supervisor';
-  let h = `<div class="tools" data-nocap>${ERR_JUST.map(([k, n]) => `<button class="chip ${just === k ? 'on' : ''}" onclick="CKS.just='${k}';vChecks()">${n}</button>`).join('')}<span class="muted">Fuera de rango, equipo duplicado y sin check de salida no se justifican con venta.</span></div>`;
-  h += `<div class="kpis">${kp('Errores del día', fmt(delDia.length), `${fdate(dia)} · ${fmt(evalDia.length)} checks evaluados`, delDia.length ? C.rd : C.gr, null, '🛠️')}${kp('Promotores con error (día)', fmt(new Set(delDia.map(x => x.usuario)).size), 'a corregir hoy si es el día actual', null, null, '🧍')}${kp('Errores del periodo', fmt(errF.length), `${fdate(r.desde)} – ${fdate(r.hasta)}`, null, null, '📅')}${kp('Promotores con error (periodo)', fmt(new Set(errF.map(x => x.usuario)).size), `de ${fmt(new Set(prim.map(x => x.usuario)).size)} que checaron`, null, null, '👥')}</div>`;
+  const just = CKS.just, errF = errFiltra(errores, just), sup = x => (tienda(x.idpdv) || {}).supervisor || 'Sin supervisor';
+  const unDia = r.desde === r.hasta, hoy = unDia && r.hasta === HOY, MAXC = 200;
+  let h = `<div class="tools" data-nocap>${ERR_JUST.map(([k, n]) => `<button class="chip ${just === k ? 'on' : ''}" onclick="CKS.just='${k}';vChecks()">${n}</button>`).join('')}<span class="muted">Fuera de rango, equipo duplicado y sin check de salida no se justifican con venta. El periodo es el de la barra de arriba.</span></div>`;
+  h += `<div class="kpis">${kp('Errores', fmt(errF.length), `${fdate(r.desde)}${unDia ? '' : ' – ' + fdate(r.hasta)} · ${fmt(prim.length)} checks evaluados`, errF.length ? C.rd : C.gr, null, '🛠️')}${kp('Promotores con error', fmt(new Set(errF.map(x => x.usuario)).size), `de ${fmt(new Set(prim.map(x => x.usuario)).size)} que checaron`, null, null, '🧍')}${kp('% de checks con error', pc1(errF.length, prim.length), 'sobre los checks evaluados', null, null, '📉')}${kp('Sin justificar con venta', fmt(errF.filter(x => justTxt(x) !== 'Con venta').length), 'siguen pendientes de corregir', C.am, null, '🔴')}</div>`;
 
-  /* ---- del día: tarjetas para WhatsApp ---- */
-  const hoy = dia === HOY;
-  h += sect('Errores del día · ' + fdate(dia), '📲') + `<div class="tools" data-nocap><span>Día:</span><select onchange="CKS.dia=this.value;vChecks()">${dias.slice().reverse().map(d => `<option value="${d}" ${d === dia ? 'selected' : ''}>${fdate(d)}${d === HOY ? ' (hoy)' : ''}</option>`).join('')}</select>
-    <button class="btn sm" onclick="capturaDescargar($('err-dia'),'Errores de check · ${fdate(dia)}',subFiltros(),'errores_check_${dia}')">📸 Imagen para WhatsApp</button><button class="btn sm" onclick="capturaCopiar($('err-dia'),'Errores de check · ${fdate(dia)}',subFiltros())">📋 Copiar imagen</button><button class="btn sm" onclick="erroresCsv('dia')">⬇ CSV del día</button>
-    <span class="muted">${hoy ? 'Es el día de hoy: todavía se pueden corregir.' : 'No es el día de hoy: sirve de seguimiento.'}</span></div>`;
-  const porSup = new Map(); delDia.forEach(x => { const k = sup(x); if (!porSup.has(k)) porSup.set(k, []); porSup.get(k).push(x); });
-  h += `<div id="err-dia" class="err-dia">${delDia.length ? [...porSup].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([s, xs]) => `<div class="err-sup"><h4>🧭 ${esc(s)} <small>${xs.length} error${xs.length === 1 ? '' : 'es'}</small></h4>${xs.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(x => {
+  /* ---- tarjetas para WhatsApp (todo el periodo elegido arriba, agrupadas por supervisor) ---- */
+  const vis = errF.slice().sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, MAXC), titulo = 'Errores de check · ' + fdate(r.desde) + (unDia ? '' : ' al ' + fdate(r.hasta));
+  h += sect('Errores por supervisor', '📲') + `<div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('err-dia'),'${titulo}',subFiltros(),'errores_check')">📸 Imagen para WhatsApp</button><button class="btn sm" onclick="capturaCopiar($('err-dia'),'${titulo}',subFiltros())">📋 Copiar imagen</button><button class="btn sm" onclick="erroresCsv('periodo')">⬇ CSV</button>
+    <span class="muted">${hoy ? 'Es el día de hoy: todavía se pueden corregir.' : unDia ? 'Día anterior: sirve de seguimiento.' : 'Varios días: cada tarjeta trae su fecha.'}${errF.length > MAXC ? ` Mostrando los ${MAXC} más recientes de ${fmt(errF.length)}; el CSV trae todos.` : ''}</span></div>`;
+  const porSup = new Map(); vis.forEach(x => { const k = sup(x); if (!porSup.has(k)) porSup.set(k, []); porSup.get(k).push(x); });
+  h += `<div id="err-dia" class="err-dia">${vis.length ? [...porSup].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([s, xs]) => `<div class="err-sup"><h4>🧭 ${esc(s)} <small>${xs.length} error${xs.length === 1 ? '' : 'es'}</small></h4>${xs.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es') || b.fecha.localeCompare(a.fecha)).map(x => {
     const t = tienda(x.idpdv) || {}, jt = justTxt(x), p = JUSTP[jt];
-    return `<div class="err-card"><div class="err-h"><b>${esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(t.nombre || 'IDPDV ' + x.idpdv)}</small></div><div>${pillx((ERRI[x.estatus_check] || '') + ' ' + errNom(x.estatus_check), NOJUST.includes(x.estatus_check) ? 'r' : 'a')} ${pillx(p[1], p[0])}${x.registros ? ` <small class="muted">${x.registros} venta${x.registros === 1 ? '' : 's'}</small>` : ''}</div><div class="err-fix">💡 ${esc(ERRFIX[x.estatus_check] || 'Revisar el check con el supervisor.')}</div>${justBtn(x)}</div>`;
-  }).join('')}</div>`).join('') : '<div class="card empty"><img src="' + img('triunfo') + '" alt="">Sin errores de check ese día con este filtro.</div>'}</div>`;
+    return `<div class="err-card"><div class="err-h"><b>${esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(t.nombre || 'IDPDV ' + x.idpdv)}${unDia ? '' : ' · ' + fdate(x.fecha)}</small></div><div>${pillx((ERRI[x.estatus_check] || '') + ' ' + errNom(x.estatus_check), NOJUST.includes(x.estatus_check) ? 'r' : 'a')} ${pillx(p[1], p[0])}${x.registros ? ` <small class="muted">${x.registros} venta${x.registros === 1 ? '' : 's'}</small>` : ''}</div><div class="err-fix">💡 ${esc(ERRFIX[x.estatus_check] || 'Revisar el check con el supervisor.')}</div>${justBtn(x)}</div>`;
+  }).join('')}</div>`).join('') : '<div class="card empty"><img src="' + img('triunfo') + '" alt="">Sin errores de check en este periodo con este filtro.</div>'}</div>`;
 
   /* ---- del periodo: acumulado ---- */
   h += sect('Acumulado del periodo', '📊') + `<p class="note">${fdate(r.desde)} – ${fdate(r.hasta)}. Cambia el periodo arriba para ver otra semana o mes.</p>`;
@@ -782,13 +781,13 @@ function erroresCheckHTML(r, rows, prim, errores) {
     { h: 'Error más frecuente', t: 1, v: q => errNom(q.top), r: q => pillx((ERRI[q.top] || '') + ' ' + errNom(q.top), NOJUST.includes(q.top) ? 'r' : 'a') },
     ...ERR_TIPOS.map(k => ({ h: (ERRI[k] || '') + ' ' + errNom(k), v: q => q.tipos[k] || 0, r: q => q.tipos[k] ? `<b>${q.tipos[k]}</b>` : '' })), { h: 'Cómo corregirlo (error más frecuente)', t: 1, v: q => ERRFIX[q.top] || '', w: 360 }];
   h += sect('Errores por promotor', '🧍') + tbl('t-err-per', cols, lista, { fix: 2, search: 1, csv: 1, png: 1, file: 'errores_check_periodo', titulo: 'Errores de check por promotor · ' + fdate(r.desde) + ' al ' + fdate(r.hasta), sort: 5, dir: -1, maxh: '60vh', lim: 500 });
-  ERR_CTX = { dia, delDia, errF };
+  ERR_CTX = { errF, r };
   return h;
 }
 let ERR_CTX = null;
-function erroresCsv(que) {
-  if (!ERR_CTX) return; const xs = que === 'dia' ? ERR_CTX.delDia : ERR_CTX.errF;
-  finBajar('errores_check_' + (que === 'dia' ? ERR_CTX.dia : 'periodo') + '.csv', [['fecha', 'usuario', 'promotor', 'idpdv', 'tienda', 'supervisor', 'gerente', 'error', 'ventas', 'justifica', 'como_corregirlo'],
+function erroresCsv() {
+  if (!ERR_CTX) return; const xs = ERR_CTX.errF, r = ERR_CTX.r;
+  finBajar('errores_check_' + r.desde + (r.desde === r.hasta ? '' : '_a_' + r.hasta) + '.csv', [['fecha', 'usuario', 'promotor', 'idpdv', 'tienda', 'supervisor', 'gerente', 'error', 'ventas', 'justifica', 'como_corregirlo'],
     ...xs.map(x => { const t = tienda(x.idpdv) || {}; return [x.fecha, x.usuario, x.nombre, x.idpdv, t.nombre, t.supervisor, t.gerente, errNom(x.estatus_check), x.registros, justTxt(x), ERRFIX[x.estatus_check] || '']; })]);
 }
 
@@ -796,7 +795,7 @@ function erroresCsv(que) {
 function justBtn(x) {
   const js = NM.justMap && NM.justMap.get(x.usuario + '|' + x.fecha);
   if (js) return `<div data-nocap>${pillx('📝 Justificación ' + js.toLowerCase(), js === 'Aprobada' ? 'g' : 'a')}</div>`;
-  return can('justificaciones', 'crear') ? `<div data-nocap><button class="btn sm" onclick="justSolicitar('${x.usuario}','${x.fecha}','${x.estatus_check}','${String(x.nombre).replace(/['"\\]/g, '')}')">📝 Solicitar justificación</button></div>` : '';
+  return can('justificaciones', 'crear') ? `<div data-nocap><button class="btn sm" onclick="justSolicitar('${x.usuario}','${x.fecha}','${x.estatus_check}','${String(x.nombre).replace(/[^\p{L} .-]/gu, '')}')">📝 Solicitar justificación</button></div>` : '';
 }
 
 /* >>> 03c_categoria.js */
