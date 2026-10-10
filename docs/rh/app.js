@@ -691,29 +691,33 @@ function estadoVivo(h) {
   const d = h.ultimo_check ? diffD(HOY, h.ultimo_check) : null;
   if (d == null) return { e: 'Sin check', det: '' }; if (d <= 0) return { e: 'Activo', det: '' }; if (d === 1) return { e: 'Descanso / falta / error', det: '1 día sin check' }; if (d > 21) return { e: 'Baja', det: d + ' días sin check · sin baja registrada' }; return { e: 'Posible baja', det: d + ' días sin check' };
 }
-const HCF = { est: '', tipo: '', ant: '', emp: '', cat: '' };
+const HCF = { est: '', tipo: '', ant: '', emp: '', cat: '', grupo: 'completos' };
+const HC_GRUPOS = [['completos', '🟢 Completos'], ['posible', '🔴 Posible baja'], ['alta', '🟠 En alta'], ['exp', '🔵 Expediente'], ['banc', '💳 Faltan datos bancarios'], ['baja', '⚫ Bajas'], ['reing', '🔁 Reingresos'], ['todos', 'Todos']];
 async function vHC() {
   await conReporte('HC', 'mochila', async () => {
     if (!R.vivo) { try { S.vigentes = await API.vigentes(); } catch (e) { } R.vivo = true; }
     await cargarCatPromotores();
     const rp = perRango(), tpor = new Map();   // tiendas donde checó cada promotor en el periodo filtrado
     try { (await checksRango(rp.desde, rp.hasta)).filter(c => c.estatus_final !== 'Otro Check').forEach(c => { if (!tpor.has(c.usuario)) tpor.set(c.usuario, new Map()); const m = tpor.get(c.usuario); m.set(c.idpdv, (m.get(c.idpdv) || 0) + 1); }); } catch (e) { console.warn('tiendas por promotor:', e); }
-    const rows = R.hc.filter(h => okI(h.ultimo_idpdv)).map(h => { const v = estadoVivo(h), u = R.uc[h.usuario] || {}, t = tienda(h.ultimo_idpdv), ant = h.fecha_alta ? diffD(HOY, h.fecha_alta) : null; return { ...h, v, u, t: t || {}, ant, tipo: tipoIngreso(h, ant), antL: antLabel(ant), alerta: S.alertas.find(a => a.usuario === h.usuario), tdas: tpor.get(h.usuario) || new Map(), cat: catActual(h.usuario) }; });
-    const vis = rows.filter(q => R.incBaja || q.v.e !== 'Baja'), cnt = {}; vis.forEach(q => cnt[q.v.e] = (cnt[q.v.e] || 0) + 1);
+    let fases = new Map(); try { fases = new Map((await API.altasFases()).map(f => [f.usuario, f])); } catch (e) { }
+    const enHC = new Set(R.hc.map(h => h.usuario)), extra = [...fases.values()].filter(f => !enHC.has(f.usuario)).map(f => ({ usuario: f.usuario, nombre: f.nombre, fecha_alta: f.fecha_ingreso, ultimo_check: null, ultimo_idpdv: f.idpdv, rol: 'Promotor', empresa: f.empresa, tipo_ingreso: f.tipo_ingreso }));
+    const rows = R.hc.concat(extra).filter(h => okI(h.ultimo_idpdv)).map(h => { const v = estadoVivo(h), u = R.uc[h.usuario] || {}, t = tienda(h.ultimo_idpdv), ant = h.fecha_alta ? diffD(HOY, h.fecha_alta) : null; return { ...h, v, u, t: t || {}, ant, tipo: tipoIngreso(h, ant), antL: antLabel(ant), alerta: S.alertas.find(a => a.usuario === h.usuario), tdas: tpor.get(h.usuario) || new Map(), cat: catActual(h.usuario), fs: fases.get(h.usuario) || null }; });
+    const enGrupo = (q, g) => g === 'todos' ? true : g === 'baja' ? q.v.e === 'Baja' : g === 'completos' ? !q.fs && q.v.e !== 'Baja' : g === 'posible' ? q.v.e === 'Posible baja' : g === 'alta' ? !!q.fs && q.fs.fase === 'Alta' : g === 'exp' ? !!q.fs && q.fs.fase === 'Expediente' : g === 'banc' ? !!q.fs && !q.fs.banc_ok : g === 'reing' ? q.tipo === 'Reingreso' : true;
+    const vis = rows.filter(q => enGrupo(q, HCF.grupo)), cnt = {}; vis.forEach(q => cnt[q.v.e] = (cnt[q.v.e] || 0) + 1);
     const ausN = vis.filter(q => !['Activo', 'Descanso / falta / error', 'Posible baja', 'Baja', 'Sin check'].includes(q.v.e)), nuevos = vis.filter(q => q.tipo === 'Nuevo ingreso').length, adap = vis.filter(q => q.tipo === 'Adaptación').length;
     const ests = [...new Set(vis.map(q => q.v.e))].sort(), emps = [...new Set(vis.map(q => q.empresa).filter(Boolean))].sort();
     const tabla = vis.filter(q => (!HCF.est || q.v.e === HCF.est) && (!HCF.tipo || q.tipo === HCF.tipo) && (!HCF.ant || q.antL === HCF.ant) && (!HCF.emp || q.empresa === HCF.emp) && (!HCF.cat || (q.cat ? q.cat.categoria : 'Sin categoría') === HCF.cat));
     let h = cab('HC · plantilla de promotoría', 'Promotores y cubre-descansos con su último check y estatus. El estatus se actualiza en vivo con las ausencias y bajas que RH captura en Posibles bajas.', 'mochila') + barraFiltros('vHC');
-    h += `<div class="tools"><button class="chip ${R.incBaja ? 'on' : ''}" onclick="R.incBaja=!R.incBaja;vHC()">Incluir bajas</button><span class="muted">${fmt(vis.length)} promotores · publicado ${esc(R.meta.generado)} · las columnas de tiendas usan el periodo de arriba</span></div>`;
+    h += `<div class="tools" data-nocap>${HC_GRUPOS.map(([k, n]) => `<button class="chip ${HCF.grupo === k ? 'on' : ''}" onclick="HCF.grupo='${k}';vHC()">${n} (${rows.filter(q => enGrupo(q, k)).length})</button>`).join('')}</div><div class="tools"><span class="muted">${fmt(vis.length)} promotores · publicado ${esc(R.meta.generado)} · las columnas de tiendas usan el periodo de arriba</span></div>`;
     h += `<div class="kpis">${kp('Plantilla', fmt(vis.filter(q => q.v.e !== 'Baja').length), 'sin bajas', null, null, '👥')}${kp('Activos hoy', fmt(cnt['Activo'] || 0), pc1(cnt['Activo'] || 0, vis.length), C.gr, null, '🟢')}${kp('Descanso / falta', fmt(cnt['Descanso / falta / error'] || 0), 'último check ayer', C.am, null, '🟠')}${kp('Posible baja', fmt(cnt['Posible baja'] || 0), '2 o más días sin check', C.rd, "ir('bandeja')", '🔴')}${kp('Con ausencia', fmt(ausN.length), 'vacaciones, incapacidad…', C.bl, "ir('vigentes')", '🏖️')}${kp('Nuevo ingreso', fmt(nuevos), 'menos de 2 semanas · arranque rápido', C.rd, null, '🆕')}${kp('Adaptación', fmt(adap), '2 a 4 semanas', C.am, null, '🌱')}</div>`;
     h += `<div class="grid g2"><div class="card"><h3>🚦 Estatus de la plantilla</h3>${donut(Object.entries(cnt).map(([k, v]) => ({ n: (ACTI[k] || '') + ' ' + k, v, c: k === 'Activo' ? C.gr : k === 'Posible baja' ? C.rd : k === 'Descanso / falta / error' ? C.am : k === 'Baja' ? C.gy : C.bl })), { sub: 'promotores' })}</div>
       <div class="card"><h3>⏳ Antigüedad</h3><p class="note">Menos de 2 semanas = nuevo ingreso: requiere arranque rápido (visita del supervisor, básicos y capacitación práctica).</p>${hbars(ANTB.map(b => ({ n: b[0], v: vis.filter(q => q.ant != null && q.ant >= b[1] && q.ant <= b[2]).length, c: b[3] })), C.pu)}</div></div>`;
     TB = {};
     h += sect('Promotores', '👥') + `<div class="tools" data-nocap><select onchange="HCF.est=this.value;vHC()"><option value="">Todos los estatus</option>${ests.map(e => `<option ${HCF.est === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select><select onchange="HCF.tipo=this.value;vHC()"><option value="">Todo tipo de ingreso</option>${['Nuevo ingreso', 'Adaptación', 'Reingreso', 'Normal'].map(e => `<option ${HCF.tipo === e ? 'selected' : ''}>${e}</option>`).join('')}</select><select onchange="HCF.ant=this.value;vHC()"><option value="">Toda antigüedad</option>${ANTB.map(b => `<option ${HCF.ant === b[0] ? 'selected' : ''}>${b[0]}</option>`).join('')}</select><select onchange="HCF.cat=this.value;vHC()"><option value="">Toda categoría (Avance)</option>${[...CATS, 'Sin categoría'].map(e => `<option ${HCF.cat === e ? 'selected' : ''}>${e}</option>`).join('')}</select><select onchange="HCF.emp=this.value;vHC()"><option value="">Toda razón social</option>${emps.map(e => `<option ${HCF.emp === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>`;
     h += tbl('t-hc', [{ h: 'Usuario', t: 1, v: q => q.usuario, w: 120 }, { h: 'Nombre', t: 1, v: q => q.nombre, w: 230, r: q => `<b>${esc(q.nombre)}</b>` },
-      { h: 'Estatus', t: 1, v: q => q.v.e, w: 250, r: q => { const pend = ['Posible baja', 'Descanso / falta / error'].includes(q.v.e) && q.alerta && can('alertas', 'editar'); return `<div class="est-c"><div class="est-r">${pillx((ACTI[q.v.e] || '🔵') + ' ' + esc(q.v.e), ACTC[q.v.e] || 'b')}${pend ? `<button class="rsv" onclick="resolverDesdeHC(${q.alerta.id})">Resolver ›</button>` : ''}</div>${q.v.det ? `<small class="muted">${esc(q.v.det)}</small>` : ''}</div>`; } },
+      { h: 'Estatus', t: 1, v: q => q.v.e, w: 250, r: q => { return `<div class="est-c"><div class="est-r">${pillx((ACTI[q.v.e] || '🔵') + ' ' + esc(q.v.e), ACTC[q.v.e] || 'b')}</div>${q.v.det ? `<small class="muted">${esc(q.v.det)}</small>` : ''}</div>`; } },
       { h: 'Categoría Avance GB', t: 1, w: 150, v: q => q.cat ? CATS.indexOf(q.cat.categoria) : 99, r: q => q.cat ? `${catPill(q.cat.categoria)}<br><small class="muted">${esc(q.cat.semana)} · ${catHist(q.usuario)}</small>` : '<span class="muted">Sin dato</span>' },
-      { h: 'Tipo de ingreso', t: 1, v: q => q.tipo, r: q => pillx((TIPC[q.tipo][1] + ' ' + q.tipo).trim(), TIPC[q.tipo][0]) }, { h: 'Antigüedad', t: 1, v: q => q.ant, r: q => q.ant == null ? '—' : `<b>${esc(q.antL)}</b><br><small class="muted">${Math.floor(q.ant / 7)} sem · ${q.ant} d</small>` },
+      { h: 'Fase del alta', t: 1, v: q => q.fs ? q.fs.fase : 'Completo', r: q => q.fs ? `${pillx(FASEC[q.fs.fase][1], FASEC[q.fs.fase][0])}${q.fs.banc_ok ? '' : '<br><small class="muted">sin datos bancarios</small>'}` : '<span class="muted">Completo</span>' }, { h: 'Tipo de ingreso', t: 1, v: q => q.tipo, r: q => pillx((TIPC[q.tipo][1] + ' ' + q.tipo).trim(), TIPC[q.tipo][0]) }, { h: 'Antigüedad', t: 1, v: q => q.ant, r: q => q.ant == null ? '—' : `<b>${esc(q.antL)}</b><br><small class="muted">${Math.floor(q.ant / 7)} sem · ${q.ant} d</small>` },
       { h: 'Fecha de ingreso', v: q => q.fecha_alta, r: q => fdate(q.fecha_alta) }, { h: 'Baja anterior', v: q => q.tipo_ingreso === 'Reingreso' ? q.baja_final : null, r: q => q.tipo_ingreso === 'Reingreso' ? fdate(q.baja_final) : '—' },
       { h: 'Último check', v: q => q.ultimo_check, r: q => fdate(q.ultimo_check) + (q.u.hora_in ? `<br><small class="muted">${hh(q.u.hora_in)} – ${hh(q.u.hora_out)}</small>` : '') }, { h: 'Tipo de check', t: 1, v: q => q.rol, r: q => esc(q.rol || '—') + (q.u.estatus_check ? `<br><small class="muted">${esc((ERRI[q.u.estatus_check] || '') + ' ' + (ERRN[q.u.estatus_check] || q.u.estatus_check))}</small>` : '') },
       { h: 'Tiendas en el periodo', v: q => q.tdas.size, r: q => q.tdas.size > 1 ? `<span class="cell-amber"><b>${q.tdas.size}</b> 🔀</span>` : String(q.tdas.size || 0) }, { h: 'Dónde checó (periodo)', t: 1, w: 320, v: q => [...q.tdas.keys()].map(i => (tienda(i) || {}).nombre || i).join(' · '), r: q => [...q.tdas].sort((a, b) => b[1] - a[1]).map(([i, n]) => `${esc((tienda(i) || {}).nombre || 'IDPDV ' + i)} <small class="muted">(${n})</small>`).join('<br>') || '—' },
@@ -1014,7 +1018,7 @@ Demo.candidatos = async function (desde, hasta) {
 };
 Demo.insertarCandidatos = async function (rows) { await new Promise(r => setTimeout(r, 300)); rows.forEach(r => Demo._cands.push({ id: 'N' + Math.random(), reagendas: 0, estatus: 'Programado', ...r })); return rows.length; };
 Demo.confirmarIngreso = async function (id, datos, hora) { const c = Demo._cands.find(x => x.id === id); Object.assign(c, { estatus: 'Ingresó', hora_ingreso: hora, telefono: datos.telefono, nombre: [datos.nombre_pila, datos.apellido_p, datos.apellido_m].filter(Boolean).join(' ').toUpperCase() }); };
-Demo.datosCandidato = async function () { return null };
+Demo.datosCandidato = async function (id) { const c = (Demo._cands || []).find(x => x.id === id) || {}; return { nombre_pila: 'JUAN', apellido_p: 'PEREZ', apellido_m: 'LOPEZ', correo: 'juan@correo.com', fecha_nacimiento: '1995-03-14', genero: 'Hombre', estado_civil: 'Soltero(a)', rfc: null, telefono: c.telefono || '5512345678' }; };
 Demo.eliminarCandidato = async function (id) { Demo._cands = Demo._cands.filter(x => x.id !== id); };
 Demo.actualizarCandidato = async function (id, patch) { const c = Demo._cands.find(x => x.id === id); Object.assign(c, patch); };
 
@@ -1540,7 +1544,7 @@ function encuestaDeBaja(id) {
    Alta: sale de un candidato que "Ingresó" (precargado) o se captura directa. Crea el colaborador, el movimiento de alta, guarda los datos sensibles
    (tabla aparte: solo RH y administración, nunca en reportes) y abre los pendientes de Expediente, Datos bancarios y CSF a 7 días.
    Expedientes: semáforo de pendientes por colaborador; cada responsable ve los de su estado. */
-const AL = { pend: null, ult: null, emp: [], pre: null };
+const AL = { pend: null, ult: null, fases: [], emp: [], pre: null, tab: '', cs: null };
 const PLAZO_DOCS = 7;
 const DOCS = ['Expediente', 'Datos bancarios', 'CSF'];
 /* checklist del expediente: [documento, obligatorio]. Los archivos viven en OneDrive/Drive; aquí se guarda el enlace y la validación */
@@ -1572,7 +1576,7 @@ Real.altasPend = async function () {
 };
 Real.altasUltimas = async function () {
   const q = cols => todo(() => sb.from('colaboradores').select(cols).gte('fecha_ingreso', addD(HOY, -45)).order('fecha_ingreso', { ascending: false }).limit(400));
-  try { return await q('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,tipo_ingreso,estatus'); } catch (e) { return await q('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,estatus'); } // antes de correr schema_v08 no existe tipo_ingreso
+  try { return await q('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,tipo_ingreso,estatus,fase'); } catch (e) { return await q('usuario_fieldwy,nombre,empresa,idpdv,fecha_ingreso,estatus'); } // antes de correr schema_v08 no existe tipo_ingreso
 };
 Real.empresas = async function () { const { data } = await sb.from('colaboradores').select('empresa').not('empresa', 'is', null).limit(3000); return [...new Set((data || []).map(x => x.empresa))].sort(); };
 Real.registrarAlta = async function (d) {
@@ -1602,83 +1606,138 @@ Real.guardarDoc = async function (usuario, tipo, url) { const { error } = await 
 Real.validarDoc = async function (usuario, tipo, estatus, nota) { const { data: u } = await sb.auth.getUser(); const { error } = await sb.from('expediente_docs').update({ estatus, nota: nota || null, validado_por: u.user.id, validado_en: new Date().toISOString() }).eq('usuario_fieldwy', usuario).eq('tipo', tipo); if (error) throw error; };
 Real.cerrarPendientes = async function (usuario, tipos) { if (!tipos.length) return; const { data: u } = await sb.auth.getUser(); await sb.from('pendientes_documentos').update({ estatus: 'Recibido', recibido_en: HOY, recibido_por: u.user.id }).eq('usuario_fieldwy', usuario).eq('estatus', 'Pendiente').in('tipo', tipos); };
 
-/* ----- ALTAS ----- */
+/* ----- ALTAS por fases -----
+   Fase 1 · Usuario Fieldway: quien genera usuarios (nómina) ve los datos del ingreso confirmado, escribe el usuario Fieldway, razón social, tipo de sueldo, IMSS e Infonavit y guarda: desde ahí ya está en el HC.
+   Fase 2 · Datos personales y bancarios: RH captura CURP, NSS, talla, Infonavit sí/no y datos bancarios (o los omite por ahora). Cuando están completos pasa a Expediente.
+   Fase 3 · Expediente: se aprueban los documentos; con expediente aprobado y datos bancarios pasa a Completo y sale de Altas. Siempre se puede regresar de fase para corregir. */
+Real.altasFases = async function () { const { data, error } = await sb.rpc('altas_pendientes'); if (error) throw error; return data || []; };
+Real.sensiblesDe = async function (u) { const { data, error } = await sb.from('datos_sensibles').select('*').eq('usuario_fieldwy', u).maybeSingle(); if (error) throw error; return data; };
+Real.altaRegistrar = async function (a) { return Real.finRpc('alta_registrar', a); };
+Real.altaCompletar = async function (a) { return Real.finRpc('alta_completar', a); };
+Real.altaRegresar = async function (u, m) { return Real.finRpc('alta_regresar', { p_usuario: u, p_motivo: m }); };
+Real.perfilDe = async function (u) { const { data, error } = await sb.from('baja_perfil').select('*').eq('usuario_fieldwy', u).order('fecha_baja', { ascending: false }).limit(1); if (error) throw error; return (data || [])[0] || null; };
+const DEMO_FASES = [];
+Demo.altasFases = async () => DEMO_FASES.slice(); Demo.sensiblesDe = async () => ({ nombre_pila: 'JUAN', apellido_p: 'PEREZ', apellido_m: 'LOPEZ', fecha_nacimiento: '1995-03-14', genero: 'Hombre' }); Demo.perfilDe = async () => null;
+Demo.altaRegistrar = async a => { const c = (typeof DA !== 'undefined' && DA.c) ? DA.c.find(x => x.id === a.p_candidato) : null; if (c) c.usuario_fieldwy = a.p_usuario; DEMO_FASES.push({ usuario: String(a.p_usuario).toUpperCase(), nombre: c ? c.nombre : 'ALTA DIRECTA', empresa: a.p_empresa, idpdv: a.p_idpdv || (c && c.idpdv), fecha_ingreso: HOY, fase: 'Alta', bancarios_omitidos: false, tipo_sueldo: a.p_tipo_sueldo, curp_ok: false, nss_ok: false, talla_ok: false, infonavit_ok: false, banc_ok: false, expediente_ok: false }); return { usuario: a.p_usuario }; };
+Demo.altaCompletar = async a => { const f = DEMO_FASES.find(x => x.usuario === a.p_usuario); const v = a.p_sens || {}; if (v.curp) f.curp_ok = true; if (v.nss) f.nss_ok = true; if (v.talla) f.talla_ok = true; if (v.infonavit != null && v.infonavit !== '') f.infonavit_ok = true; if (a.p_banc && a.p_banc.clabe) f.banc_ok = true; if (a.p_omitir_banc) f.bancarios_omitidos = true;
+  const faltan = []; if (!f.curp_ok) faltan.push('CURP'); if (!f.nss_ok) faltan.push('NSS'); if (!f.talla_ok) faltan.push('talla'); if (!f.infonavit_ok) faltan.push('Infonavit (sí/no)'); if (!f.banc_ok && !f.bancarios_omitidos) faltan.push('datos bancarios (captúralos u omítelos)'); if (!faltan.length && f.fase === 'Alta') f.fase = 'Expediente'; return { fase: f.fase, faltan }; };
+Demo.altaRegresar = async u => { const f = DEMO_FASES.find(x => x.usuario === u); f.fase = f.fase === 'Expediente' ? 'Alta' : f.fase; return f.fase; };
+
+const AL_TABS = [['usuario', '1 · Usuario Fieldway'], ['datos', '2 · Datos personales y bancarios'], ['exp', '3 · Expediente'], ['hist', '📜 Altas recientes']];
+const FASEC = { 'Alta': ['a', '🟠 Alta'], 'Expediente': ['b', '🔵 Expediente'], 'Completo': ['g', '🟢 Completo'] };
+const puedeUsuario = () => can('colaboradores', 'crear') && can('sueldos', 'editar');   // nómina, analista y administrador
+const faltanDe = f => [!f.curp_ok && 'CURP', !f.nss_ok && 'NSS', !f.talla_ok && 'Talla', !f.infonavit_ok && 'Infonavit', !f.banc_ok && !f.bancarios_omitidos && 'Bancarios'].filter(Boolean);
 async function vAltas() {
-  $('content').innerHTML = cab('Altas · nuevo ingreso', 'Da de alta a los candidatos que ingresaron: crea el colaborador, guarda sus datos y abre los pendientes de expediente a 7 días.', 'mochila') + '<div class="loading">Cargando…</div>';
-  try { [AL.pend, AL.ult] = await Promise.all([API.altasPend(), API.altasUltimas()]); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudo cargar: ${esc(e.message || e)}</div>`; return; }
-  const puede = can('colaboradores', 'crear'), ok = x => okT(tienda(x.idpdv) || null) || (!tienda(x.idpdv) && !Object.values(FL).some(Boolean));
-  const pend = AL.pend.filter(ok), ult = AL.ult.filter(ok);
-  let h = cab('Altas · nuevo ingreso', 'Da de alta a los candidatos que ingresaron: crea el colaborador, guarda sus datos y abre los pendientes de expediente a 7 días.', 'mochila') + barraFiltros('vAltas');
-  h += `<div class="kpis">${(puede ? kp('Por dar de alta', fmt(pend.length), 'candidatos que ingresaron (60 días)', pend.length ? C.rd : C.gr, null, '🆕') : '')}${kp('Altas últimos 45 días', fmt(ult.length), 'colaboradores creados', C.gr, null, '✅')}</div>`;
-  h += `<div class="tools">${puede ? '<button class="btn primary" onclick="altaNueva()">➕ Alta sin candidato</button>' : ''}<span class="muted">Los candidatos salen de Posibles ingresos cuando los marcas como "Ingresó".</span></div>`;
+  $('content').innerHTML = cab('Altas · nuevo ingreso', 'Cada ingreso pasa por fases: usuario Fieldway, datos personales y bancarios, expediente. No avanza a la siguiente hasta completar la anterior y se puede regresar para corregir.', 'mochila') + '<div class="loading">Cargando…</div>';
+  try { [AL.pend, AL.fases, AL.ult] = await Promise.all([API.altasPend(), API.altasFases(), API.altasUltimas()]); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudo cargar: ${esc(e.message || e)}</div>`; return; }
+  AL.tab = AL.tab || (puedeUsuario() ? 'usuario' : 'datos');
+  const ok = x => okT(tienda(x.idpdv) || null) || (!tienda(x.idpdv) && !Object.values(FL).some(Boolean));
+  const pend = AL.pend.filter(ok), fas = AL.fases.filter(ok), enA = fas.filter(f => f.fase === 'Alta'), enE = fas.filter(f => f.fase === 'Expediente'), ult = AL.ult.filter(ok), n = { usuario: pend.length, datos: enA.length, exp: enE.length, hist: ult.length };
+  let h = cab('Altas · nuevo ingreso', 'Cada ingreso pasa por fases: usuario Fieldway, datos personales y bancarios, expediente. No avanza a la siguiente hasta completar la anterior y se puede regresar para corregir.', 'mochila');
+  h += `<div class="kpis">${kp('Esperan usuario Fieldway', fmt(n.usuario), 'ingresos confirmados sin usuario', n.usuario ? C.rd : C.gr, "AL.tab='usuario';vAltas()", '1️⃣')}${kp('Faltan datos personales / bancarios', fmt(n.datos), 'ya tienen usuario y están en el HC', n.datos ? C.am : C.gr, "AL.tab='datos';vAltas()", '2️⃣')}${kp('En expediente', fmt(n.exp), 'documentos por aprobar', C.bl, "AL.tab='exp';vAltas()", '3️⃣')}</div>`;
+  h += `<div class="tools">${AL_TABS.map(([k, t]) => `<button class="chip ${AL.tab === k ? 'on' : ''}" onclick="AL.tab='${k}';vAltas()">${t} (${n[k]})</button>`).join('')}${puedeUsuario() ? '<button class="btn primary" onclick="altaUsuario()">➕ Alta sin candidato</button>' : ''}</div>`;
   TB = {};
-  h += await altasDiaHtml();
-  if (puede) h += sect('Candidatos que ingresaron y no tienen alta', '🆕') + tbl('t-alp', [
-    { h: 'Fecha de ingreso', v: c => c.fecha_programada, r: c => fdate(c.fecha_programada), w: 100 }, { h: 'Candidato', t: 1, v: c => c.nombre, w: 230, r: c => `<b>${esc(c.nombre)}</b>` },
-    { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: c => (tienda(c.idpdv) || {}).cadena }, { h: 'Estado', t: 1, v: c => (tienda(c.idpdv) || {}).estado }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh },
-    { h: '', v: () => '', r: c => puede ? `<button class="rsv" onclick="altaNueva('${c.id}')">Dar de alta ›</button>` : '' }], pend, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_pendientes', titulo: 'Candidatos por dar de alta', sort: 0, dir: -1, maxh: '50vh' });
-  h += sect('Altas recientes', '✅') + tbl('t-alu', [
-    { h: 'Ingreso', v: c => c.fecha_ingreso, r: c => fdate(c.fecha_ingreso), w: 96 }, { h: 'Usuario', t: 1, v: c => c.usuario_fieldwy, w: 130 }, { h: 'Colaborador', t: 1, v: c => c.nombre, r: c => `<b>${esc(c.nombre)}</b>` }, { h: 'Tipo', t: 1, v: c => c.tipo_ingreso || 'Nuevo' }, { h: 'Razón social', t: 1, v: c => c.empresa },
-    { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Región', t: 1, v: c => (tienda(c.idpdv) || {}).region }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh }, ...(can('expedientes', 'ver') ? [{ h: '', v: () => '', r: c => `<button class="rsv" onclick="expedienteAbrir('${c.usuario_fieldwy}')">Expediente ›</button>` }] : [])], ult, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_recientes', titulo: 'Altas recientes', sort: 0, dir: -1, maxh: '50vh' });
+  const loc = [{ h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: c => (tienda(c.idpdv) || {}).cadena }, { h: 'Estado', t: 1, v: c => (tienda(c.idpdv) || {}).estado }, { h: 'Supervisor', t: 1, v: c => (tienda(c.idpdv) || {}).supervisor }, { h: 'RR.HH.', t: 1, v: c => (tienda(c.idpdv) || {}).rrhh }];
+  if (AL.tab === 'usuario') h += sect('Ingresos confirmados que esperan su usuario Fieldway', '1️⃣') + `<p class="note">Salen de Posibles ingresos cuando se confirma que ingresaron (con su nombre, fecha de nacimiento, género, estado civil, correo y teléfono). Quien genera usuarios los ve aquí, escribe el usuario Fieldway y guarda: la persona pasa al HC y RH ya puede compartir el usuario.</p>` +
+    tbl('t-alp', [{ h: 'Fecha de ingreso', v: c => c.fecha_programada, r: c => fdate(c.fecha_programada) + (c.hora_ingreso ? ' ' + hh5(c.hora_ingreso) : ''), w: 120 }, { h: 'Candidato', t: 1, v: c => c.nombre, w: 230, r: c => `<b>${esc(c.nombre)}</b>` }, { h: 'Teléfono', t: 1, v: c => c.telefono }, ...loc,
+      { h: '', v: () => '', r: c => puedeUsuario() ? `<button class="rsv" onclick="altaUsuario('${c.id}')">Generar usuario ›</button>` : '<span class="muted">Lo genera nómina</span>' }], pend, { fix: 2, search: 1, csv: 1, png: 1, file: 'altas_esperan_usuario', titulo: 'Ingresos que esperan usuario Fieldway', sort: 0, dir: -1, maxh: '60vh' });
+  else if (AL.tab === 'datos') h += sect('Datos personales y bancarios por completar', '2️⃣') + `<p class="note">Ya tienen usuario y aparecen en el HC. Cuando estén CURP, NSS, talla, Infonavit (sí/no) y los datos bancarios (capturados u omitidos) pasan a Expediente. Puedes guardar con lo que tengas y seguir después.</p>` +
+    tbl('t-ald2', [{ h: 'Ingreso', v: c => c.fecha_ingreso, r: c => fdate(c.fecha_ingreso), w: 90 }, { h: 'Usuario', t: 1, v: c => c.usuario, w: 130, r: c => `<b>${esc(c.usuario)}</b>` }, { h: 'Colaborador', t: 1, v: c => c.nombre, w: 220, r: c => `<b>${esc(c.nombre)}</b>` },
+      { h: 'Falta', t: 1, v: c => faltanDe(c).length, r: c => faltanDe(c).map(x => pillx(x, 'a')).join(' ') || pillx('Completo', 'g') }, { h: 'Razón social', t: 1, v: c => c.empresa }, { h: 'Tipo de sueldo', t: 1, v: c => c.tipo_sueldo }, ...loc,
+      { h: '', v: () => '', r: c => (can('datos_sensibles', 'editar') || can('datos_sensibles', 'crear')) ? `<button class="rsv" onclick="altaCompletar('${c.usuario}')">Completar ›</button>` : '' }], enA, { fix: 3, search: 1, csv: 1, png: 1, file: 'altas_datos_pendientes', titulo: 'Altas con datos por completar', sort: 0, dir: 1, maxh: '60vh' });
+  else if (AL.tab === 'exp') h += sect('En expediente', '3️⃣') + `<p class="note">Los documentos se cargan y aprueban en <b>Expedientes</b>. Con el expediente aprobado y los datos bancarios capturados, el colaborador sale de Altas y queda Completo.</p>` +
+    tbl('t-alx', [{ h: 'Ingreso', v: c => c.fecha_ingreso, r: c => fdate(c.fecha_ingreso), w: 90 }, { h: 'Usuario', t: 1, v: c => c.usuario, w: 130 }, { h: 'Colaborador', t: 1, v: c => c.nombre, w: 220, r: c => `<b>${esc(c.nombre)}</b>` },
+      { h: 'Expediente', t: 1, v: c => c.expediente_ok ? 1 : 0, r: c => c.expediente_ok ? pillx('✔ Aprobado', 'g') : pillx('Pendiente', 'a') }, { h: 'Datos bancarios', t: 1, v: c => c.banc_ok ? 1 : 0, r: c => c.banc_ok ? pillx('✔ Capturados', 'g') : pillx(c.bancarios_omitidos ? 'Omitidos: faltan' : 'Faltan', 'r') }, ...loc,
+      { h: '', v: () => '', r: c => `${can('expedientes', 'ver') ? `<button class="rsv" onclick="expedienteAbrir('${c.usuario}')">Expediente ›</button>` : ''} ${can('colaboradores', 'editar') ? `<button class="rsv" onclick="altaRegresar('${c.usuario}')">↩ Regresar a datos</button>` : ''}` }], enE, { fix: 3, search: 1, csv: 1, png: 1, file: 'altas_en_expediente', titulo: 'Altas en expediente', sort: 0, dir: 1, maxh: '60vh' });
+  else h += sect('Altas recientes', '📜') + tbl('t-alu', [{ h: 'Ingreso', v: c => c.fecha_ingreso, r: c => fdate(c.fecha_ingreso), w: 96 }, { h: 'Usuario', t: 1, v: c => c.usuario_fieldwy, w: 130 }, { h: 'Colaborador', t: 1, v: c => c.nombre, r: c => `<b>${esc(c.nombre)}</b>` },
+      { h: 'Fase', t: 1, v: c => c.fase || 'Completo', r: c => { const f = FASEC[c.fase || 'Completo']; return pillx(f[1], f[0]); } }, { h: 'Tipo', t: 1, v: c => c.tipo_ingreso || 'Nuevo' }, { h: 'Razón social', t: 1, v: c => c.empresa }, ...loc,
+      ...(can('expedientes', 'ver') ? [{ h: '', v: () => '', r: c => `<button class="rsv" onclick="expedienteAbrir('${c.usuario_fieldwy}')">Expediente ›</button>` }] : [])], ult, { fix: 3, search: 1, csv: 1, png: 1, file: 'altas_recientes', titulo: 'Altas recientes', sort: 0, dir: -1, maxh: '60vh' });
   $('content').innerHTML = h; drawAll();
 }
 function tiendaOpts() { return Object.values(S.cat.tiendas).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es')).map(t => `<option value="${t.idpdv} · ${esc(t.nombre)} (${esc(t.cadena || '')} · ${esc(t.estado || '')})"></option>`).join(''); }
-async function altaNueva(candId) {
-  const c = candId ? AL.pend.find(x => x.id === candId) : null; AL.pre = c;
-  if (!AL.emp.length) { try { AL.emp = await API.empresas(); } catch (e) { } }
-  const t = c ? tienda(c.idpdv) : null, fld = (l, id, ph, ex) => `<div class="fld"><label>${l}</label><input id="al-${id}" ${ex || ''} placeholder="${ph || ''}"></div>`;
-  $('modal').innerHTML = `<div class="mbox wide" style="width:min(860px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>🆕 Alta de colaborador</h3>${c ? `<div class="who">Candidato: ${esc(c.nombre)} · ingresó el ${fdate(c.fecha_programada)}</div>` : ''}
-    <div class="row2">${fld('Usuario Fieldwy *', 'us', 'Ej. ABCD010203XYZ', 'autocomplete="off" style="text-transform:uppercase" onchange="altaAvisoRec()"')}${fld('Nombre(s) *', 'nom', '', '')}</div>
-    <div id="al-rec"></div>
-    <div class="row2">${fld('Apellido paterno *', 'ap')}${fld('Apellido materno', 'am')}</div>
-    <div class="row2"><div class="fld"><label>Fecha de ingreso *</label><input type="date" id="al-f" value="${c ? c.fecha_programada : HOY}"></div><div class="fld"><label>Tienda *</label><input id="al-t" list="al-tl" placeholder="Escribe IDPDV o nombre…" value="${t ? esc(c.idpdv + ' · ' + t.nombre + ' (' + (t.cadena || '') + ' · ' + (t.estado || '') + ')') : ''}"><datalist id="al-tl">${tiendaOpts()}</datalist></div></div>
-    <div class="row2"><div class="fld"><label>Razón social (empresa)</label><input id="al-emp" list="al-el" placeholder="Ej. Benber SS"><datalist id="al-el">${AL.emp.map(e => `<option value="${esc(e)}">`).join('')}</datalist></div><div class="fld"><label>Tipo de ingreso</label><select id="al-tipo"><option>Nuevo</option><option>Reingreso</option></select></div></div>
-    <div class="note">Reingreso: usa el <b>mismo usuario Fieldway</b> que tenía (debe estar en baja). Solo si no está cargado a la agencia, crea uno nuevo con <b>GB</b> al final.</div>
-    <details class="enc-d" open><summary>🔒 Datos personales (solo RH y administración)</summary><div class="enc-box">
-      <div class="row2">${fld('CURP', 'curp', '18 caracteres', 'maxlength="18" style="text-transform:uppercase"')}${fld('RFC', 'rfc', '12 o 13 caracteres', 'maxlength="13" style="text-transform:uppercase"')}</div>
-      <div class="row2">${fld('NSS (IMSS)', 'nss', '11 dígitos', 'inputmode="numeric" maxlength="11"')}${fld('Teléfono', 'tel', '10 dígitos', `inputmode="numeric" maxlength="10" value="${esc(c && c.telefono ? digs(c.telefono).slice(-10) : '')}"`)}</div>
-      <div class="row2">${fld('Correo', 'mail', 'nombre@correo.com', 'type="email"')}<div class="fld"><label>Estado civil</label><select id="al-ec"><option value="">—</option>${ESTADO_CIVIL.map(e => `<option>${e}</option>`).join('')}</select></div></div>
-      <div class="row2"><div class="fld"><label>¿Tiene crédito Infonavit?</label><select id="al-inf"><option value="">—</option><option>Sí</option><option>No</option></select></div>${fld('Monto Infonavit ($)', 'minf', '', 'type="number" min="0" step="0.01"')}<div class="fld"><label>Talla de uniforme</label><select id="al-talla"><option value="">—</option>${TALLAS.map(e => `<option>${e}</option>`).join('')}</select></div></div>
-      <div class="row2">${fld('Contacto de emergencia', 'emer', 'Nombre y teléfono')}${can('sueldos', 'editar') ? fld('Sueldo mensual ($)', 'suel', '', 'type="number" min="0" step="0.01"') : ''}</div>
-      <div class="row2"><div class="fld"><label>¿Asegurado (IMSS)?</label><select id="al-aseg"><option value="">—</option><option>Sí</option><option>No</option></select></div>${can('sueldos', 'editar') ? fld('Bono fijo ($)', 'bono', '', 'type="number" min="0" step="0.01"') : ''}</div>
-      <div class="row2">${fld('Canal', 'canal', 'Ej. Autoservicio')}</div></div></details>
-    ${can('datos_bancarios', 'crear') ? `<details class="enc-d"><summary>💳 Datos bancarios (pueden llegar después)</summary><div class="enc-box"><div class="row2">${fld('Banco', 'banco')}${fld('CLABE interbancaria', 'clabe', '18 dígitos', 'inputmode="numeric" maxlength="18"')}</div><div class="row2">${fld('Número de tarjeta', 'tarj', '', 'inputmode="numeric" maxlength="19"')}${fld('Cuenta', 'cta')}</div><div class="row2">${fld('Titular de la cuenta', 'titu', 'Si es otra persona')}${fld('Cuenta 2', 'cta2')}</div></div></details>` : '<div class="note">Los datos bancarios los captura personal autorizado desde <b>Sueldos y bancarios</b>.</div>'}
-    <div class="note">Al guardar se abren los pendientes <b>Expediente</b>, <b>Datos bancarios</b> y <b>CSF</b> con vencimiento a ${PLAZO_DOCS} días del ingreso. Los documentos se guardan fuera de la app (OneDrive o Drive).</div>
-    <div class="warn" id="al-warn" hidden></div>
-    <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="al-ok">Guardar alta</button></div></div>`;
-  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
-  $('al-ok').onclick = altaGuardar; setTimeout(() => $('al-us').focus(), 60);
-}
-/* reingresos: si el usuario ya tuvo una baja evaluada como "No recontratable" o "Con reservas", se avisa antes de darlo de alta */
-Real.perfilDe = async function (u) { const { data, error } = await sb.from('baja_perfil').select('*').eq('usuario_fieldwy', u).order('fecha_baja', { ascending: false }).limit(1); if (error) throw error; return (data || [])[0] || null; };
-Demo.perfilDe = async () => null;
+
+/* ---- fase 1: generar el usuario Fieldway ---- */
 let AL_REC = null;
-async function altaAvisoRec() {
-  const u = mayus(limpia(($('al-us') || {}).value)), box = $('al-rec'); AL_REC = null; if (!box) return; box.innerHTML = ''; if (u.length < 6) return;
+async function altaAvisoRec() {   // reingresos: si el usuario quedó como "No recontratable" o "Con reservas", se avisa antes de darlo de alta
+  const u = mayus(limpia(($('au-us') || {}).value)), box = $('au-rec'); AL_REC = null; if (!box) return; box.innerHTML = ''; if (u.length < 6) return;
   try { const p = await API.perfilDe(u); if (!p) return; AL_REC = p; const r = PF_REC[p.recontratable];
     box.innerHTML = `<div class="${p.recontratable === 'Sí' ? 'note' : 'warn'}">${r[1]} Este usuario ya tuvo una baja el ${fdate(p.fecha_baja)}: <b>${p.recontratable === 'Sí' ? 'recontratable' : p.recontratable === 'No' ? 'NO recontratable' : 'recontratable con reservas'}</b>${p.nota ? ' · ' + esc(p.nota) : ''}${p.resumen && p.resumen.veredicto ? ` · desempeño: ${esc(p.resumen.veredicto)}` : ''}.</div>`; } catch (e) { }
 }
-async function altaGuardar() {
-  const g = id => { const e = $('al-' + id); return e ? limpia(e.value) : ''; }, w = $('al-warn'), b = $('al-ok');
-  const us = mayus(g('us')), nom = g('nom'), f = g('f'), tt = g('t'), idp = parseInt(tt, 10), curp = mayus(g('curp')), rfc = mayus(g('rfc')), nss = digs(g('nss')), tel = digs(g('tel')), mail = g('mail').toLowerCase(), clabe = digs(g('clabe')), suel = g('suel');
-  const e = [];
-  if (!us) e.push('Falta el usuario Fieldwy.'); if (!nom) e.push('Falta el nombre.'); if (!g('ap')) e.push('Falta el apellido paterno.'); if (!f) e.push('Falta la fecha de ingreso.');
-  if (!idp || !tienda(idp)) e.push('Elige una tienda de la lista (empieza con su IDPDV).');
-  if (curp && !V.curp(curp)) e.push('La CURP no tiene un formato válido (18 caracteres).'); if (rfc && !V.rfc(rfc)) e.push('El RFC no tiene un formato válido.');
-  if (nss && !V.nss(nss)) e.push('El NSS debe tener 11 dígitos.'); if (tel && !V.tel(tel)) e.push('El teléfono debe tener 10 dígitos.'); if (mail && !V.mail(mail)) e.push('El correo no es válido.');
-  if (clabe && !V.clabe(clabe)) e.push('La CLABE no es válida (18 dígitos con dígito verificador correcto).');
+const copiaBtn = t => `<button type="button" class="rsv" onclick="navigator.clipboard.writeText('${esc(String(t || '')).replace(/'/g, "\\'")}').then(()=>toast('Copiado'))" title="Copiar">📋</button>`;
+async function altaUsuario(candId) {
+  const c = candId ? AL.pend.find(x => x.id === candId) : null; AL.pre = c; let d = null;
+  if (!AL.emp.length) { try { AL.emp = await API.empresas(); } catch (e) { } }
+  if (c) { try { d = await API.datosCandidato(candId); } catch (e) { } if (!d) { toast('Este ingreso no tiene sus datos de identidad: confírmalos en Posibles ingresos'); return; } }
+  const t = c ? tienda(c.idpdv) : null, fld = (l, id, ph, ex) => `<div class="fld"><label>${l}</label><input id="au-${id}" ${ex || ''} placeholder="${ph || ''}"></div>`;
+  const fila = (k, v) => `<tr><td class="t"><b>${k}</b></td><td class="t">${esc(v || '—')}</td><td>${v ? copiaBtn(v) : ''}</td></tr>`;
+  const datos = c ? `<div class="tw"><table class="dt"><tbody>${fila('Nombre(s)', d.nombre_pila)}${fila('Apellido paterno', d.apellido_p)}${fila('Apellido materno', d.apellido_m)}${fila('Correo', d.correo)}${fila('Fecha de nacimiento', d.fecha_nacimiento && fdate(d.fecha_nacimiento))}${fila('Género', d.genero)}${fila('Estado civil', d.estado_civil)}${fila('RFC', d.rfc)}${fila('Teléfono', d.telefono)}${fila('Tienda', t ? c.idpdv + ' · ' + t.nombre : '')}${fila('Fecha de ingreso', fdate(c.fecha_programada) + (c.hora_ingreso ? ' ' + hh5(c.hora_ingreso) : ''))}</tbody></table></div>` :
+    `<div class="note">Alta sin candidato: captura los mismos datos que pide Fieldway.</div>${identidadCampos(null, 'au-')}<div class="row2"><div class="fld"><label>Fecha de ingreso *</label><input type="date" id="au-f" value="${HOY}"></div><div class="fld"><label>Tienda *</label><input id="au-t" list="al-tl" placeholder="Escribe IDPDV o nombre…"><datalist id="al-tl">${tiendaOpts()}</datalist></div></div>`;
+  const veSueldo = can('sueldos', 'editar');
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(860px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>1️⃣ Generar usuario Fieldway</h3>${c ? `<div class="who">${esc(c.nombre)} · ingresó el ${fdate(c.fecha_programada)}</div>` : ''}${datos}
+    <div class="row2">${fld('Usuario Fieldway *', 'us', 'Ej. ABCD010203XYZ', 'autocomplete="off" style="text-transform:uppercase" onchange="altaAvisoRec()"')}<div class="fld"><label>Razón social (empresa)</label><input id="au-emp" list="au-el" placeholder="Ej. Benber SS"><datalist id="au-el">${AL.emp.map(e => `<option value="${esc(e)}">`).join('')}</datalist></div></div>
+    <div id="au-rec"></div>
+    <div class="row2"><div class="fld"><label>Tipo de sueldo *</label><select id="au-ts"><option value="">— elige —</option><option>Regular</option><option>Vida cara</option><option>Frontera</option></select></div><div class="fld"><label>¿Asegurado en el IMSS? *</label><select id="au-aseg"><option value="">— elige —</option><option>Sí</option><option>No</option></select></div></div>
+    <div class="row2">${fld('Monto de crédito Infonavit ($, si tiene)', 'minf', '', 'type="number" min="0" step="0.01"')}<div class="fld"><label>¿Es reingreso?</label><select id="au-tipo"><option value="">No, es nuevo</option><option>Reingreso</option></select></div></div>
+    ${veSueldo ? `<div class="row2">${fld('Sueldo ($, opcional)', 'suel', '', 'type="number" min="0" step="0.01"')}${fld('Bono fijo ($, opcional)', 'bono', '', 'type="number" min="0" step="0.01"')}</div>` : ''}
+    <div class="note">Reingreso: usa el <b>mismo usuario Fieldway</b> que tenía (debe estar en baja). Solo si no está cargado a la agencia, crea uno nuevo con <b>GB</b> al final.</div>
+    <div class="warn" id="au-warn" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="au-ok">Guardar usuario</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  $('au-ok').onclick = () => altaUsuarioGuardar(candId);
+}
+async function altaUsuarioGuardar(candId) {
+  const g = id => { const e = $('au-' + id); return e ? limpia(e.value) : ''; }, w = $('au-warn'), us = mayus(g('us')), e = [];
+  let datos = null, fecha = null, idp = null;
+  if (!candId) { datos = idLeer('au-'); e.push(...idErrores(datos)); fecha = g('f'); idp = parseInt(g('t'), 10); if (!fecha) e.push('Falta la fecha de ingreso.'); if (!idp || !tienda(idp)) e.push('Elige una tienda de la lista (empieza con su IDPDV).'); }
+  if (!us) e.push('Falta el usuario Fieldway.'); if (!g('ts') && !$('au-ts').value) e.push('Elige el tipo de sueldo.'); if (!$('au-aseg').value) e.push('Indica si será asegurado en el IMSS.');
   if (e.length) { w.hidden = false; w.innerHTML = e.map(esc).join('<br>'); return; }
   if (AL_REC && AL_REC.recontratable !== 'Sí' && AL_REC.usuario_fieldwy === us && !confirm('Este usuario quedó como ' + (AL_REC.recontratable === 'No' ? 'NO recontratable' : 'recontratable con reservas') + (AL_REC.nota ? ' (' + AL_REC.nota + ')' : '') + '.\n¿Confirmas que quieres darlo de alta?')) return;
-  const tarj = digs(g('tarj')), ap = mayus(g('ap')), am = mayus(g('am')), npila = mayus(nom), minf = g('minf'), bono = g('bono');
-  const sens = { curp: curp || null, rfc: rfc || null, nss: nss || null, correo: mail || null, telefono: tel || null, estado_civil: $('al-ec').value || null, infonavit: $('al-inf').value ? $('al-inf').value === 'Sí' : null, contacto_emergencia: g('emer') || null, talla: $('al-talla').value || null,
-    apellido_p: ap || null, apellido_m: am || null, nombre_pila: npila || null, monto_infonavit: minf ? +minf : null, asegurado: $('al-aseg').value ? $('al-aseg').value === 'Sí' : null, canal: g('canal') || null };
-  const banc = { banco: g('banco'), titular: g('titu'), clabe, cuenta: digs(g('cta')), cuenta2: digs(g('cta2')), tarjeta: tarj };   // van a datos_bancarios (función con validación y permisos)
-  const sueldo = suel !== '' ? { monto: +suel, bono: bono !== '' ? +bono : null } : null;                                          // va a sueldos_historial (solo quien puede editar sueldos)
-  b.disabled = true; b.textContent = 'Guardando…';
+  const suel = g('suel'), bono = g('bono'), minf = g('minf'); $('au-ok').disabled = true;
   try {
-    const res = await API.registrarAlta({ usuario: us, nombre: [npila, ap, am].filter(Boolean).join(' '), fecha: f, idpdv: idp, empresa: g('emp'), tipo: $('al-tipo').value, candidato: AL.pre ? AL.pre.id : null, sens, banc, sueldo });
-    cerrarM(); toast((res && res.reingreso ? 'Reingreso registrado: ' : 'Alta registrada: ') + nom + (res && res.nota ? ' · ' + res.nota : '')); vAltas();
-  } catch (x) { b.disabled = false; b.textContent = 'Reintentar'; w.hidden = false; w.textContent = x.message || String(x); }
+    const r = await API.altaRegistrar({ p_candidato: candId || null, p_datos: datos, p_fecha: fecha, p_idpdv: idp, p_usuario: us, p_empresa: g('emp') || null, p_tipo_sueldo: $('au-ts').value, p_sueldo: suel !== '' ? { monto: suel, bono: bono !== '' ? bono : '' } : null,
+      p_monto_infonavit: minf !== '' ? +minf : null, p_asegurado: $('au-aseg').value === 'Sí', p_tipo: $('au-tipo').value || null });
+    cerrarM(); toast('Usuario ' + us + ' guardado: ya está en el HC y pasa a Datos personales y bancarios' + (r && r.nota ? ' · ' + r.nota : '')); AL.tab = 'datos'; vAltas();
+  } catch (x) { $('au-ok').disabled = false; w.hidden = false; w.textContent = 'No se pudo guardar: ' + (x.message || x); }
+}
+
+/* ---- fase 2: datos personales y bancarios (RH) ---- */
+async function altaCompletar(usuario) {
+  const f = AL.fases.find(x => x.usuario === usuario) || {}; let s = null; try { s = await API.sensiblesDe(usuario); } catch (e) { toast('No se pudieron leer sus datos: ' + (e.message || e)); return; } s = s || {};
+  const v = k => esc(s[k] == null ? '' : s[k]), nombreFull = [s.nombre_pila, s.apellido_p, s.apellido_m].filter(Boolean).join(' ') || f.nombre || '';
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(820px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>2️⃣ Datos personales y bancarios</h3><div class="who">${esc(f.nombre || nombreFull)} · ${esc(usuario)}</div>
+    <div class="note">${faltanDe(f).length ? 'Falta: <b>' + faltanDe(f).join(', ') + '</b>.' : 'Tiene todo lo necesario.'} Puedes guardar con lo que tengas y completar después.</div>
+    <div class="fld"><label>CURP (18 caracteres)</label><div class="rfc-row"><input id="ac-curp" maxlength="18" style="text-transform:uppercase" value="${v('curp')}" autocomplete="off"><select id="ac-edo" title="Estado de nacimiento (solo para generar la base)"><option value="">Estado de nacimiento…</option>${ESTADOS_NAC.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select><button type="button" class="btn sm" onclick="altaCurpBase()">⚙️ Generar base (16)</button></div><small class="muted">La base sale del nombre, fecha de nacimiento, género y estado. Los 2 últimos caracteres (diferenciador y dígito verificador) los da RENAPO: se escriben a mano.</small></div>
+    <div class="row2"><div class="fld"><label>NSS (11 dígitos)</label><input id="ac-nss" inputmode="numeric" maxlength="11" value="${v('nss')}"><small class="muted">Si no se obtiene de la página del IMSS, captúralo a mano.</small></div>
+      <div class="fld"><label>Talla de uniforme</label><select id="ac-talla"><option value="">— elige —</option>${TALLAS.map(t => `<option ${s.talla === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
+    <div class="row2"><div class="fld"><label>¿Tiene crédito Infonavit?</label><select id="ac-inf"><option value="">— elige —</option><option value="true" ${s.infonavit === true ? 'selected' : ''}>Sí</option><option value="false" ${s.infonavit === false ? 'selected' : ''}>No</option></select><small class="muted">El monto lo asigna quien genera el usuario.</small></div>
+      <div class="fld"><label>Contacto y teléfono de emergencia</label><input id="ac-emer" value="${v('contacto_emergencia')}" placeholder="Nombre y teléfono"></div></div>
+    ${sect('Datos bancarios', '💳')}${f.banc_ok ? '<div class="note">Ya tiene datos bancarios capturados. Para corregirlos usa Expedientes → Datos bancarios.</div>' : `<div class="row2"><div class="fld"><label>Banco</label><input id="ac-banco"></div><div class="fld"><label>Titular de la cuenta</label><input id="ac-titu" value="${esc(nombreFull)}"></div></div>
+    <div class="row2"><div class="fld"><label>CLABE (18 dígitos)</label><input id="ac-clabe" inputmode="numeric" maxlength="18"></div><div class="fld"><label>Número de cuenta (si aplica)</label><input id="ac-cta"></div></div>
+    <div class="fld"><label>Número de tarjeta (si aplica)</label><input id="ac-tarj" inputmode="numeric" maxlength="16"></div><label class="chk"><input type="checkbox" id="ac-omit" ${f.bancarios_omitidos ? 'checked' : ''}> Omitir los datos bancarios por ahora (quedan pendientes y se completan desde Expedientes)</label>`}
+    <div class="warn" id="ac-warn" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="ac-ok">Guardar</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); }; AL.cs = s;
+  $('ac-ok').onclick = () => altaCompletarGuardar(usuario, f);
+}
+function altaCurpBase() {
+  const s = AL.cs || {}, b = curpBase(s.nombre_pila, s.apellido_p, s.apellido_m, s.fecha_nacimiento, s.genero, $('ac-edo').value);
+  if (!b) { toast('Para generar la base se necesitan nombre, apellidos, fecha de nacimiento, género y el estado de nacimiento'); return; }
+  const cur = $('ac-curp').value.toUpperCase(); $('ac-curp').value = b + (cur.length > 16 ? cur.slice(16) : ''); $('ac-curp').focus();
+}
+async function altaCompletarGuardar(usuario, f) {
+  const g = id => { const e = $('ac-' + id); return e ? limpia(e.value) : ''; }, w = $('ac-warn'), e = [], curp = mayus(g('curp')), nss = digs(g('nss')), clabe = digs(g('clabe'));
+  if (curp && !V.curp(curp)) e.push('La CURP debe tener 18 caracteres con formato válido (la base se genera y se completa a mano).'); if (nss && !V.nss(nss)) e.push('El NSS debe tener 11 dígitos.'); if (clabe && !V.clabe(clabe)) e.push('La CLABE no es válida (18 dígitos con dígito verificador correcto).');
+  if (e.length) { w.hidden = false; w.innerHTML = e.map(esc).join('<br>'); return; }
+  const sens = { curp, nss, talla: g('talla'), infonavit: $('ac-inf').value, contacto_emergencia: g('emer') }; Object.keys(sens).forEach(k => { if (sens[k] === '') delete sens[k]; });
+  const banc = f.banc_ok ? {} : { banco: g('banco'), titular: g('titu'), clabe, cuenta: digs(g('cta')), tarjeta: digs(g('tarj')) }; const tieneB = [banc.banco, banc.clabe, banc.cuenta, banc.tarjeta].some(x => x);
+  if (tieneB && !clabe) { w.hidden = false; w.textContent = 'Para guardar datos bancarios escribe la CLABE (o márcalos como omitidos).'; return; }
+  $('ac-ok').disabled = true;
+  try {
+    const r = await API.altaCompletar({ p_usuario: usuario, p_sens: sens, p_banc: tieneB ? banc : {}, p_omitir_banc: !tieneB && !!($('ac-omit') && $('ac-omit').checked) });
+    cerrarM(); toast(r.faltan && r.faltan.length ? 'Guardado. Todavía falta: ' + r.faltan.join(', ') : r.fase === 'Completo' ? 'Alta completa' : 'Datos completos: pasa a Expediente'); vAltas();
+  } catch (x) { $('ac-ok').disabled = false; w.hidden = false; w.textContent = 'No se pudo guardar: ' + (x.message || x); }
+}
+async function altaRegresar(usuario) {
+  const m = prompt('¿Por qué se regresa a la fase anterior? (mínimo 5 caracteres)', ''); if (m === null) return; if (limpia(m).length < 5) { toast('Escribe el motivo'); return; }
+  try { const a = await API.altaRegresar(usuario, limpia(m)); toast('Regresó a ' + a); vAltas(); } catch (e) { toast(e.message || e); }
 }
 
 /* ----- EXPEDIENTES: semáforo de pendientes ----- */
@@ -1708,24 +1767,6 @@ async function docRecibido(id) {
   if (limpia(url) && !urlSegura(url)) { toast('El enlace debe empezar con https://'); return; }
   try { await API.marcarDoc(id, limpia(url)); EXP.lista = EXP.lista.filter(x => x.id !== id); toast('Marcado como recibido'); vExpedientes(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); }
 }
-
-/* ----- altas del día (para quien crea los usuarios de Fieldwy) ----- */
-let ALD = { dia: null, lista: [] };
-async function altasDiaHtml() {
-  ALD.dia = ALD.dia || HOY; let rows = [];
-  try { rows = await API.altasDia(ALD.dia); } catch (e) { return `<div class="warn">No se pudieron cargar las altas del día: ${esc(e.message || e)}</div>`; }
-  ALD.lista = rows = rows.map(r => ({ ...r, s: (Array.isArray(r.datos_sensibles) ? r.datos_sensibles[0] : r.datos_sensibles) || {} }));
-  const sens = can('datos_sensibles', 'ver'), edita = can('colaboradores', 'editar'), pend = rows.filter(r => !r.usuario_creado_en).length;
-  const cols = [
-    { h: 'Hora', v: r => r.creado_en, r: r => r.creado_en ? new Date(r.creado_en).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—', w: 70 }, { h: 'Usuario Fieldwy', t: 1, v: r => r.usuario_fieldwy, w: 150, r: r => `<b>${esc(r.usuario_fieldwy)}</b>` },
-    { h: 'Nombre', t: 1, v: r => r.nombre, r: r => `<b>${esc(r.nombre)}</b>` }, { h: 'Tipo', t: 1, v: r => r.tipo_ingreso || 'Nuevo' }, { h: 'Tienda', t: 1, v: r => (tienda(r.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: r => (tienda(r.idpdv) || {}).cadena }, { h: 'Estado', t: 1, v: r => (tienda(r.idpdv) || {}).estado },
-    { h: 'Supervisor', t: 1, v: r => (tienda(r.idpdv) || {}).supervisor }, { h: 'Razón social', t: 1, v: r => r.empresa },
-    ...(sens ? [{ h: 'Teléfono', t: 1, v: r => r.s.telefono }, { h: 'Correo', t: 1, v: r => r.s.correo }, { h: 'CURP', t: 1, v: r => r.s.curp }, { h: 'RFC', t: 1, v: r => r.s.rfc }, { h: 'NSS', t: 1, v: r => r.s.nss }] : []),
-    { h: 'Usuario creado', v: r => r.usuario_creado_en ? 1 : 0, r: r => r.usuario_creado_en ? `<span class="pill g">✔ ${fdate(r.usuario_creado_en.slice(0, 10))}</span>${edita ? ` <button class="rsv" onclick="usuarioCreado('${r.usuario_fieldwy}',false)">Deshacer</button>` : ''}` : (edita ? `<button class="rsv" onclick="usuarioCreado('${r.usuario_fieldwy}',true)">Marcar creado</button>` : '—') }];
-  return sect('Altas capturadas del día', '📋') + `<div class="tools"><span>Día:</span><input type="date" max="${HOY}" value="${ALD.dia}" onchange="ALD.dia=this.value;vAltas()"><span class="muted">${fmt(rows.length)} altas · <b>${fmt(pend)}</b> sin usuario creado</span></div>` +
-    tbl('t-ald', cols, rows, { fix: 3, search: 1, csv: 1, png: 1, file: 'altas_del_dia_' + ALD.dia, titulo: 'Altas del ' + fdia(ALD.dia), sort: 0, dir: 1, maxh: '50vh' });
-}
-async function usuarioCreado(u, v) { try { await API.marcarUsuarioCreado(u, v); toast(v ? 'Marcado: usuario creado' : 'Marca quitada'); vAltas(); } catch (e) { toast('No se pudo guardar (¿ya corriste el SQL v09?): ' + (e.message || e)); } }
 
 /* ----- checklist del expediente: ver 07d_expedientes.js (almacén temporal + revisión) ----- */
 
