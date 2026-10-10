@@ -37,7 +37,7 @@ const Real = {
     return { id, nombre: p.nombre, rol: p.rol, rrhh: p.rrhh_nombre, zona: p.zona_rrhh, reclutador_id: p.reclutador_id, permisos: Object.fromEntries((pm || []).map(x => [x.modulo, x])) };
   },
   async catalogos() {
-    const [t, ma, mb] = await Promise.all([todo(() => sb.from('tiendas').select('idpdv,nombre,cadena,estado,region,gerente,supervisor,rrhh,posiciones,zona_rrhh')),
+    const [t, ma, mb] = await Promise.all([todo(() => sb.from('tiendas').select('idpdv,nombre,cadena,estado,region,gerente,supervisor,rrhh,posiciones,zona_rrhh,clase,tipo_ekt,subdireccion_gb,sub_terr,lider')),
       sb.from('catalogo_motivos_ausencia').select('motivo').eq('activo', true), sb.from('catalogo_motivos_baja').select('motivo,tipo').eq('activo', true)]);
     return { tiendas: Object.fromEntries(t.map(x => [x.idpdv, x])), motAus: ma.data.map(x => x.motivo), motBaja: mb.data };
   },
@@ -266,21 +266,12 @@ const tpngCopiar = id => capturaCopiar($(id + '-w'), TB[id].titulo, subFiltros()
 const subFiltros = () => { const f = Object.entries(FL).filter(([, v]) => v).map(([k, v]) => v).join(' · '); return f || 'Todas las zonas'; };
 
 /* ---------- filtros de estructura (compartidos por todas las secciones) ---------- */
-const FL = { region: '', gerente: '', supervisor: '', zona_rrhh: '', rrhh: '', cadena: '' };
-let FB_OPEN = false; // panel de filtros abierto en celular (sobrevive a los re-render de cada vista)
-const FCAMPOS = [['region', 'Región'], ['gerente', 'Gerente / Líder'], ['supervisor', 'Supervisor'], ['zona_rrhh', 'Gerencia RR.HH.'], ['rrhh', 'RR.HH.'], ['cadena', 'Cadena']];
-const okT = t => t ? Object.entries(FL).every(([k, v]) => !v || t[k] === v) : !Object.values(FL).some(Boolean);
+const FL = { cadena: '', posiciones: '', clase: '', tipo_ekt: '', idpdv: '', region: '', subdireccion_gb: '', gerente: '', supervisor: '', sub_terr: '', lider: '', zona_rrhh: '', rrhh: '' };
+const FCAMPOS = [['cadena', 'Cadena'], ['posiciones', 'Posc.'], ['clase', 'Class'], ['tipo_ekt', 'Resurtible'], ['idpdv', 'Tienda · IDPDV'], ['region', 'Región'], ['subdireccion_gb', 'Sub_GB'], ['gerente', 'Gerente'], ['supervisor', 'Supervisor'], ['sub_terr', 'Sub_Terr'], ['lider', 'Líder'], ['zona_rrhh', 'Gerencia RR.HH.'], ['rrhh', 'RR.HH.']];
+const okT = t => t ? Object.entries(FL).every(([k, v]) => !v || String(t[k]) === String(v)) : !Object.values(FL).some(Boolean);
 const okI = id => okT(tienda(id));
-function barraFiltros(fn, base, campos) {
-  base = base || Object.values(S.cat.tiendas); campos = campos || FCAMPOS.map(c => c[0]);
-  const sel = FCAMPOS.filter(c => campos.includes(c[0])).map(([k, l]) => {
-    const ops = [...new Set(base.filter(t => Object.entries(FL).every(([kk, v]) => kk === k || !v || t[kk] === v)).map(t => t[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-    return `<div class="fb-field ${FL[k] ? 'on' : ''}"><label>${l}</label><select aria-label="${esc(l)}" onchange="FL['${k}']=this.value;${fn}()"><option value="">Todos</option>${ops.map(o => `<option ${FL[k] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
-  }).join('');
-  const nAct = FCAMPOS.filter(c => campos.includes(c[0]) && FL[c[0]]).length;
-  const tg = `<button type="button" class="btn sm fb-toggle" data-nocap aria-expanded="${FB_OPEN}" onclick="FB_OPEN=!FB_OPEN;this.setAttribute('aria-expanded',FB_OPEN);this.nextElementSibling.classList.toggle('open',FB_OPEN);this.querySelector('b').textContent=FB_OPEN?'Ocultar filtros':'Filtros'">🔎 <b>${FB_OPEN ? 'Ocultar filtros' : 'Filtros'}</b>${nAct ? `<span class="fb-n">${nAct}</span>` : ''}</button>`;
-  return `${tg}<div class="fbar${FB_OPEN ? ' open' : ''}" data-nocap>${sel}<button class="btn sm" onclick="Object.keys(FL).forEach(k=>FL[k]='');${fn}()">✕ Quitar filtros</button></div>`;
-}
+/* los filtros y el periodo viven en la barra global de arriba (02b_filtros.js); estas funciones quedan vacías para que las vistas no pinten una segunda barra */
+const barraFiltros = () => '', barraPeriodo = () => '';
 
 /* ---------- periodo: semana · mes · rango (como Avance GB) ---------- */
 const PER = { modo: 'semana', sem: null, mes: null, desde: null, hasta: null };
@@ -305,7 +296,7 @@ function semanasUlt4(r) { // las 4 últimas semanas (lun-dom) contra las que se 
   return out;
 }
 function meses3() { const L = limites(), out = []; let m = L.max.slice(0, 7); for (let k = 0; k < 3; k++) { out.unshift(m); const x = new Date(m + '-01T12:00:00'); x.setMonth(x.getMonth() - 1); m = x.getFullYear() + '-' + pad(x.getMonth() + 1); } return out; }
-function barraPeriodo(fn, opts = {}) {
+function periodoHTML(fn, opts = {}) {
   const W = ventana(), L = limites(), r = perRango(), modos = [['hoy', '☀️ Hoy'], ['semana', '📅 Semana'], ['mes', '🗓️ Mes'], ['rango', '↔️ Rango'], ['todo', '📊 Todo'], ...(opts.dia ? [['dia', '🗓️ Día']] : [])];
   let ctl = '';
   if (PER.modo === 'semana') ctl = `<select onchange="PER.sem=+this.value;${fn}()">${W.map((w, k) => ({ w, k })).filter(({ w }) => addD(w.ini, 6) >= L.min).map(({ w, k }) => `<option value="${k}" ${k === PER.sem ? 'selected' : ''}>${w.w} · ${fdate(w.ini)}${k === W.length - 1 ? ' (en curso)' : ''}</option>`).join('')}</select>`;
@@ -313,7 +304,7 @@ function barraPeriodo(fn, opts = {}) {
   else if (PER.modo === 'dia') ctl = `<input type="date" min="${L.min}" max="${L.max}" value="${r.desde}" onchange="PER.desde=this.value;${fn}()">`;
   else if (PER.modo === 'hoy' || PER.modo === 'todo') ctl = '';
   else ctl = `<input type="date" min="${L.min}" max="${L.max}" value="${r.desde}" onchange="PER.desde=this.value;${fn}()"> <span>a</span> <input type="date" min="${L.min}" max="${L.max}" value="${r.hasta}" onchange="PER.hasta=this.value;${fn}()">`;
-  return `<div class="pbar" data-nocap><div class="seg">${modos.map(([k, n]) => `<button class="${PER.modo === k ? 'on' : ''}" onclick="PER.modo='${k}';${k === 'dia' ? "PER.desde=PER.desde||'" + L.max + "';" : ''}${fn}()">${n}</button>`).join('')}</div>${ctl}<span class="muted">${r.dias.length} día${r.dias.length > 1 ? 's' : ''} · ${fdate(r.desde)} al ${fdate(r.hasta)} (últimos 3 meses disponibles)</span></div>`;
+  return `<div class="pb-seg">${modos.map(([k, n]) => `<button class="${PER.modo === k ? 'on' : ''}" onclick="PER.modo='${k}';${k === 'dia' ? "PER.desde=PER.desde||'" + L.max + "';" : ''}${fn}()">${n}</button>`).join('')}</div>${ctl}<span class="pb-info">${r.dias.length} día${r.dias.length > 1 ? 's' : ''} · ${fdate(r.desde)} al ${fdate(r.hasta)} (últimos 3 meses disponibles)</span>`;
 }
 
 /* ---------- tabla expandible tipo Excel (tabla dinámica): región > gerente > supervisor > tienda, con columnas numéricas ---------- */
@@ -339,6 +330,98 @@ function arbol(items, cols, o = {}) {
   return `${o.sinCtl ? '' : ctl}<div class="tw xlw"><table class="xl" id="${id}">${cab}<tbody>${body}${tot}</tbody></table></div>`;
 }
 
+/* >>> 02b_filtros.js */
+/* ====================================================================== BARRA GLOBAL DE FILTROS Y PERIODO (igual que Avance GB) ======================================================================
+   Una sola barra para todas las secciones: periodo (solo en reportes), etiquetas de lo filtrado, filtros de sección (Cadena, Posc., Class, Resurtible, Tienda · IDPDV)
+   y filtros de estructura (Región, Sub_GB, Gerente, Supervisor, Sub_Terr, Líder, Gerencia RR.HH., RR.HH.) que se pueden ocultar. En escritorio el panel aparece al pasar el mouse
+   o se fija con 📌; el menú lateral es una tira de iconos que se abre al pasar el mouse o se fija con «. Las preferencias usan las mismas llaves que Avance GB.
+   Las opciones de cada filtro dependen de los demás (cascada). La estructura (tiendas, supervisores, class…) viene de Maestra, no de un archivo. */
+const FB_SECCION = ['cadena', 'posiciones', 'clase', 'tipo_ekt', 'idpdv'], FB_ESTR = ['region', 'subdireccion_gb', 'gerente', 'supervisor', 'sub_terr', 'lider', 'zona_rrhh', 'rrhh'];
+const FB_IC = { cadena: '🔗', posiciones: '👥', clase: '🏷️', tipo_ekt: '♻️', idpdv: '🏬', region: '📍', subdireccion_gb: '🏙️', gerente: '🧑‍💼', supervisor: '🧭', sub_terr: '🗺️', lider: '🧑‍💼', zona_rrhh: '🧩', rrhh: '👤' };
+const fbLs = { get: (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } } };
+const fbEtq = k => (FCAMPOS.find(c => c[0] === k) || [k, k])[1];
+const fbBase = () => (S.cat && S.cat.tiendas) ? Object.values(S.cat.tiendas) : [];
+const fbVista = () => (typeof VISTAS !== 'undefined' && VISTAS.find(x => x.k === S.view)) || {};
+function fbOpciones(k) {   // valores posibles de k según los demás filtros activos
+  const ok = t => Object.entries(FL).every(([kk, v]) => kk === k || !v || String(t[kk]) === String(v));
+  const xs = fbBase().filter(ok);
+  if (k === 'idpdv') return xs.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es')).map(t => [String(t.idpdv), `${t.idpdv} — ${t.nombre}`]);
+  const vs = [...new Set(xs.map(t => t[k]).filter(v => v !== null && v !== undefined && v !== ''))];
+  vs.sort((a, b) => typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b), 'es'));
+  return vs.map(v => [String(v), String(v)]);
+}
+function fbSet(k, v) {
+  FL[k] = v;
+  FB_SECCION.concat(FB_ESTR).forEach(kk => { if (kk !== k && FL[kk] && !fbOpciones(kk).some(([x]) => x === String(FL[kk]))) FL[kk] = ''; });   // un filtro que ya no existe en la cascada se quita
+  render();
+}
+function fbLimpiar() { Object.keys(FL).forEach(k => FL[k] = ''); render(); }
+function fbCampo(k) {
+  const ic = `<span class="fb-ic">${FB_IC[k]}</span>`;
+  if (k === 'idpdv') {
+    const sel = FL.idpdv ? (S.cat.tiendas[FL.idpdv] || {}) : null;
+    return `<div class="fb-field fb-tienda ${FL.idpdv ? 'on tiene' : ''}"><label>${ic}Tienda · IDPDV</label><input class="ta-in" id="fb-ta" autocomplete="off" aria-label="Tienda o IDPDV" placeholder="Escribe IDPDV o nombre…" value="${esc(sel ? sel.idpdv + ' — ' + sel.nombre : '')}"><span class="ta-x" onclick="fbSet('idpdv','')" title="Quitar tienda">×</span><div class="ta-list" id="fb-ta-l" role="listbox"></div></div>`;
+  }
+  const ops = fbOpciones(k);
+  return `<div class="fb-field ${FL[k] ? 'on' : ''}"><label>${ic}${esc(fbEtq(k))}</label><select aria-label="${esc(fbEtq(k))}" onchange="fbSet('${k}',this.value)"><option value="">${k === 'posiciones' || k === 'clase' || k === 'cadena' || k === 'region' || k === 'subdireccion_gb' ? 'Todas' : 'Todos'}</option>${ops.map(([v, t]) => `<option value="${esc(v)}" ${String(FL[k]) === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`;
+}
+function fbTienda() {   // lista que se despliega conforme se escribe
+  const inp = $('fb-ta'), lista = $('fb-ta-l'); if (!inp) return;
+  let sug = [], pos = -1;
+  const pintar = () => {
+    const q = norm(inp.value.trim()), todas = fbOpciones('idpdv');
+    sug = (q && !FL.idpdv ? todas.filter(([, t]) => norm(t).includes(q)) : todas).slice(0, 14);
+    lista.innerHTML = sug.length ? sug.map(([v, t], i) => { const [id, ...r] = t.split(' — '); return `<div data-v="${esc(v)}" class="${i === pos ? 'sel' : ''}"><small>${esc(id)}</small>${esc(r.join(' — '))}</div>`; }).join('') + (todas.length > 14 && !q ? '<div class="vacio">Sigue escribiendo para ver más…</div>' : '') : '<div class="vacio">Sin coincidencias</div>';
+    lista.classList.add('on');
+  };
+  inp.addEventListener('input', () => { if (FL.idpdv) { FL.idpdv = ''; } pos = -1; pintar(); });
+  inp.addEventListener('focus', () => { if (FL.idpdv) inp.select(); pintar(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { pos = Math.min(sug.length - 1, pos + 1); pintar(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { pos = Math.max(0, pos - 1); pintar(); e.preventDefault(); }
+    else if (e.key === 'Enter') { const o = sug[pos >= 0 ? pos : 0]; if (o) fbSet('idpdv', o[0]); e.preventDefault(); }
+    else if (e.key === 'Escape') { lista.classList.remove('on'); inp.blur(); }
+  });
+  inp.addEventListener('blur', () => setTimeout(() => lista.classList.remove('on'), 150));
+  lista.addEventListener('mousedown', e => { const d = e.target.closest('[data-v]'); if (d) { e.preventDefault(); fbSet('idpdv', d.dataset.v); } });
+}
+function fbChips() {
+  const act = FCAMPOS.filter(([k]) => FL[k]);
+  const txt = k => k === 'idpdv' ? ((S.cat.tiendas[FL.idpdv] || {}).nombre || FL.idpdv) : FL[k];
+  $('fb-chips').innerHTML = act.map(([k, l]) => `<span class="chip">${esc(l)}: ${esc(txt(k))}<button class="chip-x" type="button" aria-label="Quitar ${esc(l)}" onclick="fbSet('${k}','')">×</button></span>`).join('');
+  $('fb-summary').textContent = act.length ? act.map(([k]) => txt(k)).join(' · ') : 'Sin filtros';
+}
+function fbPintar() {
+  if (!S.cat || !$('filterbar')) return;
+  const v = fbVista(), sinFb = !!v.sinFiltros;
+  document.body.classList.toggle('sin-fb', sinFb); if (sinFb) return;
+  const gen = (typeof R !== 'undefined' && R.meta && R.meta.generado) ? R.meta.generado : '';
+  $('fb-act').textContent = gen ? '🕒 Actualizado: ' + gen : '';
+  $('pbar').innerHTML = v.per && typeof R !== 'undefined' && R.loaded && R.meta ? periodoHTML('render', { dia: v.per === 'dia' }) : '';
+  const abierta = !$('fb-row').classList.contains('est-cerrada');
+  $('fb-row').innerHTML = `<div class="fb-line"><div class="fb-left">${FB_SECCION.map(fbCampo).join('')}<div class="fb-field fb-clear-wrap"><label>&nbsp;</label><button id="fb-clear" type="button" title="Quitar todos los filtros" onclick="fbLimpiar()"><span>✕</span> Quitar filtros</button></div></div>
+    <div class="fb-right"><button id="fb-est-toggle" type="button" class="btn" title="Mostrar u ocultar los filtros de estructura" onclick="fbEstructura()">Estructura ${abierta ? '▾' : '▸'}</button><div class="fb-est">${FB_ESTR.map(fbCampo).join('')}</div></div></div>`;
+  fbTienda(); fbChips();
+}
+function fbEstructura() { const r = $('fb-row'); r.classList.toggle('est-cerrada'); fbLs.set('gb_fb_est_cerrada', r.classList.contains('est-cerrada') ? '1' : '0'); $('fb-est-toggle').textContent = 'Estructura ' + (r.classList.contains('est-cerrada') ? '▸' : '▾'); }
+
+/* panel de filtros: aparece al pasar el mouse o se fija; menú lateral: compacto o fijo; en celular el botón Filtros abre y cierra el panel */
+(function () {
+  let auto = fbLs.get('gb_fb_auto', '1') === '1', rail = fbLs.get('gb_sb_rail', '1') === '1';
+  if (fbLs.get('gb_fb_est_cerrada', '0') === '1') $('fb-row').classList.add('est-cerrada');
+  const pin = $('fb-pin'), tog = $('fb-toggle'), sbPin = $('sb-pin'), desk = () => window.matchMedia('(min-width:861px)').matches;
+  function panel() {
+    const modoAuto = auto && desk();
+    document.body.classList.toggle('fb-auto', modoAuto); if (!modoAuto) document.body.classList.remove('fb-abierto');
+    pin.textContent = auto ? '📌 Fijar filtros' : '📌 Filtros fijos'; pin.classList.toggle('on', !auto);
+  }
+  function menu() { document.body.classList.toggle('sb-rail', rail); sbPin.textContent = rail ? '»' : '«'; sbPin.title = rail ? 'Fijar el menú abierto' : 'Dejar el menú compacto (se abre al pasar el mouse)'; }
+  pin.addEventListener('click', () => { auto = !auto; fbLs.set('gb_fb_auto', auto ? '1' : '0'); panel(); });
+  tog.addEventListener('click', () => { if (desk()) document.body.classList.toggle('fb-abierto'); else { const o = $('filterbar').classList.toggle('fb-open'); tog.textContent = o ? '▲ Ocultar filtros' : '🔎 Filtros'; } });
+  sbPin.addEventListener('click', e => { e.stopPropagation(); rail = !rail; fbLs.set('gb_sb_rail', rail ? '1' : '0'); menu(); });
+  window.addEventListener('resize', panel); panel(); menu();
+})();
+
 /* >>> 03_reportes.js */
 /* ====================================================================== REPORTES: RESUMEN · PENALIZACIÓN · DETALLE DE CHECKS · HC ====================================================================== */
 const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
@@ -362,7 +445,7 @@ async function cargarReporte() {
   const d = await API.reporte();
   R.meta = d.meta; R.hc = d.hc; R.uc = Object.fromEntries(d.uc.map(x => [x.usuario, x])); R.bajasLive = new Map(d.bajas.map(b => [b.usuario_fieldwy, b.fecha_baja]));
   R.T = d.tiendas.map(r => ({ id: r.idpdv, t: tienda(r.idpdv) || { nombre: 'IDPDV ' + r.idpdv, cadena: '', estado: '', region: '', gerente: '', supervisor: '', rrhh: '', zona_rrhh: '', posiciones: 0 }, sem: r.semanas || [], chk: (r.chk && r.chk.s) || [], cd: (r.chk && r.chk.cd) || '', dias: r.dias || '', hc: r.hc_sem || [], pen: r.pen || [] }));
-  R.loaded = true;
+  R.loaded = true; if (typeof fbPintar === 'function') fbPintar();
 }
 const cargando = (t, m) => { $('content').innerHTML = cab(t, 'Cargando…', m); };
 async function conReporte(titulo, mascota, fn) {
@@ -623,28 +706,28 @@ const tienda = id => (S.cat && S.cat.tiendas[id]) || null;
 const colorDias = d => d >= 5 ? 'd5' : d >= 3 ? 'd3' : 'd2';
 
 const VISTAS = [
-  { k: 'resumen', ic: '📊', n: 'Resumen', mod: 'reportes', f: vResumen },
+  { k: 'resumen', ic: '📊', n: 'Resumen', mod: 'reportes', f: vResumen, per: true },
   { k: 'penal', ic: '⚠️', n: 'Penalización', mod: 'reportes', f: vPenal },
-  { k: 'checks', ic: '✅', n: 'Detalle de checks', mod: 'reportes', f: vChecks },
+  { k: 'checks', ic: '✅', n: 'Detalle de checks', mod: 'reportes', f: vChecks, per: 'dia' },
   { k: 'hc', ic: '👥', n: 'HC', mod: 'reportes', f: vHC },
-  { k: 'movs', ic: '🔄', n: 'Ingresos y bajas', mod: 'reportes', f: vMovs },
+  { k: 'movs', ic: '🔄', n: 'Ingresos y bajas', mod: 'reportes', f: vMovs, per: 'dia' },
   { k: 'sep', n: 'Gestión', sep: true },
-  { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
-  { k: 'vigentes', ic: '🩺', n: 'Ausencias vigentes', mod: 'ausencias', f: vVigentes },
   { k: 'ingresos', ic: '🧑‍💼', n: 'Posibles ingresos', mod: 'posibles_ingresos', f: vIngresos },
   { k: 'altas', ic: '🆕', n: 'Altas', mod: 'colaboradores', f: vAltas },
-  { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
   { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', f: vExpedientes },
+  { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
+  { k: 'vigentes', ic: '🩺', n: 'Motivos de ausencias', mod: 'ausencias', f: vVigentes },
+  { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
   { k: 'finiquitos', ic: '🧾', n: 'Finiquitos', mod: 'finiquitos', f: vFiniquitos },
-  { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos },
-  { k: 'auditoria', ic: '🧾', n: 'Auditoría', mod: 'auditoria', f: vAuditoria }
+  { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos, sinFiltros: true },
+  { k: 'auditoria', ic: '🧾', n: 'Auditoría', mod: 'auditoria', f: vAuditoria, sinFiltros: true }
 ];
 
 function nav() {
   $('nav').innerHTML = VISTAS.filter(v => v.sep || can(v.mod, 'ver')).map(v => v.sep ? `<div class="nav-sep">${v.n}</div>` : `<div class="nav-item ${v.k === S.view ? 'active' : ''} ${v.soon ? 'off' : ''}" ${v.soon ? '' : `onclick="ir('${v.k}')"`}><span class="ic">${v.ic}</span>${v.n}${v.soon ? '<span class="soon">pronto</span>' : ''}</div>`).join('');
 }
 function ir(k) { S.view = k; $('sidebar').classList.remove('open'); nav(); render(); window.scrollTo(0, 0); }
-function render() { const v = VISTAS.find(x => x.k === S.view); if (v && v.f) v.f(); }
+function render() { const v = VISTAS.find(x => x.k === S.view); if (typeof fbPintar === 'function') fbPintar(); if (v && v.f) v.f(); }
 const cab = (t, sub, m) => `<div class="page-head"><div><h2>${t}${DEMO ? '<span class="demo-tag">DATOS DE EJEMPLO</span>' : ''}</h2><div class="sub">${sub}</div></div><img class="pg-mascot" src="${img(m)}" alt=""></div>`;
 
 /* ---------- bandeja ---------- */
@@ -698,13 +781,13 @@ function vVigentes() {
   const rows = todos.filter(v => okT(v.t.nombre ? v.t : null) && (!S.f.mot || v.motivo === S.f.mot)).sort((a, b) => a.faltan - b.faltan);
   const porMot = {}; rows.forEach(r => porMot[r.motivo] = (porMot[r.motivo] || 0) + 1);
   const MI = { 'Vacaciones': '🏖️', 'Incapacidad (IMSS)': '🏥', 'Permiso especial': '📝', 'Tema médico (particular)': '🩺', 'No localizado': '❓' };
-  let h = cab('Ausencias vigentes', 'Promotores con ausencia registrada que sigue vigente hoy, y cuándo regresan.', 'mochila') + barraFiltros('vVigentes', todos.map(v => v.t).filter(t => t.nombre), ['zona_rrhh', 'rrhh', 'supervisor', 'region', 'cadena']);
+  let h = cab('Motivos de ausencias', 'Promotores con ausencia registrada que sigue vigente hoy, y cuándo regresan.', 'mochila') + barraFiltros('vVigentes', todos.map(v => v.t).filter(t => t.nombre), ['zona_rrhh', 'rrhh', 'supervisor', 'region', 'cadena']);
   h += `<div class="kpis"><div class="kpi"><div class="l">🩺 Vigentes</div><div class="v">${fmt(rows.length)}</div><div class="s">hoy</div></div>${Object.entries(porMot).map(([m, c]) => `<div class="kpi"><div class="l">${MI[m] || ''} ${esc(m)}</div><div class="v">${c}</div></div>`).join('')}<div class="kpi"><div class="l">⏰ Regresan en ≤ 3 días</div><div class="v" style="color:var(--orange-n)">${rows.filter(r => r.faltan <= 3).length}</div></div></div>`;
   h += `<div class="tools" data-nocap><span>Motivo:</span><select onchange="S.f.mot=this.value;vVigentes()"><option value="">Todos</option>${[...new Set(todos.map(v => v.motivo))].sort().map(m => `<option ${S.f.mot === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>`;
   TB = {};
   h += tbl('t-vig', [{ h: 'Usuario', t: 1, v: r => r.usuario, w: 112 }, { h: 'Promotor', t: 1, v: r => r.nombre, w: 210, r: r => `<b>${esc(r.nombre)}</b>` }, { h: 'Motivo', t: 1, v: r => r.motivo, r: r => `<span class="pill b">${MI[r.motivo] || ''} ${esc(r.motivo)}</span>` }, { h: 'Inicio', v: r => r.inicio, r: r => fdate(r.inicio) }, { h: 'Días', v: r => r.dias }, { h: 'Regresa', v: r => r.regreso, r: r => fdate(r.regreso) },
     { h: 'Faltan', v: r => r.faltan, r: r => `<span class="pill ${r.faltan <= 0 ? 'r' : r.faltan <= 3 ? 'a' : 'x'}">${r.faltan <= 0 ? '⏰ hoy' : r.faltan + ' d'}</span>` }, { h: 'Tienda', t: 1, v: r => r.t.nombre || '' }, { h: 'Estado', t: 1, v: r => r.t.estado }, { h: 'Supervisor', t: 1, v: r => r.t.supervisor }, { h: 'Gerente', t: 1, v: r => r.t.gerente }, { h: 'Gerencia RR.HH.', t: 1, v: r => r.t.zona_rrhh }, { h: 'RR.HH.', t: 1, v: r => r.t.rrhh }],
-    rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'ausencias_vigentes', titulo: 'Ausencias vigentes', sort: 6, dir: 1, maxh: '72vh' });
+    rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'ausencias_vigentes', titulo: 'Motivos de ausencias', sort: 6, dir: 1, maxh: '72vh' });
   $('content').innerHTML = h; drawAll();
 }
 
@@ -1712,7 +1795,7 @@ function finEnTab(r, t) {
 }
 function finPintar() {
   const q = norm(FQ.q), cuenta = t => FQ.lista.filter(r => finEnTab(r, t)).length;
-  const filas = FQ.lista.filter(r => finEnTab(r, FQ.tab)).filter(r => !q || norm(`${r.nombre} ${r.usuario_fieldwy} ${r.tienda || ''}`).includes(q));
+  const filas = FQ.lista.filter(r => finEnTab(r, FQ.tab)).filter(r => okT(tienda(r.idpdv) || null) || (!tienda(r.idpdv) && !Object.values(FL).some(Boolean))).filter(r => !q || norm(`${r.nombre} ${r.usuario_fieldwy} ${r.tienda || ''}`).includes(q));
   const accion = r => r.finiquito_id ? `<button class="btn sm" onclick="finAbrir(${r.finiquito_id})">Abrir</button>` : can('finiquitos', 'crear') ? `<button class="btn sm primary" onclick="finCalcular(${r.baja_id})">Calcular</button>` : '';
   const fila = r => `<tr>${FQ.tab === 'pagar' && can('finiquitos', 'editar') && !r.lote_id ? `<td><input type="checkbox" class="fq-sel" value="${r.finiquito_id}"></td>` : FQ.tab === 'pagar' && can('finiquitos', 'editar') ? '<td></td>' : ''}
     <td class="t"><b>${esc(r.nombre)}</b><br><small class="muted">${esc(r.usuario_fieldwy)}</small></td><td class="t">${esc(r.tienda || '—')}<br><small class="muted">${esc(r.estado_tienda || '')}</small></td><td>${fdate(r.fecha_baja)}</td>
