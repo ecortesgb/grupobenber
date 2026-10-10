@@ -823,7 +823,7 @@ const VISTAS = [
 ];
 
 function nav() {
-  $('nav').innerHTML = VISTAS.filter(v => v.sep || can(v.mod, 'ver')).map(v => v.sep ? `<div class="nav-sep">${v.n}</div>` : `<div class="nav-item ${v.k === S.view ? 'active' : ''} ${v.soon ? 'off' : ''}" ${v.soon ? '' : `onclick="ir('${v.k}')"`}><span class="ic">${v.ic}</span>${v.n}${v.soon ? '<span class="soon">pronto</span>' : ''}</div>`).join('');
+  $('nav').innerHTML = VISTAS.filter(v => v.sep || can(v.mod, 'ver')).map(v => v.sep ? `<div class="nav-sep">${v.n}</div>` : `<div class="nav-item ${v.k === S.view ? 'active' : ''} ${v.soon ? 'off' : ''}" ${v.soon ? '' : `onclick="ir('${v.k}')"`}><span class="ic">${v.ic}</span>${v.n}${v.soon ? '<span class="soon">pronto</span>' : ''}${v.k === 'vacantes' && S.vacBadge ? `<span class="nav-badge" title="Compromisos de cobertura vencidos o que vencen en 3 días">${S.vacBadge}</span>` : ''}</div>`).join('');
 }
 function ir(k) { S.view = k; $('sidebar').classList.remove('open'); nav(); render(); window.scrollTo(0, 0); }
 function render() { const v = VISTAS.find(x => x.k === S.view); if (typeof fbPintar === 'function') fbPintar(); if (v && v.f) v.f(); }
@@ -1532,7 +1532,8 @@ async function altaNueva(candId) {
   if (!AL.emp.length) { try { AL.emp = await API.empresas(); } catch (e) { } }
   const t = c ? tienda(c.idpdv) : null, fld = (l, id, ph, ex) => `<div class="fld"><label>${l}</label><input id="al-${id}" ${ex || ''} placeholder="${ph || ''}"></div>`;
   $('modal').innerHTML = `<div class="mbox wide" style="width:min(860px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>🆕 Alta de colaborador</h3>${c ? `<div class="who">Candidato: ${esc(c.nombre)} · ingresó el ${fdate(c.fecha_programada)}</div>` : ''}
-    <div class="row2">${fld('Usuario Fieldwy *', 'us', 'Ej. ABCD010203XYZ', 'autocomplete="off" style="text-transform:uppercase"')}${fld('Nombre(s) *', 'nom', '', '')}</div>
+    <div class="row2">${fld('Usuario Fieldwy *', 'us', 'Ej. ABCD010203XYZ', 'autocomplete="off" style="text-transform:uppercase" onchange="altaAvisoRec()"')}${fld('Nombre(s) *', 'nom', '', '')}</div>
+    <div id="al-rec"></div>
     <div class="row2">${fld('Apellido paterno *', 'ap')}${fld('Apellido materno', 'am')}</div>
     <div class="row2"><div class="fld"><label>Fecha de ingreso *</label><input type="date" id="al-f" value="${c ? c.fecha_programada : HOY}"></div><div class="fld"><label>Tienda *</label><input id="al-t" list="al-tl" placeholder="Escribe IDPDV o nombre…" value="${t ? esc(c.idpdv + ' · ' + t.nombre + ' (' + (t.cadena || '') + ' · ' + (t.estado || '') + ')') : ''}"><datalist id="al-tl">${tiendaOpts()}</datalist></div></div>
     <div class="row2"><div class="fld"><label>Razón social (empresa)</label><input id="al-emp" list="al-el" placeholder="Ej. Benber SS"><datalist id="al-el">${AL.emp.map(e => `<option value="${esc(e)}">`).join('')}</datalist></div><div class="fld"><label>Tipo de ingreso</label><select id="al-tipo"><option>Nuevo</option><option>Reingreso</option></select></div></div>
@@ -1552,6 +1553,15 @@ async function altaNueva(candId) {
   $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
   $('al-ok').onclick = altaGuardar; setTimeout(() => $('al-us').focus(), 60);
 }
+/* reingresos: si el usuario ya tuvo una baja evaluada como "No recontratable" o "Con reservas", se avisa antes de darlo de alta */
+Real.perfilDe = async function (u) { const { data, error } = await sb.from('baja_perfil').select('*').eq('usuario_fieldwy', u).order('fecha_baja', { ascending: false }).limit(1); if (error) throw error; return (data || [])[0] || null; };
+Demo.perfilDe = async () => null;
+let AL_REC = null;
+async function altaAvisoRec() {
+  const u = mayus(limpia(($('al-us') || {}).value)), box = $('al-rec'); AL_REC = null; if (!box) return; box.innerHTML = ''; if (u.length < 6) return;
+  try { const p = await API.perfilDe(u); if (!p) return; AL_REC = p; const r = PF_REC[p.recontratable];
+    box.innerHTML = `<div class="${p.recontratable === 'Sí' ? 'note' : 'warn'}">${r[1]} Este usuario ya tuvo una baja el ${fdate(p.fecha_baja)}: <b>${p.recontratable === 'Sí' ? 'recontratable' : p.recontratable === 'No' ? 'NO recontratable' : 'recontratable con reservas'}</b>${p.nota ? ' · ' + esc(p.nota) : ''}${p.resumen && p.resumen.veredicto ? ` · desempeño: ${esc(p.resumen.veredicto)}` : ''}.</div>`; } catch (e) { }
+}
 async function altaGuardar() {
   const g = id => { const e = $('al-' + id); return e ? limpia(e.value) : ''; }, w = $('al-warn'), b = $('al-ok');
   const us = mayus(g('us')), nom = g('nom'), f = g('f'), tt = g('t'), idp = parseInt(tt, 10), curp = mayus(g('curp')), rfc = mayus(g('rfc')), nss = digs(g('nss')), tel = digs(g('tel')), mail = g('mail').toLowerCase(), clabe = digs(g('clabe')), suel = g('suel');
@@ -1562,6 +1572,7 @@ async function altaGuardar() {
   if (nss && !V.nss(nss)) e.push('El NSS debe tener 11 dígitos.'); if (tel && !V.tel(tel)) e.push('El teléfono debe tener 10 dígitos.'); if (mail && !V.mail(mail)) e.push('El correo no es válido.');
   if (clabe && !V.clabe(clabe)) e.push('La CLABE no es válida (18 dígitos con dígito verificador correcto).');
   if (e.length) { w.hidden = false; w.innerHTML = e.map(esc).join('<br>'); return; }
+  if (AL_REC && AL_REC.recontratable !== 'Sí' && AL_REC.usuario_fieldwy === us && !confirm('Este usuario quedó como ' + (AL_REC.recontratable === 'No' ? 'NO recontratable' : 'recontratable con reservas') + (AL_REC.nota ? ' (' + AL_REC.nota + ')' : '') + '.\n¿Confirmas que quieres darlo de alta?')) return;
   const tarj = digs(g('tarj')), ap = mayus(g('ap')), am = mayus(g('am')), npila = mayus(nom), minf = g('minf'), bono = g('bono');
   const sens = { curp: curp || null, rfc: rfc || null, nss: nss || null, correo: mail || null, telefono: tel || null, estado_civil: $('al-ec').value || null, infonavit: $('al-inf').value ? $('al-inf').value === 'Sí' : null, contacto_emergencia: g('emer') || null, talla: $('al-talla').value || null,
     apellido_p: ap || null, apellido_m: am || null, nombre_pila: npila || null, monto_infonavit: minf ? +minf : null, asegurado: $('al-aseg').value ? $('al-aseg').value === 'Sí' : null, canal: g('canal') || null };
@@ -2159,7 +2170,7 @@ async function vacGuardar(id) {
   const est = $('vc-est').value;
   try {
     await API.vacGuardar({ p_idpdv: id, p_estado: est, p_posiciones: est === 'Confirmada' && $('vc-pos').value !== '' ? +$('vc-pos').value : null, p_fecha_compromiso: est === 'Confirmada' ? ($('vc-fec').value || null) : null, p_motivo: est === 'Confirmada' ? ($('vc-mot').value || null) : null, p_nota: limpia($('vc-nota').value) || null, p_cubierta_por: est === 'Cubierta' ? limpia($('vc-por').value) : null });
-    toast(est === 'Cubierta' ? 'Marcada como cubierta' : 'Vacante confirmada'); cerrarM(); await vacCargar(true); vVacantes();
+    toast(est === 'Cubierta' ? 'Marcada como cubierta' : 'Vacante confirmada'); cerrarM(); await vacCargar(true); vacInsignia(); vVacantes();
   } catch (e) { toast(e.message || e); }
 }
 async function vacQuitar(id) {
@@ -2182,6 +2193,12 @@ function vacResumenHTML(items, r) {
   const por = (campo, vacio) => { const m = new Map(); vac.forEach(i => { const k = i.t[campo] || vacio; m.set(k, (m.get(k) || 0) + Math.max(1, i.falt)); }); return [...m].sort((a, b) => b[1] - a[1]).slice(0, 10); };
   h += `<div class="grid g2"><div class="card"><h3>🧑‍💼 Posiciones faltantes por gerente</h3>${hbars(por('gerente', 'Sin gerente').map(([k, v]) => ({ n: k, v, c: C.rd })), C.rd)}</div><div class="card"><h3>🔗 Posiciones faltantes por cadena</h3>${hbars(por('cadena', 'Sin cadena').map(([k, v]) => ({ n: k, v, c: C.am })), C.am)}</div></div>`;
   return h;
+}
+
+/* insignia del menú: compromisos vencidos o que vencen en 3 días (consulta ligera, sin cargar los reportes) */
+async function vacInsignia() {
+  if (!can('vacantes', 'ver')) return;
+  try { const g = await API.vacGestion(); S.vacBadge = g.filter(x => x.estado === 'Confirmada' && x.fecha_compromiso && diffD(x.fecha_compromiso, HOY) <= 3).length; nav(); } catch (e) { }
 }
 
 /* >>> 07g_perfil_baja.js */
@@ -2335,6 +2352,7 @@ async function entrar() {
     [S.alertas, S.vigentes] = await Promise.all([can('alertas', 'ver') ? API.alertas() : [], can('ausencias', 'ver') ? API.vigentes() : []]);
     const primera = VISTAS.find(v => !v.soon && can(v.mod, 'ver')); S.view = primera ? primera.k : 'bandeja';
     nav(); render();
+    vacInsignia();
     API.generado().then(g => { S.gen = g; fbPintar(); }).catch(() => { });
   } catch (e) { await API.logout(); mostrarLogin(e.message || String(e)); }
 }
