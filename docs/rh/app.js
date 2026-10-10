@@ -840,7 +840,7 @@ const VISTAS = [
   { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', f: vExpedientes },
   { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
   { k: 'vigentes', ic: '🩺', n: 'Motivos de ausencia', mod: 'ausencias', f: vAusencias, per: 'libre' },
-  { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
+  { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas, per: 'libre' },
   { k: 'vacantes', ic: '🏬', n: 'Vacantes', mod: 'vacantes', f: vVacantes, per: true },
   { k: 'finiquitos', ic: '🧾', n: 'Finiquitos', mod: 'finiquitos', f: vFiniquitos },
   { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos, sinFiltros: true },
@@ -928,6 +928,7 @@ function vVigentes() {
 const cerrarM = () => { $('modal').hidden = true; $('modal').innerHTML = ''; };
 function abrir(tipo, id) {
   const a = S.alertas.find(x => x.id === id); if (!a) return;
+  if (tipo === 'baja') { bajaNueva({ usuario_fieldwy: a.usuario, nombre: a.nombre, idpdv: a.idpdv, empresa: a.empresa, estatus: 'Activo', ultimo: a.ultimo }); return; }
   const t = tienda(a.idpdv);
   const cab = (tt) => `<h3>${tt}</h3><div class="who">${esc(a.nombre)} · ${esc(a.usuario)}<br>${t ? esc(t.nombre) : ''} · último check ${fdate(a.ultimo)} (${a.dias} días sin check)</div>`;
   let h = '';
@@ -1423,6 +1424,14 @@ Real.registrarBaja = async function (d) {
 Real.guardarEncuesta = async function (bajaId, e) {
   const { error } = await sb.from('encuesta_salida').upsert({ baja_id: bajaId, respondida_por: 'rh', ...e }); if (error) throw error;
 };
+Real.ultimoCheckDe = async function (u) { const { data } = await sb.from('rep_ultimo_check').select('fecha').eq('usuario', u).maybeSingle(); return data ? data.fecha : null; };
+Real.subirEvidenciaBaja = async function (u, fecha, file) {
+  const p = await docPreparar(file), ext = EXP_MIME[p.mime]; if (p.bytes > 8 * 1024 * 1024) throw new Error('La evidencia pesa más de 8 MB');
+  const prep = await Real.finRpc('baja_evidencia_preparar', { p_usuario: u, p_fecha: fecha, p_ext: ext });
+  const { error } = await sb.storage.from('bajas-temp').upload(prep.ruta, p.blob, { contentType: p.mime, upsert: false }); if (error) throw new Error('No se pudo subir la evidencia: ' + error.message);
+  await Real.finRpc('baja_evidencia_registrar', { p_usuario: u, p_fecha: fecha, p_version: prep.version, p_ruta: prep.ruta, p_nombre: file.name, p_mime: p.mime, p_bytes: p.bytes, p_sha: p.sha });
+};
+Demo.ultimoCheckDe = async () => addD(HOY, -2); Demo.subirEvidenciaBaja = async () => { };
 Real.actualizarFiniquito = async function (id, est) { const { error } = await sb.from('bajas').update({ finiquito_estatus: est }).eq('id', id); if (error) throw error; };
 Real.anularBaja = async function (b, motivo) {
   const { error } = await sb.rpc('anular_baja', { p_baja: b.id, p_motivo: motivo }); if (error) throw new Error(error.message);   // queda el rastro (quién, cuándo y por qué) en Auditoría
@@ -1450,15 +1459,15 @@ function leerEncuesta(p) {
 /* ----- vista ----- */
 async function vBajas() {
   $('content').innerHTML = cab('Bajas y encuesta de salida', 'Registra aquí las bajas. Alimentan el reporte de Ingresos y bajas, el HC y la rotación; la encuesta de salida complementa el motivo.', 'saltando') + '<div class="loading">Cargando bajas…</div>';
-  const desde = BJ.per === 'all' ? null : addD(HOY, -(+BJ.per));
+  const rr = rangoLibre(), desde = rr.todo ? null : rr.desde;
   try { BJ.lista = await API.bajasLista(desde); PF.lista = new Map((await API.perfilesBaja().catch(() => [])).map(p => [p.usuario_fieldwy + '|' + p.fecha_baja, p])); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudieron cargar las bajas: ${esc(e.message || e)}</div>`; return; }
   const ok = b => okT(tienda(b.idpdv) || null) || (!tienda(b.idpdv) && !Object.values(FL).some(Boolean));
-  const base = BJ.lista.filter(ok), tipoDe = b => tipoMotivo(b.motivo) || 'Sin clasificar';
+  const base = BJ.lista.filter(ok).filter(b => b.fecha <= rr.hasta), tipoDe = b => tipoMotivo(b.motivo) || 'Sin clasificar';
   const rows = base.filter(b => (!BJ.mot || b.motivo === BJ.mot) && (!BJ.tipo || tipoDe(b) === BJ.tipo) && (!BJ.enc || (BJ.enc === 'si' ? b.enc : !b.enc)));
   const vol = base.filter(b => tipoDe(b) === 'Voluntaria').length, inv = base.filter(b => tipoDe(b) === 'Involuntaria').length, conEnc = base.filter(b => b.enc).length, adeudos = base.filter(b => b.adeudo > 0).length, pend = base.filter(b => b.finq !== 'Pagado').length;
   const motivos = [...new Set(base.map(b => b.motivo))].sort();
   let h = cab('Bajas y encuesta de salida', 'Registra aquí las bajas. Alimentan el reporte de Ingresos y bajas, el HC y la rotación; la encuesta de salida complementa el motivo.', 'saltando') + barraFiltros('vBajas');
-  h += `<div class="tools"><span>Periodo:</span><select onchange="BJ.per=this.value;vBajas()">${[['30', 'Últimos 30 días'], ['60', 'Últimos 60 días'], ['90', 'Últimos 90 días'], ['365', 'Último año'], ['all', 'Todo el histórico']].map(([v, t]) => `<option value="${v}" ${BJ.per === v ? 'selected' : ''}>${t}</option>`).join('')}</select><select onchange="BJ.mot=this.value;vBajas()"><option value="">Todos los motivos</option>${motivos.map(m => `<option ${BJ.mot === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select><select onchange="BJ.tipo=this.value;vBajas()"><option value="">Voluntaria e involuntaria</option>${['Voluntaria', 'Involuntaria'].map(m => `<option ${BJ.tipo === m ? 'selected' : ''}>${m}</option>`).join('')}</select><select onchange="BJ.enc=this.value;vBajas()"><option value="">Con y sin encuesta</option><option value="si" ${BJ.enc === 'si' ? 'selected' : ''}>Con encuesta</option><option value="no" ${BJ.enc === 'no' ? 'selected' : ''}>Sin encuesta</option></select>${can('bajas', 'crear') ? '<button class="btn primary" style="margin-left:auto" onclick="bajaNueva()">➕ Registrar baja</button>' : ''}</div>`;
+  h += `<div class="tools"><span class="muted">Periodo: el de la barra de arriba</span><select onchange="BJ.mot=this.value;vBajas()"><option value="">Todos los motivos</option>${motivos.map(m => `<option ${BJ.mot === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select><select onchange="BJ.tipo=this.value;vBajas()"><option value="">Voluntaria e involuntaria</option>${['Voluntaria', 'Involuntaria'].map(m => `<option ${BJ.tipo === m ? 'selected' : ''}>${m}</option>`).join('')}</select><select onchange="BJ.enc=this.value;vBajas()"><option value="">Con y sin encuesta</option><option value="si" ${BJ.enc === 'si' ? 'selected' : ''}>Con encuesta</option><option value="no" ${BJ.enc === 'no' ? 'selected' : ''}>Sin encuesta</option></select>${can('bajas', 'crear') ? '<button class="btn primary" style="margin-left:auto" onclick="bajaNueva()">➕ Registrar baja</button>' : ''}</div>`;
   h += `<div class="kpis">${kp('Bajas', fmt(base.length), 'en el periodo y filtros', C.rd, null, '📤')}${kp('Voluntarias', fmt(vol), pc1(vol, base.length), C.am, null, '🚶')}${kp('Involuntarias', fmt(inv), pc1(inv, base.length), C.dk, null, '⛔')}${kp('Con encuesta', fmt(conEnc), pc1(conEnc, base.length), C.bl, null, '📝')}${kp('Con adeudo', fmt(adeudos), 'monto o detalle por cobrar', C.rd, null, '💸')}${kp('Finiquito pendiente', fmt(pend), 'sin marcar como pagado', C.am, null, '🧾')}</div>`;
   TB = {};
   const puedeFin = can('bajas', 'editar');
@@ -1466,7 +1475,7 @@ async function vBajas() {
     { h: 'Fecha de baja', v: b => b.fecha, r: b => fdate(b.fecha), w: 96 }, { h: 'Colaborador', t: 1, v: b => b.nombre, w: 230, r: b => `<b>${esc(b.nombre)}</b><br><small class="muted">${esc(b.usuario)}</small>` },
     { h: 'Motivo', t: 1, v: b => b.motivo, r: b => pillx(esc(b.motivo) + (b.marca ? ' → ' + esc(b.marca) : ''), tipoDe(b) === 'Involuntaria' ? 'r' : 'a') }, { h: 'Tipo', t: 1, v: b => tipoDe(b) },
     { h: 'Encuesta', v: b => b.enc ? 1 : 0, r: b => b.enc ? '<span class="pill g">✔ Capturada</span>' : (can('encuesta_salida', 'crear') ? `<button class="rsv" onclick="encuestaDeBaja(${b.id})">Capturar</button>` : '—') },
-    { h: 'Finiquito', t: 1, v: b => FINQ.indexOf(b.finq), r: b => puedeFin ? `<select class="finq" onchange="cambiaFinq(${b.id},this.value)">${FINQ.map(f => `<option ${f === b.finq ? 'selected' : ''}>${f}</option>`).join('')}</select>` : esc(b.finq) },
+    { h: 'Finiquito', t: 1, v: b => finqTxt(b), r: b => finqPill(b) },
     { h: 'Recontratable', t: 1, v: b => (PF.lista.get(b.usuario + '|' + b.fecha) || {}).recontratable || '', r: b => { const p = PF.lista.get(b.usuario + '|' + b.fecha); return `${p ? pillx(PF_REC[p.recontratable][1] + ' ' + p.recontratable, PF_REC[p.recontratable][0]) : '<span class="muted">Sin evaluar</span>'} <button class="rsv" onclick="perfilAbrir(${b.id})">Perfil</button>`; } },
     { h: 'Adeudo', v: b => b.adeudo, r: b => b.adeudo ? `<b class="cell-red">$${fmt(b.adeudo)}</b>` : '—' }, { h: 'Tienda', t: 1, v: b => (tienda(b.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: b => (tienda(b.idpdv) || {}).cadena }, { h: 'Región', t: 1, v: b => (tienda(b.idpdv) || {}).region },
     { h: 'Gerente', t: 1, v: b => (tienda(b.idpdv) || {}).gerente }, { h: 'Supervisor', t: 1, v: b => (tienda(b.idpdv) || {}).supervisor }, { h: 'Comentarios', t: 1, v: b => b.com || '' },
@@ -1474,6 +1483,8 @@ async function vBajas() {
   ], rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'bajas', titulo: 'Bajas registradas', sort: 0, dir: -1, maxh: '70vh', lim: 500 });
   $('content').innerHTML = h; drawAll();
 }
+const finqTxt = b => (b.fecha >= '2026-10-10' && !PF.lista.has(b.usuario + '|' + b.fecha)) ? 'Falta evaluar recontratación' : (b.finq || 'Sin iniciar');
+const finqPill = b => finqTxt(b) === 'Falta evaluar recontratación' ? `${pillx('Falta evaluar recontratación', 'a')} <button class="rsv" onclick="perfilAbrir(${b.id})">Evaluar</button>` : pillx(esc(finqTxt(b)), b.finq === 'Pagado' ? 'g' : (!b.finq || b.finq === 'Sin iniciar') ? 'x' : 'b');
 async function cambiaFinq(id, est) { try { await API.actualizarFiniquito(id, est); const b = BJ.lista.find(x => x.id === id); if (b) b.finq = est; toast('Finiquito: ' + est); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } }
 async function anularBaja(id) {
   const b = BJ.lista.find(x => x.id === id); if (!b || !confirm(`¿Anular la baja de ${b.nombre} (${fdate(b.fecha)})?\nLa baja queda anulada (se conserva con su motivo) y el colaborador vuelve a quedar activo.`)) return;
@@ -1492,7 +1503,7 @@ function bajaNueva(pre) {
       <div class="fld"><label>Motivo de baja</label><select id="bj-m"><option value="">— elige el motivo —</option><optgroup label="Voluntaria">${vol.map(m => `<option>${esc(m.motivo)}</option>`).join('')}</optgroup><optgroup label="Involuntaria">${inv.map(m => `<option>${esc(m.motivo)}</option>`).join('')}</optgroup></select></div>
       <div class="fld" id="bj-marca-w" hidden><label>Marca o cadena destino</label><input id="bj-marca" placeholder="Ej. Telcel, Walmart…"></div>
       <div class="row2"><div class="fld"><label>Adeudo con la agencia ($)</label><input type="number" id="bj-ad" min="0" step="0.01" placeholder="0"></div><div class="fld"><label>Detalle del adeudo</label><input id="bj-adt" placeholder="Equipo, uniforme, faltante…"></div></div>
-      <div class="fld"><label>Enlace a evidencia (opcional)</label><input id="bj-ev" placeholder="https://… carpeta de OneDrive o Drive"></div>
+      <div class="fld"><label>Evidencia (foto o PDF, opcional)</label><input type="file" id="bj-ev" accept="image/jpeg,image/png,application/pdf"><small class="muted">Se guarda en el almacén y luego pasa a OneDrive (carpeta Bajas).</small></div>
       <div class="fld"><label>Comentarios</label><textarea id="bj-c"></textarea></div>
       <details class="enc-d"><summary>📝 Capturar encuesta de salida ahora (opcional)</summary>${encuestaCampos('be-')}</details>
       <div id="bj-perfil"></div>
@@ -1518,6 +1529,7 @@ async function bajaElegir(c) {
   $('bj-sel').innerHTML = `<div class="bj-card"><div><b>${esc(c.nombre)}</b><br><small>${esc(c.usuario_fieldwy)} · ${esc(c.empresa || 'sin razón social')}</small></div><div><b>${esc(t.nombre || 'Sin tienda')}</b><br><small>${esc([t.cadena, t.estado, t.supervisor].filter(Boolean).join(' · '))}</small></div><button class="rsv" onclick="BJ.sel=null;$('bj-sel').innerHTML='';$('bj-resto').hidden=true;$('bj-ok').disabled=true">Cambiar</button></div>`;
   $('bj-resto').hidden = false; $('bj-ok').disabled = false;
   bajaPerfilPanel(c);
+  (async () => { let u = c.ultimo || null; try { u = (await API.ultimoCheckDe(c.usuario_fieldwy)) || u; } catch (e) { } if (u && BJ.sel === c) { $('bj-u').value = u; const fl = $('bj-u').parentElement; let hs = fl.querySelector('small'); if (!hs) { hs = document.createElement('small'); hs.className = 'muted'; fl.appendChild(hs); } hs.textContent = 'Sugerido: su último check (' + fdate(u) + ')'; } })();
   const w = $('bj-warn'); w.hidden = true;
   try { const p = await API.bajasPrevias(c.usuario_fieldwy); if (c.estatus === 'Baja' || p.length) { w.hidden = false; w.textContent = c.estatus === 'Baja' ? 'Este colaborador ya aparece como baja.' : ''; if (p.length) w.textContent += ` Ya tiene una baja registrada el ${fdate(p[0].fecha_baja)} (${p[0].motivo}). Si es la misma, no la dupliques.`; } } catch (e) { }
 }
@@ -1528,8 +1540,9 @@ async function bajaGuardar() {
   if (err) { w.hidden = false; w.textContent = err; return; }
   b.disabled = true; b.textContent = 'Guardando…';
   try {
-    await API.registrarBaja({ usuario: c.usuario_fieldwy, idpdv: c.idpdv, fecha: f, ultimo: $('bj-u').value, motivo: m, marca: $('bj-marca').value.trim(), adeudo: +$('bj-ad').value || 0, adeudoDet: $('bj-adt').value.trim(), evidencia: $('bj-ev').value.trim(), comentarios: $('bj-c').value.trim(), enc: leerEncuesta('be-') });
+    await API.registrarBaja({ usuario: c.usuario_fieldwy, idpdv: c.idpdv, fecha: f, ultimo: $('bj-u').value, motivo: m, marca: $('bj-marca').value.trim(), adeudo: +$('bj-ad').value || 0, adeudoDet: $('bj-adt').value.trim(), evidencia: null, comentarios: $('bj-c').value.trim(), enc: leerEncuesta('be-') });
     await perfilGuardarDeModal(c, f);
+    const ev = $('bj-ev') && $('bj-ev').files && $('bj-ev').files[0]; if (ev) { try { await API.subirEvidenciaBaja(c.usuario_fieldwy, f, ev); } catch (x) { toast('La baja se guardó, pero la evidencia no: ' + (x.message || x)); } }
     MV.loaded = false; R.vivo = false; cerrarM(); toast('Baja registrada: ' + c.nombre);
     if (S.alertas) S.alertas = S.alertas.filter(x => x.usuario !== c.usuario_fieldwy);
     if (S.view === 'bajas') vBajas(); else if (typeof nav === 'function') { nav(); render(); }
@@ -2056,10 +2069,10 @@ function finEnTab(r, t) {
 function finPintar() {
   const q = norm(FQ.q), cuenta = t => FQ.lista.filter(r => finEnTab(r, t)).length;
   const filas = FQ.lista.filter(r => finEnTab(r, FQ.tab)).filter(r => okT(tienda(r.idpdv) || null) || (!tienda(r.idpdv) && !Object.values(FL).some(Boolean))).filter(r => !q || norm(`${r.nombre} ${r.usuario_fieldwy} ${r.tienda || ''}`).includes(q));
-  const accion = r => r.finiquito_id ? `<button class="btn sm" onclick="finAbrir(${r.finiquito_id})">Abrir</button>` : can('finiquitos', 'crear') ? `<button class="btn sm primary" onclick="finCalcular(${r.baja_id})">Calcular</button>` : '';
+  const accion = r => r.finiquito_id ? `<button class="btn sm" onclick="finAbrir(${r.finiquito_id})">Abrir</button>` : (r.exige_perfil && !r.perfil_evaluado) ? `<button class="btn sm primary" onclick="perfilAbrirDe({usuario:'${r.usuario_fieldwy}',fecha:'${r.fecha_baja}',nombre:'${esc(r.nombre).replace(/'/g, '')}',motivo:'${esc(r.motivo_baja || '').replace(/'/g, '')}'})">Evaluar recontratación</button>` : can('finiquitos', 'crear') ? `<button class="btn sm primary" onclick="finCalcular(${r.baja_id})">Calcular</button>` : '';
   const fila = r => `<tr>${FQ.tab === 'pagar' && can('finiquitos', 'editar') && !r.lote_id ? `<td><input type="checkbox" class="fq-sel" value="${r.finiquito_id}"></td>` : FQ.tab === 'pagar' && can('finiquitos', 'editar') ? '<td></td>' : ''}
     <td class="t"><b>${esc(r.nombre)}</b><br><small class="muted">${esc(r.usuario_fieldwy)}</small></td><td class="t">${esc(r.tienda || '—')}<br><small class="muted">${esc(r.estado_tienda || '')}</small></td><td>${fdate(r.fecha_baja)}</td>
-    <td>${r.dias_desde_baja}${r.dias_desde_baja > 120 && !r.finiquito_id ? ' ' + pillx('fuera de plazo', 'r') : ''}</td><td class="t">${finPill(r.estatus)}${r.lote_id ? `<br><small class="muted">lote ${r.lote_id}</small>` : ''}</td><td>${r.total != null ? money(r.total) : '—'}</td><td>${accion(r)}</td></tr>`;
+    <td>${r.dias_desde_baja}${r.dias_desde_baja > 120 && !r.finiquito_id ? ' ' + pillx('fuera de plazo', 'r') : ''}</td><td class="t">${(r.exige_perfil && !r.perfil_evaluado && !r.finiquito_id) ? pillx('Falta evaluar recontratación', 'a') : finPill(r.estatus)}${r.lote_id ? `<br><small class="muted">lote ${r.lote_id}</small>` : ''}</td><td>${r.total != null ? money(r.total) : '—'}</td><td>${accion(r)}</td></tr>`;
   const pagar = FQ.tab === 'pagar' && can('finiquitos', 'editar');
   $('content').innerHTML = cab('Finiquitos', 'Solo promotores con baja reciente (máximo 120 días). Salario base: salario mínimo vigente a la fecha de baja. Flujo: calcular → validar → documentos → firmado (RH) → autorizar → pago.', 'mochila') +
     `<div class="tools">${FQ_TABS.map(([k, n]) => `<button class="btn ${FQ.tab === k ? 'primary' : ''}" onclick="FQ.tab='${k}';finPintar()">${n} (${cuenta(k)})</button>`).join('')}
@@ -2387,17 +2400,19 @@ async function perfilGuardarDeModal(c, fecha) {   // se llama después de regist
   catch (e) { toast('La baja se guardó, pero el perfil no: ' + (e.message || e) + ' (complétalo desde Bajas y encuesta → Perfil)'); }
 }
 
-/* desde la lista de bajas */
-async function perfilAbrir(id) {
-  const b = BJ.lista.find(x => x.id === id); if (!b) return; const prev = PF.lista.get(b.usuario + '|' + b.fecha); let p = prev ? prev.resumen : null;
+/* desde la lista de bajas o desde Finiquitos */
+function perfilAbrir(id) { const b = BJ.lista && BJ.lista.find(x => x.id === id); if (b) perfilAbrirDe(b); }
+async function perfilAbrirDe(b) {   // b = { usuario, fecha, nombre, motivo }
+  PF.cur = b; const prev = PF.lista.get(b.usuario + '|' + b.fecha); let p = prev ? prev.resumen : null;
   $('modal').innerHTML = `<div class="mbox" style="width:min(680px,96vw)" role="dialog" aria-modal="true"><h3>🧑‍💼 Perfil del promotor</h3><div class="who">${esc(b.nombre)} · ${esc(b.usuario)} · baja ${fdate(b.fecha)} · ${esc(b.motivo)}</div><div id="pf-cuerpo"><div class="loading">Armando el perfil…</div></div></div>`; $('modal').hidden = false;
   try { if (!p || !p.veredicto) p = await perfilCalc(b.usuario); } catch (e) { }
+  const edita = can('bajas', 'editar') || can('bajas', 'crear');
   $('pf-cuerpo').innerHTML = (p ? perfilHTML(p) : '<div class="warn">No se pudo armar el resumen.</div>') + (prev ? `<p class="note">Evaluación guardada el ${fdate(String(prev.en).slice(0, 10))}. El resumen es la foto de ese momento.</p>` : '') +
-    (can('bajas', 'editar') || can('bajas', 'crear') ? perfilCampos(prev && prev.recontratable, prev && prev.nota) : '') + `<div class="mfoot"><button class="btn" onclick="cerrarM()">Cerrar</button>${can('bajas', 'editar') || can('bajas', 'crear') ? `<button class="btn primary" onclick="perfilGuardar(${id})">Guardar</button>` : ''}</div>`;
+    (edita ? perfilCampos(prev && prev.recontratable, prev && prev.nota) : '') + `<div class="mfoot"><button class="btn" onclick="cerrarM()">Cerrar</button>${edita ? '<button class="btn primary" onclick="perfilGuardar()">Guardar</button>' : ''}</div>`;
 }
-async function perfilGuardar(id) {
-  const b = BJ.lista.find(x => x.id === id); const rec = $('pf-rec').value; if (!rec) { toast('Elige si es recontratable'); return; }
-  try { const res = (PF.lista.get(b.usuario + '|' + b.fecha) || {}).resumen; await API.guardarPerfilBaja({ p_usuario: b.usuario, p_fecha: b.fecha, p_resumen: (res && res.veredicto) ? res : await perfilCalc(b.usuario), p_recontratable: rec, p_nota: limpia($('pf-nota').value) || null }); toast('Perfil guardado'); cerrarM(); vBajas(); }
+async function perfilGuardar() {
+  const b = PF.cur; const rec = $('pf-rec').value; if (!rec) { toast('Elige si es recontratable'); return; }
+  try { const res = (PF.lista.get(b.usuario + '|' + b.fecha) || {}).resumen; await API.guardarPerfilBaja({ p_usuario: b.usuario, p_fecha: b.fecha, p_resumen: (res && res.veredicto) ? res : await perfilCalc(b.usuario), p_recontratable: rec, p_nota: limpia($('pf-nota').value) || null }); toast('Perfil guardado'); cerrarM(); if (S.view === 'finiquitos') vFiniquitos(); else vBajas(); }
   catch (e) { toast(e.message || e); }
 }
 
