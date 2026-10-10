@@ -42,13 +42,13 @@ const Real = {
     return { tiendas: Object.fromEntries(t.map(x => [x.idpdv, x])), motAus: ma.data.map(x => x.motivo), motBaja: mb.data };
   },
   async alertas() {
-    const al = await todo(() => sb.from('alertas_asistencia').select('id,usuario_fieldwy,ultimo_check,dias_sin_check,idpdv,colaboradores(nombre,empresa,fecha_ingreso,idpdv)').eq('estatus', 'Abierta').order('dias_sin_check', { ascending: false }));
+    const al = await todo(() => sb.from('alertas_asistencia').select('id,usuario_fieldwy,ultimo_check,dias_sin_check,idpdv,origen,nota,colaboradores(nombre,empresa,fecha_ingreso,idpdv)').eq('estatus', 'Abierta').order('dias_sin_check', { ascending: false, nullsFirst: false }));
     const desde = addD(HOY, -90);
     const us = al.map(a => a.usuario_fieldwy);
     let hist = [];
     if (us.length) hist = await todo(() => sb.from('ausencias').select('usuario_fieldwy,motivo,fecha_inicio,dias,fecha_regreso').gte('fecha_inicio', desde).neq('motivo', 'Descanso').in('usuario_fieldwy', us.slice(0, 400)));
     const por = {}; hist.forEach(h => (por[h.usuario_fieldwy] = por[h.usuario_fieldwy] || []).push(h));
-    return al.map(a => ({ id: a.id, usuario: a.usuario_fieldwy, nombre: a.colaboradores?.nombre || a.usuario_fieldwy, ultimo: a.ultimo_check, dias: a.dias_sin_check, idpdv: a.idpdv || a.colaboradores?.idpdv, empresa: a.colaboradores?.empresa, ingreso: a.colaboradores?.fecha_ingreso, aus: por[a.usuario_fieldwy] || [] }));
+    return al.map(a => ({ id: a.id, usuario: a.usuario_fieldwy, nombre: a.colaboradores?.nombre || a.usuario_fieldwy, ultimo: a.ultimo_check, dias: a.dias_sin_check, idpdv: a.idpdv || a.colaboradores?.idpdv, empresa: a.colaboradores?.empresa, ingreso: a.colaboradores?.fecha_ingreso, origen: a.origen || 'asistencia', nota: a.nota || '', aus: por[a.usuario_fieldwy] || [] }));
   },
   async vigentes() {
     const r = await todo(() => sb.from('ausencias').select('id,usuario_fieldwy,motivo,fecha_inicio,dias,fecha_regreso,comentarios,idpdv,colaboradores(nombre,idpdv)').gt('fecha_regreso', HOY).lte('fecha_inicio', HOY).neq('motivo', 'Descanso').order('fecha_regreso'));
@@ -59,16 +59,15 @@ const Real = {
     return data || [];
   },
   async registrarAusencia(al, d) {
-    const { data, error } = await sb.from('ausencias').insert({ usuario_fieldwy: al.usuario, motivo: d.motivo, fecha_inicio: d.inicio, dias: d.dias, comentarios: d.comentarios || null, idpdv: al.idpdv || null }).select('id').single();
-    if (error) throw error;
-    await this.cerrar(al, 'Con ausencia', data.id);
+    // ausencia + cierre de la alerta en una sola transacción
+    const { error } = await sb.rpc('registrar_ausencia_desde_alerta', { p_alerta: al.id, p_motivo: d.motivo, p_inicio: d.inicio, p_dias: d.dias, p_comentarios: d.comentarios || null });
+    if (error) throw new Error(error.message);
   },
   async confirmarBaja(al, d, usr) {
-    const { error } = await sb.from('bajas').insert({ usuario_fieldwy: al.usuario, fecha_baja: d.fecha, ultimo_dia_laborado: al.ultimo, motivo: d.motivo, marca_destino: d.marca || null, comentarios: d.comentarios || null, idpdv: al.idpdv || null });
-    if (error) throw error;
-    const m = await sb.from('movimientos').insert({ usuario_fieldwy: al.usuario, tipo: 'Baja', fecha: d.fecha, motivo: d.motivo, idpdv: al.idpdv || null, origen: 'app' }); if (m.error) throw m.error;
-    const c = await sb.from('colaboradores').update({ estatus: 'Baja' }).eq('usuario_fieldwy', al.usuario); if (c.error) throw c.error;
-    await this.cerrar(al, 'Baja confirmada');
+    // baja + movimiento + estatus + cierre de la alerta en una sola transacción
+    const { error } = await sb.rpc('registrar_baja', { p_usuario: al.usuario, p_fecha: d.fecha, p_ultimo: al.ultimo || null, p_motivo: d.motivo, p_marca: d.marca || null, p_adeudo: 0, p_adeudo_detalle: null,
+      p_evidencia: null, p_comentarios: d.comentarios || null, p_idpdv: al.idpdv || null, p_enc: null });
+    if (error) throw new Error(error.message);
   },
   async errorAsistencia(al) { await this.cerrar(al, 'Error de asistencia'); },
   async cerrar(al, estatus, ausId) {
@@ -645,7 +644,7 @@ const cab = (t, sub, m) => `<div class="page-head"><div><h2>${t}${DEMO ? '<span 
 /* ---------- bandeja ---------- */
 function filtradas() {
   const q = norm(S.f.q);
-  return S.alertas.filter(a => a.dias >= S.f.min).filter(a => {
+  return S.alertas.filter(a => a.dias == null || a.dias >= S.f.min).filter(a => {   // las alertas por conciliar (sin check reciente) no dependen del filtro de días
     const t = tienda(a.idpdv); if (!okT(t)) return false;
     if (q && !norm(`${a.nombre} ${a.usuario} ${t ? t.nombre + ' ' + t.supervisor : ''}`).includes(q)) return false;
     return true;
@@ -660,6 +659,7 @@ function vBandeja() {
     <div class="kpi click ${S.f.min === 2 ? 'sel' : ''}" onclick="S.f.min=2;vBandeja()"><div class="l">Abiertas</div><div class="v">${fmt(todas.length)}</div><div class="s">2 o más días sin check</div></div>
     <div class="kpi click ${S.f.min === 3 ? 'sel' : ''}" onclick="S.f.min=3;vBandeja()"><div class="l">3 o más días</div><div class="v" style="color:var(--orange-n)">${fmt(n(3))}</div><div class="s">prioridad media</div></div>
     <div class="kpi click ${S.f.min === 5 ? 'sel' : ''}" onclick="S.f.min=5;vBandeja()"><div class="l">5 o más días</div><div class="v" style="color:var(--red)">${fmt(n(5))}</div><div class="s">prioridad alta</div></div>
+    <div class="kpi"><div class="l">Por conciliar</div><div class="v" style="color:var(--purple)">${fmt(todas.filter(a => a.origen === 'conciliacion').length)}</div><div class="s">baja sin registro: confirmar con históricos</div></div>
     <div class="kpi"><div class="l">Con ausencia vigente</div><div class="v" style="color:var(--blue)">${fmt(S.vigentes.length)}</div><div class="s">${fmt(reg)} regresan en ≤ 3 días</div></div></div>`;
   h += barraFiltros('vBandeja', S.alertas.map(a => tienda(a.idpdv)).filter(Boolean), ['zona_rrhh', 'rrhh', 'supervisor', 'region', 'cadena']);
   h += `<div class="tools"><input type="search" id="q" placeholder="🔎 Buscar nombre, usuario, tienda o supervisor…" value="${esc(S.f.q)}"><span class="muted">${fmt(f.length)} caso${f.length === 1 ? '' : 's'}</span></div>`;
@@ -674,9 +674,9 @@ function filaAlerta(a) {
   const dias90 = a.aus.reduce((s, x) => s + x.dias, 0);
   const hist = a.aus.length ? `<span class="${rep ? 'rep' : ''}">${a.aus.length} ausencia${a.aus.length > 1 ? 's' : ''} · ${dias90} d</span><br>${esc(a.aus.slice().sort((x, y) => y.fecha_inicio.localeCompare(x.fecha_inicio))[0].motivo)} (${fdate(a.aus.slice().sort((x, y) => y.fecha_inicio.localeCompare(x.fecha_inicio))[0].fecha_inicio)})` : 'Sin ausencias';
   return `<div class="al">
-    <div class="who a-who"><b>${esc(a.nombre)}</b><small>${esc(a.usuario)}${ant != null ? ' · ' + (ant < 90 ? ant + ' días en la empresa' : Math.floor(ant / 30) + ' meses') : ''}${a.empresa ? ' · ' + esc(a.empresa) : ''}</small></div>
+    <div class="who a-who"><b>${esc(a.nombre)}</b>${a.origen === 'conciliacion' ? `<span class="pill" style="background:#fdf1de;color:#8a5a00;margin-left:6px;font-size:10px" title="${esc(a.nota)}">Por conciliar</span>` : ''}<small>${esc(a.usuario)}${ant != null ? ' · ' + (ant < 90 ? ant + ' días en la empresa' : Math.floor(ant / 30) + ' meses') : ''}${a.empresa ? ' · ' + esc(a.empresa) : ''}</small></div>
     <div class="store a-store"><b>${t ? esc(t.nombre) : 'Tienda no identificada'}</b><small>${t ? esc(t.estado) + ' · ' + esc(t.supervisor || '') : ''}</small></div>
-    <div class="a-days"><span class="days ${colorDias(a.dias)}">${a.dias} d</span></div>
+    <div class="a-days">${a.dias == null ? '<span class="days d5" title="Sin check en las últimas 10 semanas">sin check</span>' : `<span class="days ${colorDias(a.dias)}">${a.dias} d</span>`}</div>
     <div class="muted a-last">${fdate(a.ultimo)}</div>
     <div class="hist a-hist">${hist}</div>
     <div class="acts a-acts">
@@ -1114,22 +1114,18 @@ Real.bajasLista = async function (desde) {
   return r.map(b => ({ id: b.id, usuario: b.usuario_fieldwy, nombre: (b.colaboradores || {}).nombre || b.usuario_fieldwy, empresa: (b.colaboradores || {}).empresa, fecha: b.fecha_baja, ultimo: b.ultimo_dia_laborado, motivo: b.motivo, marca: b.marca_destino, adeudo: +b.adeudo_monto || 0, adeudoDet: b.adeudo_detalle, finq: b.finiquito_estatus, idpdv: b.idpdv || (b.colaboradores || {}).idpdv, com: b.comentarios, cap: b.capturado_en, enc: !!(b.encuesta_salida && (Array.isArray(b.encuesta_salida) ? b.encuesta_salida.length : b.encuesta_salida.baja_id)) }));
 };
 Real.registrarBaja = async function (d) {
-  const ins = await sb.from('bajas').insert({ usuario_fieldwy: d.usuario, fecha_baja: d.fecha, ultimo_dia_laborado: d.ultimo || null, motivo: d.motivo, marca_destino: d.marca || null, adeudo_monto: d.adeudo || 0, adeudo_detalle: d.adeudoDet || null, evidencia_url: d.evidencia || null, comentarios: d.comentarios || null, idpdv: d.idpdv || null }).select('id').single();
-  if (ins.error) throw ins.error;
-  const m = await sb.from('movimientos').insert({ usuario_fieldwy: d.usuario, tipo: 'Baja', fecha: d.fecha, motivo: d.motivo, idpdv: d.idpdv || null, origen: 'app' }); if (m.error) throw m.error;
-  const c = await sb.from('colaboradores').update({ estatus: 'Baja' }).eq('usuario_fieldwy', d.usuario); if (c.error) throw c.error;
-  try { const { data: u } = await sb.auth.getUser(); await sb.from('alertas_asistencia').update({ estatus: 'Baja confirmada', resuelta_por: u.user.id, resuelta_en: new Date().toISOString() }).eq('usuario_fieldwy', d.usuario).eq('estatus', 'Abierta'); } catch (e) { }
-  if (d.enc) await this.guardarEncuesta(ins.data.id, d.enc);
-  return ins.data.id;
+  // Baja, movimiento, estatus del colaborador, cierre de alertas y encuesta: una sola transacción en la base.
+  const { data, error } = await sb.rpc('registrar_baja', { p_usuario: d.usuario, p_fecha: d.fecha, p_ultimo: d.ultimo || null, p_motivo: d.motivo, p_marca: d.marca || null, p_adeudo: d.adeudo || 0,
+    p_adeudo_detalle: d.adeudoDet || null, p_evidencia: d.evidencia || null, p_comentarios: d.comentarios || null, p_idpdv: d.idpdv || null, p_enc: d.enc || null });
+  if (error) throw new Error(error.message);
+  return data;
 };
 Real.guardarEncuesta = async function (bajaId, e) {
   const { error } = await sb.from('encuesta_salida').upsert({ baja_id: bajaId, respondida_por: 'rh', ...e }); if (error) throw error;
 };
 Real.actualizarFiniquito = async function (id, est) { const { error } = await sb.from('bajas').update({ finiquito_estatus: est }).eq('id', id); if (error) throw error; };
-Real.anularBaja = async function (b) {
-  let r = await sb.from('bajas').delete().eq('id', b.id); if (r.error) throw r.error;
-  await sb.from('movimientos').delete().eq('usuario_fieldwy', b.usuario).eq('tipo', 'Baja').eq('fecha', b.fecha);
-  await sb.from('colaboradores').update({ estatus: 'Activo' }).eq('usuario_fieldwy', b.usuario);
+Real.anularBaja = async function (b, motivo) {
+  const { error } = await sb.rpc('anular_baja', { p_baja: b.id, p_motivo: motivo }); if (error) throw new Error(error.message);   // queda el rastro (quién, cuándo y por qué) en Auditoría
 };
 
 /* ----- encuesta de salida: campos reutilizables ----- */
@@ -1180,7 +1176,8 @@ async function vBajas() {
 async function cambiaFinq(id, est) { try { await API.actualizarFiniquito(id, est); const b = BJ.lista.find(x => x.id === id); if (b) b.finq = est; toast('Finiquito: ' + est); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } }
 async function anularBaja(id) {
   const b = BJ.lista.find(x => x.id === id); if (!b || !confirm(`¿Anular la baja de ${b.nombre} (${fdate(b.fecha)})?\nSe elimina la baja y el colaborador vuelve a quedar activo.`)) return;
-  try { await API.anularBaja(b); MV.loaded = false; R.vivo = false; toast('Baja anulada'); vBajas(); } catch (e) { toast('No se pudo anular: ' + (e.message || e)); }
+  const motivo = prompt('Motivo de la anulación (obligatorio; queda en Auditoría):', ''); if (motivo === null) return; if (limpia(motivo).length < 5) { toast('Escribe el motivo de la anulación (mínimo 5 caracteres)'); return; }
+  try { await API.anularBaja(b, limpia(motivo)); MV.loaded = false; R.vivo = false; toast('Baja anulada'); vBajas(); } catch (e) { toast('No se pudo anular: ' + (e.message || e)); }
 }
 
 /* ----- captura de una baja ----- */
@@ -1282,24 +1279,11 @@ Real.altasUltimas = async function () {
 };
 Real.empresas = async function () { const { data } = await sb.from('colaboradores').select('empresa').not('empresa', 'is', null).limit(3000); return [...new Set((data || []).map(x => x.empresa))].sort(); };
 Real.registrarAlta = async function (d) {
-  const ex = await sb.from('colaboradores').select('usuario_fieldwy,estatus').eq('usuario_fieldwy', d.usuario).maybeSingle(); if (ex.error) throw ex.error;
-  let tipoMov = 'Alta';
-  if (ex.data) {
-    if (ex.data.estatus !== 'Baja') throw new Error('El usuario ' + d.usuario + ' ya existe y está activo.');
-    const u = await sb.from('colaboradores').update({ nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, estatus: 'Activo', candidato_id: d.candidato || null }).eq('usuario_fieldwy', d.usuario); if (u.error) throw u.error; await sb.from('colaboradores').update({ tipo_ingreso: 'Reingreso' }).eq('usuario_fieldwy', d.usuario); tipoMov = 'Reingreso';
-  } else {
-    const fila = { usuario_fieldwy: d.usuario, nombre: d.nombre, empresa: d.empresa || null, fecha_ingreso: d.fecha, idpdv: d.idpdv, tipo_ingreso: d.tipo || 'Nuevo', candidato_id: d.candidato || null };
-    let i = await sb.from('colaboradores').insert(fila); if (i.error && /tipo_ingreso/.test(i.error.message)) { delete fila.tipo_ingreso; i = await sb.from('colaboradores').insert(fila); } if (i.error) throw i.error;
-  }
-  const m = await sb.from('movimientos').insert({ usuario_fieldwy: d.usuario, tipo: tipoMov, fecha: d.fecha, idpdv: d.idpdv, origen: 'app' }); if (m.error) throw m.error;
-  const s = d.sens || {}; if (Object.values(s).some(v => v != null && v !== '')) { const r = await sb.from('datos_sensibles').upsert({ usuario_fieldwy: d.usuario, ...s, actualizado_en: new Date().toISOString() }); if (r.error) throw new Error('Se dio de alta, pero no se guardaron los datos personales: ' + r.error.message); }
-  const bc = d.banc || {}; let bancOk = false;
-  if (Object.values(bc).some(v => v)) { const r = await sb.rpc('guardar_bancarios', { p_usuario: d.usuario, p_banco: bc.banco || null, p_titular: bc.titular || null, p_clabe: bc.clabe || null, p_cuenta: bc.cuenta || null, p_cuenta2: bc.cuenta2 || null, p_tarjeta: bc.tarjeta || null }); if (r.error) throw new Error('Se dio de alta, pero no se guardaron los datos bancarios: ' + r.error.message); bancOk = !!bc.clabe; }
-  if (d.sueldo) { const r = await sb.rpc('cambiar_sueldo', { p_usuario: d.usuario, p_monto: d.sueldo.monto, p_bono: d.sueldo.bono, p_desde: d.fecha, p_motivo: 'Alta' }); if (r.error) throw new Error('Se dio de alta, pero no se guardó el sueldo: ' + r.error.message); }
-  const lim = addD(d.fecha, PLAZO_DOCS), hoy = HOY;
-  const pend = DOCS.map(t => ({ usuario_fieldwy: d.usuario, tipo: t, fecha_limite: lim, estatus: (t === 'Datos bancarios' && bancOk) ? 'Recibido' : 'Pendiente', recibido_en: (t === 'Datos bancarios' && bancOk) ? hoy : null }));
-  const p = await sb.from('pendientes_documentos').upsert(pend, { onConflict: 'usuario_fieldwy,tipo' }); if (p.error) throw new Error('Se dio de alta, pero no se crearon los pendientes de expediente: ' + p.error.message);
-  if (d.candidato) await sb.from('candidatos').update({ usuario_fieldwy: d.usuario }).eq('id', d.candidato);
+  // Todo ocurre dentro de la base en una sola transacción (colaborador, movimiento, datos personales, bancarios, sueldo, pendientes y candidato): o se guarda completo o no se guarda nada.
+  const { data, error } = await sb.rpc('registrar_alta', { p_usuario: d.usuario, p_nombre: d.nombre, p_empresa: d.empresa || null, p_fecha: d.fecha, p_idpdv: d.idpdv, p_tipo: d.tipo || 'Nuevo',
+    p_candidato: d.candidato || null, p_sens: d.sens || {}, p_banc: d.banc || {}, p_sueldo: d.sueldo || null });
+  if (error) throw new Error(error.message);
+  return data;
 };
 Real.expedientes = async function () {
   const r = await todo(() => sb.from('pendientes_documentos').select('id,usuario_fieldwy,tipo,fecha_limite,estatus,enlace_url,colaboradores(nombre,fecha_ingreso,idpdv,empresa,estatus)').eq('estatus', 'Pendiente').order('fecha_limite'));
@@ -1351,6 +1335,7 @@ async function altaNueva(candId) {
     <div class="row2">${fld('Apellido paterno *', 'ap')}${fld('Apellido materno', 'am')}</div>
     <div class="row2"><div class="fld"><label>Fecha de ingreso *</label><input type="date" id="al-f" value="${c ? c.fecha_programada : HOY}"></div><div class="fld"><label>Tienda *</label><input id="al-t" list="al-tl" placeholder="Escribe IDPDV o nombre…" value="${t ? esc(c.idpdv + ' · ' + t.nombre + ' (' + (t.cadena || '') + ' · ' + (t.estado || '') + ')') : ''}"><datalist id="al-tl">${tiendaOpts()}</datalist></div></div>
     <div class="row2"><div class="fld"><label>Razón social (empresa)</label><input id="al-emp" list="al-el" placeholder="Ej. Benber SS"><datalist id="al-el">${AL.emp.map(e => `<option value="${esc(e)}">`).join('')}</datalist></div><div class="fld"><label>Tipo de ingreso</label><select id="al-tipo"><option>Nuevo</option><option>Reingreso</option></select></div></div>
+    <div class="note">Reingreso: usa el <b>mismo usuario Fieldway</b> que tenía (debe estar en baja). Solo si no está cargado a la agencia, crea uno nuevo con <b>GB</b> al final.</div>
     <details class="enc-d" open><summary>🔒 Datos personales (solo RH y administración)</summary><div class="enc-box">
       <div class="row2">${fld('CURP', 'curp', '18 caracteres', 'maxlength="18" style="text-transform:uppercase"')}${fld('RFC', 'rfc', '12 o 13 caracteres', 'maxlength="13" style="text-transform:uppercase"')}</div>
       <div class="row2">${fld('NSS (IMSS)', 'nss', '11 dígitos', 'inputmode="numeric" maxlength="11"')}${fld('Teléfono', 'tel', '10 dígitos', `inputmode="numeric" maxlength="10" value="${esc(c && c.telefono ? digs(c.telefono).slice(-10) : '')}"`)}</div>
@@ -1383,8 +1368,8 @@ async function altaGuardar() {
   const sueldo = suel !== '' ? { monto: +suel, bono: bono !== '' ? +bono : null } : null;                                          // va a sueldos_historial (solo quien puede editar sueldos)
   b.disabled = true; b.textContent = 'Guardando…';
   try {
-    await API.registrarAlta({ usuario: us, nombre: [npila, ap, am].filter(Boolean).join(' '), fecha: f, idpdv: idp, empresa: g('emp'), tipo: $('al-tipo').value, candidato: AL.pre ? AL.pre.id : null, sens, banc, sueldo });
-    cerrarM(); toast('Alta registrada: ' + nom); vAltas();
+    const res = await API.registrarAlta({ usuario: us, nombre: [npila, ap, am].filter(Boolean).join(' '), fecha: f, idpdv: idp, empresa: g('emp'), tipo: $('al-tipo').value, candidato: AL.pre ? AL.pre.id : null, sens, banc, sueldo });
+    cerrarM(); toast((res && res.reingreso ? 'Reingreso registrado: ' : 'Alta registrada: ') + nom + (res && res.nota ? ' · ' + res.nota : '')); vAltas();
   } catch (x) { b.disabled = false; b.textContent = 'Reintentar'; w.hidden = false; w.textContent = x.message || String(x); }
 }
 
