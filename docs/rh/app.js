@@ -391,13 +391,34 @@ function fbChips() {
   $('fb-chips').innerHTML = act.map(([k, l]) => `<span class="chip">${esc(l)}: ${esc(txt(k))}<button class="chip-x" type="button" aria-label="Quitar ${esc(l)}" onclick="fbSet('${k}','')">×</button></span>`).join('');
   $('fb-summary').textContent = act.length ? act.map(([k]) => txt(k)).join(' · ') : 'Sin filtros';
 }
+
+/* ---------- periodo libre (secciones que trabajan con fechas futuras, como Posibles ingresos): hoy, mañana, semana, mes, rango o todo ---------- */
+const PL = { modo: 'sem', sem: 0, mes: '', desde: '', hasta: '' };
+const lunesDe = d => { const x = new Date(d + 'T12:00:00'); return addD(d, -((x.getDay() + 6) % 7)); };
+function rangoLibre() {
+  if (PL.modo === 'hoy') return { desde: HOY, hasta: HOY, txt: 'Hoy' };
+  if (PL.modo === 'man') return { desde: addD(HOY, 1), hasta: addD(HOY, 1), txt: 'Mañana' };
+  if (PL.modo === 'sem') { const l = addD(lunesDe(HOY), 7 * PL.sem); return { desde: l, hasta: addD(l, 6), txt: 'Semana' }; }
+  if (PL.modo === 'mes') { const m = PL.mes || HOY.slice(0, 7), n = new Date(m + '-01T12:00:00'); n.setMonth(n.getMonth() + 1); n.setDate(0); return { desde: m + '-01', hasta: n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate()), txt: 'Mes' }; }
+  if (PL.modo === 'todo') return { desde: '2020-01-01', hasta: addD(HOY, 120), txt: 'Todo', todo: true };
+  const d = PL.desde || HOY, h = PL.hasta || d; return { desde: d <= h ? d : h, hasta: d <= h ? h : d, txt: 'Rango' };
+}
+function periodoLibreHTML() {
+  const r = rangoLibre(), modos = [['hoy', '☀️ Hoy'], ['man', '🌅 Mañana'], ['sem', '📅 Semana'], ['mes', '🗓️ Mes'], ['rango', '↔️ Rango'], ['todo', '📊 Todo']];
+  let ctl = '';
+  if (PL.modo === 'sem') { const opts = []; for (let k = -12; k <= 4; k++) { const l = addD(lunesDe(HOY), 7 * k); opts.push(`<option value="${k}" ${k === PL.sem ? 'selected' : ''}>${fdate(l)} al ${fdate(addD(l, 6))}${k === 0 ? ' (esta semana)' : k === 1 ? ' (próxima)' : ''}</option>`); } ctl = `<select onchange="PL.sem=+this.value;render()">${opts.join('')}</select>`; }
+  else if (PL.modo === 'mes') { const o = [], m0 = new Date(HOY.slice(0, 7) + '-01T12:00:00'); for (let k = -12; k <= 2; k++) { const d = new Date(m0); d.setMonth(d.getMonth() + k); const m = d.getFullYear() + '-' + pad(d.getMonth() + 1); o.push(`<option value="${m}" ${(PL.mes || HOY.slice(0, 7)) === m ? 'selected' : ''}>${mlabel(m)}${m === HOY.slice(0, 7) ? ' (en curso)' : ''}</option>`); } ctl = `<select onchange="PL.mes=this.value;render()">${o.join('')}</select>`; }
+  else if (PL.modo === 'rango') ctl = `<input type="date" value="${r.desde}" onchange="PL.desde=this.value;if(!PL.hasta||PL.hasta<PL.desde)PL.hasta=PL.desde;render()"> <span>a</span> <input type="date" value="${r.hasta}" onchange="PL.hasta=this.value;if(!PL.desde)PL.desde=PL.hasta;render()">`;
+  return `<div class="pb-seg">${modos.map(([k, n]) => `<button class="${PL.modo === k ? 'on' : ''}" onclick="PL.modo='${k}';if('${k}'==='rango'&&!PL.desde){PL.desde=HOY;PL.hasta=HOY}render()">${n}</button>`).join('')}</div>${ctl}<span class="pb-info">${r.todo ? 'Todo el histórico cargado' : r.desde === r.hasta ? fdate(r.desde) : fdate(r.desde) + ' al ' + fdate(r.hasta)}</span>`;
+}
+
 function fbPintar() {
   if (!S.cat || !$('filterbar')) return;
   const v = fbVista(), sinFb = !!v.sinFiltros;
   document.body.classList.toggle('sin-fb', sinFb); if (sinFb) return;
   const gen = (typeof R !== 'undefined' && R.meta && R.meta.generado) ? R.meta.generado : (S.gen || '');
   $('fb-act').textContent = gen ? '🕒 Actualizado: ' + gen : '';
-  $('pbar').innerHTML = v.per && typeof R !== 'undefined' && R.loaded && R.meta ? periodoHTML('render', { dia: v.per === 'dia' }) : '';
+  $('pbar').innerHTML = v.per === 'libre' ? periodoLibreHTML() : v.per && typeof R !== 'undefined' && R.loaded && R.meta ? periodoHTML('render', { dia: v.per === 'dia' }) : '';
   const abierta = !$('fb-row').classList.contains('est-cerrada');
   $('fb-row').innerHTML = `<div class="fb-line"><div class="fb-left">${FB_SECCION.map(fbCampo).join('')}<div class="fb-field fb-clear-wrap"><label>&nbsp;</label><button id="fb-clear" type="button" title="Quitar todos los filtros" onclick="fbLimpiar()"><span>✕</span> Quitar filtros</button></div></div>
     <div class="fb-right"><button id="fb-est-toggle" type="button" class="btn" title="Mostrar u ocultar los filtros de estructura" onclick="fbEstructura()">Estructura ${abierta ? '▾' : '▸'}</button><div class="fb-est">${FB_ESTR.map(fbCampo).join('')}</div></div></div>`;
@@ -810,7 +831,7 @@ const VISTAS = [
   { k: 'hc', ic: '👥', n: 'HC', mod: 'reportes', f: vHC, per: true },
   { k: 'movs', ic: '🔄', n: 'Ingresos y bajas', mod: 'reportes', f: vMovs, per: 'dia' },
   { k: 'sep', n: 'Gestión', sep: true },
-  { k: 'ingresos', ic: '🧑‍💼', n: 'Posibles ingresos', mod: 'posibles_ingresos', f: vIngresos },
+  { k: 'ingresos', ic: '🧑‍💼', n: 'Posibles ingresos', mod: 'posibles_ingresos', f: vIngresos, per: 'libre' },
   { k: 'altas', ic: '🆕', n: 'Altas', mod: 'colaboradores', f: vAltas },
   { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', f: vExpedientes },
   { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
@@ -962,13 +983,15 @@ Real.catIngresos = async function () {
   const val = t => (v.data || []).filter(x => x.tipo === t).map(x => x.valor);
   return { recl: r.data || [], fuentes: f.data || [], generado: val('generado_por'), experiencia: val('experiencia'), acomp: val('acompanamiento') };
 };
-const COLS_CAND = 'id,nombre,idpdv,fecha_programada,estatus,reclutador_id,fuente_id,generado_por,experiencia,acompanamiento,acompanado_por,referido_por,comentarios,usuario_fieldwy,reagendas,origen';
+const COLS_CAND = 'id,nombre,telefono,hora_ingreso,idpdv,fecha_programada,estatus,reclutador_id,fuente_id,generado_por,experiencia,acompanamiento,acompanado_por,referido_por,comentarios,usuario_fieldwy,reagendas,origen';
 Real.candidatos = function (desde, hasta) { return todo(() => sb.from('candidatos').select(COLS_CAND).gte('fecha_programada', desde).lte('fecha_programada', hasta).order('fecha_programada').order('nombre')); };
 Real.insertarCandidatos = async function (rows) {
   const lote = crypto.randomUUID(); let n = 0;
   for (let i = 0; i < rows.length; i += 200) { const parte = rows.slice(i, i + 200).map(r => ({ ...r, lote, origen: 'app' })); const { error } = await sb.from('candidatos').insert(parte); if (error) throw error; n += parte.length; }
   return n;
 };
+Real.confirmarIngreso = async function (id, datos, hora) { return Real.finRpc('confirmar_ingreso', { p_id: id, p_datos: datos, p_hora: hora || null }); };
+Real.datosCandidato = async function (id) { const { data, error } = await sb.from('candidatos_datos').select('*').eq('candidato_id', id).maybeSingle(); if (error) throw error; return data; };
 Real.eliminarCandidato = async function (id) { const { error } = await sb.from('candidatos').delete().eq('id', id); if (error) throw error; };
 Real.actualizarCandidato = async function (id, patch) { const { error } = await sb.from('candidatos').update(patch).eq('id', id); if (error) throw error; };
 
@@ -990,6 +1013,8 @@ Demo.candidatos = async function (desde, hasta) {
   return Demo._cands.filter(c => c.fecha_programada >= desde && c.fecha_programada <= hasta);
 };
 Demo.insertarCandidatos = async function (rows) { await new Promise(r => setTimeout(r, 300)); rows.forEach(r => Demo._cands.push({ id: 'N' + Math.random(), reagendas: 0, estatus: 'Programado', ...r })); return rows.length; };
+Demo.confirmarIngreso = async function (id, datos, hora) { const c = Demo._cands.find(x => x.id === id); Object.assign(c, { estatus: 'Ingresó', hora_ingreso: hora, telefono: datos.telefono, nombre: [datos.nombre_pila, datos.apellido_p, datos.apellido_m].filter(Boolean).join(' ').toUpperCase() }); };
+Demo.datosCandidato = async function () { return null };
 Demo.eliminarCandidato = async function (id) { Demo._cands = Demo._cands.filter(x => x.id !== id); };
 Demo.actualizarCandidato = async function (id, patch) { const c = Demo._cands.find(x => x.id === id); Object.assign(c, patch); };
 
@@ -1016,20 +1041,33 @@ function aExperiencia(v) {
   if (tel && ven) return g('Ventas de telefonía'); if (tel) return g('Telefonía'); if (ven && atc) return g('Ventas y atención al cliente'); if (atc) return g('Atención al cliente'); if (ven) return g('Ventas'); if (/SIN EXP|NINGUNA/.test(k)) return g('Sin experiencia'); return '';
 }
 const CAMPOS = [
-  { k: 'fecha', h: 'Fecha de ingreso', w: 128, tipo: 'date' }, { k: 'nombre', h: 'Nombre del candidato', w: 210 }, { k: 'idpdv', h: 'IDPDV', w: 96 },
-  { k: 'fuente', h: 'Medio', w: 140, tipo: 'sel' }, { k: 'recl', h: 'Reclutado por', w: 140, tipo: 'sel' }, { k: 'generado', h: 'Generado por', w: 128, tipo: 'sel' },
-  { k: 'experiencia', h: 'Experiencia', w: 170, tipo: 'sel' }, { k: 'acomp', h: 'Acompañamiento', w: 130, tipo: 'sel' }, { k: 'referido', h: 'Referido por', w: 130 }, { k: 'coment', h: 'Comentarios', w: 180 }
+  { k: 'fecha', h: 'Fecha de ingreso', w: 128, tipo: 'date' }, { k: 'nombre', h: 'Nombre del candidato', w: 210 }, { k: 'tel', h: 'Teléfono de contacto', w: 128 }, { k: 'idpdv', h: 'IDPDV', w: 96 },
+  { k: 'fuente', h: 'Medio', w: 140, tipo: 'sel' }, { k: 'generado', h: 'Generado por (puesto)', w: 140, tipo: 'sel' }, { k: 'recl', h: 'Reclutado por', w: 150, tipo: 'sel' },
+  { k: 'experiencia', h: 'Experiencia', w: 170, tipo: 'sel' }, { k: 'acomp', h: 'Acompañamiento (puesto)', w: 150, tipo: 'sel' }, { k: 'ingresa', h: 'Ingresa', w: 160, tipo: 'ing' }, { k: 'hora', h: 'Hora de ingreso', w: 100, tipo: 'time' },
+  { k: 'referido', h: 'Referido por', w: 130 }, { k: 'coment', h: 'Comentarios', w: 180 }
 ];
-const filaVacia = () => ({ fecha: '', nombre: '', idpdv: '', fuente: '', recl: S.me && S.me.reclutador_id ? String(S.me.reclutador_id) : '', generado: '', experiencia: '', acomp: '', referido: '', coment: '' });
-function opcionesCampo(k) {
+const filaVacia = () => ({ fecha: '', nombre: '', tel: '', idpdv: '', fuente: '', generado: '', recl: S.me && S.me.reclutador_id ? String(S.me.reclutador_id) : '', experiencia: '', acomp: '', ingresa: '', hora: '', referido: '', coment: '' });
+/* reclutadores: si el catálogo trae el puesto de cada uno, al elegir "Generado por" solo salen los de ese puesto; si no, salen todos */
+const reclPorPuesto = p => { const L = IG.cat.recl, hay = L.some(x => x.puesto); return hay && p ? L.filter(x => !x.puesto || norm(x.puesto) === norm(p)) : L; };
+/* nombres sugeridos para "Ingresa" según el puesto de acompañamiento: Supervisor, Líder Telefónica (de la estructura) o Reclutador (catálogo) */
+function nombresIngresa(puesto, idpdv) {
+  const T = Object.values(S.cat.tiendas), uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'es')), t = tienda(+idpdv);
+  if (puesto === 'Supervisor') { const l = uniq(T.map(x => x.supervisor)); return t && t.supervisor ? [t.supervisor, ...l.filter(x => x !== t.supervisor)] : l; }
+  if (puesto === 'Líder Telefónica') { const l = uniq(T.map(x => x.lider)); return t && t.lider ? [t.lider, ...l.filter(x => x !== t.lider)] : l; }
+  if (puesto === 'Reclutador') return IG.cat.recl.map(x => x.nombre);
+  return [];
+}
+function opcionesCampo(k, r) {
   const c = IG.cat;
-  if (k === 'fuente') return c.fuentes.map(x => [String(x.id), x.fuente]); if (k === 'recl') return c.recl.map(x => [String(x.id), x.nombre]);
+  if (k === 'fuente') return c.fuentes.map(x => [String(x.id), x.fuente]); if (k === 'recl') return reclPorPuesto(r && r.generado).map(x => [String(x.id), x.nombre]);
   if (k === 'generado') return c.generado.map(x => [x, x]); if (k === 'experiencia') return c.experiencia.map(x => [x, x]); if (k === 'acomp') return c.acomp.map(x => [x, x]); return [];
 }
 function valorPegado(k, t) {
   t = String(t || '').trim();
   if (k === 'fecha') return parseFecha(t);
   if (k === 'idpdv') return t.replace(/\D/g, '');
+  if (k === 'tel') return t.replace(/\D/g, '').slice(-10);
+  if (k === 'hora') { const m = t.match(/(\d{1,2})[:.](\d{2})/); return m ? pad(+m[1]) + ':' + m[2] : ''; }
   if (k === 'fuente') { const o = aOpcion(t, IG.cat.fuentes.map(x => x.fuente), MAPA_FUENTE); const f = IG.cat.fuentes.find(x => x.fuente === o); return f ? String(f.id) : ''; }
   if (k === 'recl') { const nombre = t.replace(/\s+/g, ' ').trim(); const o = aOpcion(nombre, IG.cat.recl.map(x => x.nombre)); const f = IG.cat.recl.find(x => x.nombre === o); return f ? String(f.id) : ''; }
   if (k === 'generado') return aOpcion(t, IG.cat.generado, MAPA_GEN);
@@ -1042,31 +1080,40 @@ function errorFila(r) {
   if (!r.fecha) e.fecha = 'Falta la fecha'; else if (r.fecha < addD(HOY, -1)) e.fecha = 'Fecha pasada';
   if (r.nombre.trim().length < 5) e.nombre = 'Escribe nombre completo';
   if (!r.idpdv) e.idpdv = 'Falta IDPDV'; else if (!tienda(+r.idpdv)) e.idpdv = 'IDPDV no existe';
-  if (!r.fuente) e.fuente = 'Elige el medio'; if (!r.recl) e.recl = 'Elige reclutador';
+  if (!r.fuente) e.fuente = 'Elige el medio'; if (!r.recl) e.recl = 'Elige reclutador'; if (r.tel && r.tel.length !== 10) e.tel = 'El teléfono debe tener 10 dígitos';
   return e;
 }
-const vacia = r => !r.fecha && !r.nombre && !r.idpdv && !r.fuente && !(r.generado || r.experiencia || r.referido || r.coment);
+const vacia = r => !r.fecha && !r.nombre && !r.idpdv && !r.fuente && !(r.generado || r.experiencia || r.referido || r.coment || r.tel || r.ingresa || r.hora);
 
 /* ----- vista principal ----- */
 async function vIngresos() {
-  if (!IG.loaded) { $('content').innerHTML = cab('Posibles ingresos', 'Cargando…', 'mochila'); IG.cat = await API.catIngresos(); IG.grid = Array.from({ length: 12 }, filaVacia); await cargarCands(); IG.loaded = true; }
-  const T = [['captura', '✍️ Captura masiva', can('posibles_ingresos', 'crear')], ['seguimiento', '📅 Seguimiento', true], ['resumen', '📊 Resumen y conversión', true]].filter(x => x[2]);
+  if (!IG.loaded) { $('content').innerHTML = cab('Posibles ingresos', 'Cargando…', 'mochila'); IG.cat = await API.catIngresos(); IG.grid = Array.from({ length: 12 }, filaVacia); IG.tab = can('posibles_ingresos', 'crear') ? 'captura' : 'seguimiento'; IG.loaded = true; }
+  const T = [['captura', '✍️ Captura', can('posibles_ingresos', 'crear')], ['seguimiento', '📅 Seguimiento', true], ['resumen', '🗺️ Resumen', true], ['detalle', '📊 Detalle', true]].filter(x => x[2]);
   if (!T.find(x => x[0] === IG.tab)) IG.tab = T[0][0];
-  let h = cab('Posibles ingresos', 'Programa los ingresos de la semana pegando filas desde Excel, da seguimiento día a día y mide qué reclutadores y medios convierten.', 'mochila');
-  h += `<div class="tools">${T.map(([k, n]) => `<button class="chip ${IG.tab === k ? 'on' : ''}" onclick="IG.tab='${k}';vIngresos()">${n}</button>`).join('')}</div><div id="ig-body"></div>`;
+  let h = cab('Posibles ingresos', 'Programa los ingresos (en bloque o uno por uno), da seguimiento por región, confirma quién ingresó y mide qué reclutadores y medios convierten. El periodo se elige arriba.', 'mochila');
+  h += `<div class="tools">${T.map(([k, n]) => `<button class="chip ${IG.tab === k ? 'on' : ''}" onclick="IG.tab='${k}';vIngresos()">${n}</button>`).join('')}</div><div id="ig-body"><div class="loading">Cargando…</div></div>`;
   $('content').innerHTML = h;
-  ({ captura: tCaptura, seguimiento: tSeguimiento, resumen: tResumen })[IG.tab]();
+  try { if (IG.tab !== 'captura') { const r = rangoLibre(); await asegurarCands(r.desde, r.hasta); } else if (!IG.lista.length) await cargarCands(); } catch (e) { $('ig-body').innerHTML = `<div class="warn">No se pudieron cargar los candidatos: ${esc(e.message || e)}</div>`; return; }
+  ({ captura: tCaptura, seguimiento: tSeguimiento, resumen: tResumen, detalle: tDetalle })[IG.tab]();
 }
-async function cargarCands() { IG.lista = await API.candidatos(addD(HOY, -120), addD(HOY, 60)); }
+IG.rng = null;
+async function cargarCands(d, h) { d = d || (IG.rng ? IG.rng[0] : addD(HOY, -120)); h = h || (IG.rng ? IG.rng[1] : addD(HOY, 60)); IG.lista = await API.candidatos(d, h); IG.rng = [d, h]; }
+async function asegurarCands(d, h) {   // carga solo lo que falta del rango pedido (el periodo de arriba puede ir a fechas viejas o futuras)
+  d = d < '2020-01-01' ? '2020-01-01' : d; h = h > addD(HOY, 120) ? addD(HOY, 120) : h;
+  if (IG.rng && d >= IG.rng[0] && h <= IG.rng[1]) return;
+  await cargarCands(IG.rng ? (d < IG.rng[0] ? d : IG.rng[0]) : (d < addD(HOY, -120) ? d : addD(HOY, -120)), IG.rng ? (h > IG.rng[1] ? h : IG.rng[1]) : (h > addD(HOY, 60) ? h : addD(HOY, 60)));
+}
 
 /* ----- captura masiva ----- */
 function tCaptura() {
   const prop = S.me.permisos.posibles_ingresos.alcance === 'propio';
-  let h = `<div class="card"><div class="note">Copia las filas de tu Excel (sin encabezados) en este orden: <b>fecha · nombre · IDPDV · medio · reclutado por · generado por · experiencia · acompañamiento · referido por · comentarios</b>, haz clic en la primera celda y pega con <b>Ctrl+V</b>. También puedes escribir directo. Lo que no se reconozca queda en rojo para que lo corrijas.</div>
-  <div class="tools"><button class="btn sm" onclick="IG.grid.push(...Array.from({length:10},filaVacia));tCaptura()">+ 10 filas</button><button class="btn sm" onclick="limpiarVacias()">Quitar filas vacías</button><label class="btn sm xl-btn">📂 Cargar Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="importarExcel(this.files[0]);this.value=''"></label><button class="btn sm" onclick="IG.grid=Array.from({length:12},filaVacia);tCaptura()">Empezar de nuevo</button><span class="muted" id="g-res"></span><button class="btn primary" id="g-ok" style="margin-left:auto" onclick="guardarGrid()">Guardar candidatos</button></div>
+  let h = `<div class="card"><div class="note">Copia las filas de tu Excel (sin encabezados) en este orden: <b>fecha · nombre · teléfono · IDPDV · medio · generado por (puesto) · reclutado por · experiencia · acompañamiento (puesto) · ingresa · hora de ingreso · referido por · comentarios</b>, haz clic en la primera celda y pega con <b>Ctrl+V</b>. También puedes escribir directo. Lo que no se reconozca queda en rojo para que lo corrijas.</div>
+  <datalist id="dl-ing"></datalist>
+  <div class="tools"><button class="btn sm primary" onclick="modalCandidato()">➕ Nuevo ingreso individual</button><button class="btn sm" onclick="IG.grid.push(...Array.from({length:10},filaVacia));tCaptura()">+ 10 filas</button><button class="btn sm" onclick="limpiarVacias()">Quitar filas vacías</button><label class="btn sm xl-btn">📂 Cargar Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="importarExcel(this.files[0]);this.value=''"></label><button class="btn sm" onclick="IG.grid=Array.from({length:12},filaVacia);tCaptura()">Empezar de nuevo</button><span class="muted" id="g-res"></span><button class="btn primary" id="g-ok" style="margin-left:auto" onclick="guardarGrid()">Guardar candidatos</button></div>
   <div class="tbl-wrap grid-wrap"><table class="dt gt" id="gt"><thead><tr><th>#</th>${CAMPOS.map(c => `<th style="min-width:${c.w}px">${c.h}</th>`).join('')}<th></th></tr></thead><tbody>${IG.grid.map((r, i) => filaGrid(r, i)).join('')}</tbody></table></div></div>`;
   $('ig-body').innerHTML = h; resumenGrid();
   const t = $('gt');
+  t.addEventListener('change', e => { const el = e.target.closest('[data-r]'); if (!el || CAMPOS[+el.dataset.c].k !== 'generado') return; const i = +el.dataset.r, j = CAMPOS.findIndex(c => c.k === 'recl'), rs = t.querySelector('#gr' + i + ' select[data-c="' + j + '"]'); if (rs) { rs.innerHTML = '<option value=""></option>' + reclPorPuesto(IG.grid[i].generado).map(x => `<option value="${x.id}" ${String(x.id) === IG.grid[i].recl ? 'selected' : ''}>${esc(x.nombre)}</option>`).join(''); } });
   t.addEventListener('paste', e => {
     const el = e.target.closest('[data-r]'); if (!el) return; const txt = (e.clipboardData || window.clipboardData).getData('text'); if (!txt || !/[\t\n]/.test(txt)) return; e.preventDefault();
     const r0 = +el.dataset.r, c0 = +el.dataset.c; const filas = txt.replace(/\r/g, '').split('\n'); if (filas[filas.length - 1] === '') filas.pop();
@@ -1079,13 +1126,16 @@ function filaGrid(r, i) {
   const e = errorFila(r), vac = vacia(r);
   const celda = (c, j) => {
     const bad = !vac && e[c.k] ? 'bad' : '', ttl = !vac && e[c.k] ? ` title="${esc(e[c.k])}"` : '';
-    if (c.tipo === 'sel') return `<td class="${bad}"${ttl}><select data-r="${i}" data-c="${j}"><option value=""></option>${opcionesCampo(c.k).map(([v, t]) => `<option value="${esc(v)}" ${v === r[c.k] ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></td>`;
+    if (c.tipo === 'sel') return `<td class="${bad}"${ttl}><select data-r="${i}" data-c="${j}"><option value=""></option>${opcionesCampo(c.k, r).map(([v, t]) => `<option value="${esc(v)}" ${v === r[c.k] ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></td>`;
+    if (c.tipo === 'time') return `<td class="${bad}"${ttl}><input type="time" data-r="${i}" data-c="${j}" value="${esc(r.hora)}"></td>`;
+    if (c.tipo === 'ing') return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" list="dl-ing" value="${esc(r.ingresa)}" onfocus="IG.gi=${i};ingListaFila(${i})"></td>`;
     if (c.tipo === 'date') return `<td class="${bad}"${ttl}><input type="date" data-r="${i}" data-c="${j}" value="${esc(r.fecha)}"></td>`;
     if (c.k === 'idpdv') { const t = tienda(+r.idpdv); return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" inputmode="numeric" value="${esc(r.idpdv)}"><small id="ts${i}" class="ts">${t ? esc(t.nombre) : (r.idpdv ? 'IDPDV no existe' : '')}</small></td>`; }
     return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" value="${esc(r[c.k])}"></td>`;
   };
   return `<tr id="gr${i}" class="${vac ? 'vac' : ''}"><td class="n">${i + 1}</td>${CAMPOS.map(celda).join('')}<td><button class="btn sm" title="Quitar fila" onclick="IG.grid.splice(${i},1);tCaptura()">✕</button></td></tr>`;
 }
+function ingListaFila(i) { const r = IG.grid[i], dl = $('dl-ing'); if (dl) dl.innerHTML = nombresIngresa(r.acomp, r.idpdv).map(n => `<option value="${esc(n)}">`).join(''); }
 function marcar(i) { const tr = $('gr' + i); if (!tr) return; const r = IG.grid[i], e = errorFila(r), vac = vacia(r); tr.classList.toggle('vac', vac); CAMPOS.forEach((c, j) => { const td = tr.children[j + 1]; if (td) td.classList.toggle('bad', !vac && !!e[c.k]); }); }
 function resumenGrid() {
   const llenas = IG.grid.filter(r => !vacia(r)), malas = llenas.filter(r => Object.keys(errorFila(r)).length);
@@ -1098,13 +1148,13 @@ function limpiarVacias() { IG.grid = IG.grid.filter(r => !vacia(r)); while (IG.g
 async function guardarGrid() {
   const llenas = IG.grid.filter(r => !vacia(r)); if (!llenas.length) return;
   const b = $('g-ok'); b.disabled = true; b.textContent = 'Guardando…';
-  const rows = llenas.map(r => ({ nombre: r.nombre.replace(/\s+/g, ' ').trim(), idpdv: +r.idpdv, fecha_captura: HOY, fecha_programada: r.fecha, reclutador_id: +r.recl, fuente_id: +r.fuente, generado_por: r.generado || null, experiencia: r.experiencia || null, acompanamiento: r.acomp || null, referido_por: r.referido.trim() || null, comentarios: r.coment.trim() || null }));
+  const rows = llenas.map(r => ({ nombre: r.nombre.replace(/\s+/g, ' ').trim(), telefono: r.tel || null, hora_ingreso: r.hora || null, acompanado_por: r.ingresa.trim() || null, idpdv: +r.idpdv, fecha_captura: HOY, fecha_programada: r.fecha, reclutador_id: +r.recl, fuente_id: +r.fuente, generado_por: r.generado || null, experiencia: r.experiencia || null, acompanamiento: r.acomp || null, referido_por: r.referido.trim() || null, comentarios: r.coment.trim() || null }));
   try { const n = await API.insertarCandidatos(rows); toast(n + ' candidato' + (n > 1 ? 's' : '') + ' guardado' + (n > 1 ? 's' : '')); IG.grid = Array.from({ length: 12 }, filaVacia); await cargarCands(); IG.tab = 'seguimiento'; vIngresos(); }
   catch (e) { b.disabled = false; b.textContent = 'Guardar candidatos'; toast('No se pudo guardar: ' + (e.message || e)); }
 }
 
 /* ----- importar Excel ----- */
-const ENC = { fecha: /^(FECHA|DIA|FECHA DE INGRESO)/, nombre: /^NOMBRE/, idpdv: /^ID ?PDV/, fuente: /^MEDIO/, recl: /^RECLUTADO/, generado: /^GENERADO/, experiencia: /^EXPERIENCIA/, acomp: /^ACOMPA/, referido: /^REFERIDO/, coment: /^COMENT/ };
+const ENC = { fecha: /^(FECHA|DIA|FECHA DE INGRESO)/, nombre: /^NOMBRE/, tel: /^(TEL|CELULAR)/, ingresa: /^INGRESA/, hora: /^HORA/, idpdv: /^ID ?PDV/, fuente: /^MEDIO/, recl: /^RECLUTADO/, generado: /^GENERADO/, experiencia: /^EXPERIENCIA/, acomp: /^ACOMPA/, referido: /^REFERIDO/, coment: /^COMENT/ };
 function celdaTxt(v, k) {
   if (v == null || v === '') return '';
   if (k === 'fecha' && typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 864e5)); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
@@ -1127,84 +1177,132 @@ async function importarExcel(file) {
   } catch (e) { console.error(e); toast('No pude leer el archivo: ' + (e.message || e)); }
 }
 
-/* ----- seguimiento ----- */
+/* ----- seguimiento: etiquetas por región ----- */
 const okAlc = c => c.idpdv == null ? !Object.values(FL).some(Boolean) : okI(c.idpdv);
 const nombreRecl = id => (IG.cat.recl.find(x => x.id === id) || {}).nombre || '—';
 const nombreFuente = id => (IG.cat.fuentes.find(x => x.id === id) || {}).fuente || '—';
 const PEND = ['Programado', 'Confirmado', 'Reagenda'];
+const SEST = [['', 'Todos'], ['pend', '⏳ Pendientes'], ['Ingresó', '🙌 Ingresaron'], ['No llegó', '🚫 No llegó'], ['Declinó', '✖️ Declinó'], ['No contesta', '📵 No contesta']];
+const hh5 = h => h ? String(h).slice(0, 5) : '';
+const quienIngresa = c => c.acompanamiento && c.acompanamiento !== 'Ninguno' ? (c.acompanamiento + (c.acompanado_por ? ' · ' + c.acompanado_por : '')) : (c.acompanado_por || 'Sin acompañamiento');
 function tSeguimiento() {
-  const rangos = { hoy: ['Hoy', HOY, HOY], man: ['Mañana', addD(HOY, 1), addD(HOY, 1)], sem: ['Próximos 7 días', HOY, addD(HOY, 7)], pend: ['⏰ Por cerrar', addD(HOY, -30), addD(HOY, -1)] };
-  const k = IG.rg || 'man', [nm, d1, d2] = rangos[k];
-  const todos = IG.lista.filter(okAlc), pen = c => PEND.includes(c.estatus);
-  const en = todos.filter(c => c.fecha_programada >= d1 && c.fecha_programada <= d2 && (k !== 'pend' || pen(c)));
+  const r = rangoLibre(), todos = IG.lista.filter(okAlc), pen = c => PEND.includes(c.estatus);
+  const enP = todos.filter(c => c.fecha_programada >= r.desde && c.fecha_programada <= r.hasta), est = IG.sest || '';
   const porCerrar = todos.filter(c => c.fecha_programada < HOY && pen(c)).length, man = todos.filter(c => c.fecha_programada === addD(HOY, 1));
-  let h = barraFiltros('tSeguimiento', IG.lista.map(c => tienda(c.idpdv)).filter(Boolean), ['region', 'gerente', 'supervisor', 'zona_rrhh', 'rrhh', 'cadena']);
-  h += `<div class="kpis"><div class="kpi"><div class="l">📅 Programados mañana</div><div class="v">${man.length}</div><div class="s">${man.filter(c => c.estatus === 'Confirmado').length} confirmados</div></div>
+  const q = norm(IG.sq || ''), f = enP.filter(c => (!est || (est === 'pend' ? pen(c) : c.estatus === est)) && (!q || norm(c.nombre + ' ' + (c.telefono || '')).includes(q)));
+  let h = `<div class="kpis"><div class="kpi"><div class="l">📅 Programados mañana</div><div class="v">${man.length}</div><div class="s">${man.filter(c => c.estatus === 'Confirmado').length} confirmados</div></div>
     <div class="kpi"><div class="l">☀️ Programados hoy</div><div class="v">${todos.filter(c => c.fecha_programada === HOY).length}</div><div class="s">${todos.filter(c => c.fecha_programada === HOY && c.estatus === 'Ingresó').length} ya ingresaron</div></div>
-    <div class="kpi ${porCerrar ? 'click' : ''}" onclick="IG.rg='pend';tSeguimiento()"><div class="l">⏰ Por cerrar</div><div class="v" style="color:${porCerrar ? 'var(--red)' : 'var(--green)'}">${porCerrar}</div><div class="s">fecha pasada sin resultado</div></div></div>`;
-  h += `<div class="tools">${Object.entries(rangos).map(([kk, v]) => `<button class="chip ${k === kk ? 'on' : ''}" onclick="IG.rg='${kk}';tSeguimiento()">${v[0]}</button>`).join('')}<input type="search" id="sg-q" placeholder="🔎 Buscar nombre…" value="${esc(IG.sq || '')}"><button class="btn sm primary" onclick="modalOperaciones()">📲 Mensaje para Operaciones</button></div>`;
-  const q = norm(IG.sq || ''), f = en.filter(c => !q || norm(c.nombre).includes(q)), dias = [...new Set(f.map(c => c.fecha_programada))].sort();
-  if (!f.length) h += `<div class="card empty"><img src="${img('pulgares')}" alt="">No hay candidatos en este rango.</div>`;
-  for (const d of dias) {
-    const g = f.filter(c => c.fecha_programada === d);
-    h += `<div class="dia-h">${fdia(d)}${d === HOY ? ' · hoy' : d === addD(HOY, 1) ? ' · mañana' : ''} <span class="muted">${g.length} candidato${g.length > 1 ? 's' : ''} · ${g.filter(c => c.estatus === 'Ingresó').length} ingresaron · ${g.filter(c => c.estatus === 'Confirmado').length} confirmados</span></div><div class="list">${g.map(filaCand).join('')}</div>`;
-  }
+    <div class="kpi ${porCerrar ? 'click' : ''}" onclick="PL.modo='rango';PL.desde=addD(HOY,-30);PL.hasta=addD(HOY,-1);IG.sest='pend';render()"><div class="l">⏰ Por cerrar</div><div class="v" style="color:${porCerrar ? 'var(--red)' : 'var(--green)'}">${porCerrar}</div><div class="s">fecha pasada sin resultado</div></div>
+    <div class="kpi"><div class="l">En el periodo</div><div class="v">${enP.length}</div><div class="s">${enP.filter(c => c.estatus === 'Ingresó').length} ingresaron · ${enP.filter(pen).length} pendientes</div></div></div>`;
+  h += `<div class="tools" data-nocap>${SEST.map(([k, n]) => `<button class="chip ${est === k ? 'on' : ''}" onclick="IG.sest='${k}';tSeguimiento()">${n} (${k === '' ? enP.length : k === 'pend' ? enP.filter(pen).length : enP.filter(c => c.estatus === k).length})</button>`).join('')}<input type="search" id="sg-q" placeholder="🔎 Buscar nombre o teléfono…" value="${esc(IG.sq || '')}">
+    <button class="btn sm" onclick="capturaDescargar($('ing-wrap'),'Posibles ingresos · ${esc(rangoTxt(r))}',subFiltros(),'posibles_ingresos')">📸 Imagen</button><button class="btn sm" onclick="capturaCopiar($('ing-wrap'),'Posibles ingresos · ${esc(rangoTxt(r))}',subFiltros())">📋 Copiar imagen para WhatsApp</button></div>`;
+  const MAX = 300, vis = f.slice(0, MAX);
+  if (!f.length) h += `<div class="card empty"><img src="${img('pulgares')}" alt="">No hay candidatos con estos filtros y periodo.</div>`;
+  const reg = new Map(); vis.forEach(c => { const k = (tienda(c.idpdv) || {}).region || 'Sin región'; if (!reg.has(k)) reg.set(k, []); reg.get(k).push(c); });
+  h += `<div id="ing-wrap" class="err-dia">${[...reg].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([rg, xs]) => `<div class="err-sup"><h4>🗺️ ${esc(rg)} <small>${xs.length} candidato${xs.length === 1 ? '' : 's'} · ${xs.filter(c => c.estatus === 'Ingresó').length} ingresaron</small></h4>${xs.sort((a, b) => a.fecha_programada.localeCompare(b.fecha_programada) || (a.hora_ingreso || '').localeCompare(b.hora_ingreso || '') || a.nombre.localeCompare(b.nombre, 'es')).map(filaCand).join('')}</div>`).join('')}</div>`;
+  if (f.length > MAX) h += `<p class="muted">Mostrando ${MAX} de ${f.length}: acota el periodo o usa los filtros de arriba.</p>`;
   $('ig-body').innerHTML = h;
   $('sg-q').oninput = e => { IG.sq = e.target.value; clearTimeout(IG.t); IG.t = setTimeout(() => { const p = e.target.selectionStart; tSeguimiento(); const q2 = $('sg-q'); q2.focus(); q2.setSelectionRange(p, p); }, 250); };
 }
+const rangoTxt = r => r.desde === r.hasta ? fdia(r.desde) : r.todo ? 'todo el histórico' : fdate(r.desde) + ' al ' + fdate(r.hasta);
 function filaCand(c) {
-  const t = tienda(c.idpdv);
-  const ac = can('posibles_ingresos', 'editar') ? `<div class="acts">${c.estatus === 'Programado' ? `<button class="btn sm" onclick="cambiarEst('${c.id}','Confirmado')">✔️ Confirmó</button>` : ''}
-    ${c.estatus !== 'Ingresó' ? `<button class="btn sm primary" onclick="modalIngreso('${c.id}')">🙌 Ingresó</button><button class="btn sm" onclick="cambiarEst('${c.id}','No llegó')">🚫 No llegó</button><button class="btn sm" onclick="cambiarEst('${c.id}','No contesta')">📵 No contesta</button><button class="btn sm" onclick="cambiarEst('${c.id}','Declinó')">✖️ Declinó</button><button class="btn sm" onclick="modalReagendar('${c.id}')">🔁 Reagendar</button>` : ''}${can('posibles_ingresos', 'borrar') ? `<button class="btn sm danger" title="Eliminar (creado por error)" onclick="eliminarCand('${c.id}')">🗑</button>` : ''}</div>` : '';
-  return `<div class="cd"><div class="who"><b>${esc(c.nombre)}</b><small>${t ? esc(t.nombre) + ' · ' + esc(t.estado) : 'Tienda no identificada'}</small></div>
-    <div class="muted">${esc(nombreFuente(c.fuente_id))} · ${esc(nombreRecl(c.reclutador_id))}${c.generado_por ? ' · ' + esc(c.generado_por) : ''}${c.reagendas ? ' · reagendó ' + c.reagendas + 'x' : ''}</div>
-    <div><span class="pill ${ESTC[c.estatus] || 'x'}">${esc(c.estatus)}</span>${c.usuario_fieldwy ? `<br><small class="muted">${esc(c.usuario_fieldwy)}</small>` : ''}</div>${ac}</div>`;
+  const t = tienda(c.idpdv) || {}, ed = can('posibles_ingresos', 'editar');
+  const ac = ed ? `<div class="acts" data-nocap>${c.estatus === 'Programado' ? `<button class="btn sm" onclick="cambiarEst('${c.id}','Confirmado')">✔️ Confirmó</button>` : ''}
+    ${c.estatus !== 'Ingresó' ? `<button class="btn sm primary" onclick="modalIngreso('${c.id}')">🙌 Ingresó</button><button class="btn sm" onclick="cambiarEst('${c.id}','No llegó')">🚫 No llegó</button><button class="btn sm" onclick="cambiarEst('${c.id}','No contesta')">📵 No contesta</button><button class="btn sm" onclick="cambiarEst('${c.id}','Declinó')">✖️ Declinó</button><button class="btn sm" onclick="modalReagendar('${c.id}')">🔁 Reagendar</button>` : `<button class="btn sm" onclick="modalIngreso('${c.id}')">👤 Datos</button>`}
+    <button class="btn sm" onclick="modalCandidato('${c.id}')">✏️ Editar</button>${can('posibles_ingresos', 'borrar') ? `<button class="btn sm danger" onclick="eliminarCand('${c.id}')" title="Solo candidatos creados por error">🗑</button>` : ''}</div>` : '';
+  return `<div class="err-card"><div class="err-h"><b>${esc(c.nombre)}</b><small>📞 ${esc(c.telefono || 'sin teléfono')} · ${fdia(c.fecha_programada)}${c.hora_ingreso ? ' · ⏰ ' + hh5(c.hora_ingreso) : ''}</small></div>
+    <div>${pillx(esc(c.estatus), ESTC[c.estatus] || 'x')} <small class="muted">IDPDV ${c.idpdv || '—'} · ${esc(t.nombre || 'Tienda no identificada')}${t.cadena ? ' · ' + esc(t.cadena) : ''}</small></div>
+    <div class="muted" style="font-size:12px;font-weight:600">🧍 Ingresa: ${esc(quienIngresa(c))} · ${esc(nombreFuente(c.fuente_id))} · ${esc(nombreRecl(c.reclutador_id))}${c.reagendas ? ' · reagendó ' + c.reagendas + 'x' : ''}${c.usuario_fieldwy ? ' · ' + esc(c.usuario_fieldwy) : ''}</div>${ac}</div>`;
 }
 async function cambiarEst(id, est) { try { await API.actualizarCandidato(id, { estatus: est }); IG.lista.find(x => x.id === id).estatus = est; toast(est); tSeguimiento(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } }
 async function eliminarCand(id) {
   const c = IG.lista.find(x => x.id === id); if (!confirm(`¿Eliminar a "${c.nombre}"? Solo debe usarse para candidatos creados por error. No se puede deshacer.`)) return;
   try { await API.eliminarCandidato(id); IG.lista = IG.lista.filter(x => x.id !== id); toast('Candidato eliminado'); tSeguimiento(); } catch (e) { toast('No se pudo eliminar: ' + (e.message || e)); }
 }
-function modalIngreso(id) {
-  const c = IG.lista.find(x => x.id === id);
-  $('modal').innerHTML = `<div class="mbox"><h3>🙌 Ingresó</h3><div class="who">${esc(c.nombre)}</div><div class="fld"><label>Usuario Fieldwy (opcional por ahora)</label><input id="m-usr" placeholder="Ej. ABCD010203" autocapitalize="characters"></div><div class="note">Con el usuario Fieldwy se enlaza después con su asistencia, su plantilla y su baja.</div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="m-ok">Guardar ingreso</button></div></div>`; $('modal').hidden = false;
-  $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
-  $('m-ok').onclick = async () => { const u = $('m-usr').value.trim().toUpperCase(); try { await API.actualizarCandidato(id, { estatus: 'Ingresó', usuario_fieldwy: u || null }); c.estatus = 'Ingresó'; c.usuario_fieldwy = u || null; cerrarM(); toast('Ingreso registrado'); tSeguimiento(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } };
+
+/* ----- confirmar que ingresó: datos de identidad (los mismos que pide Fieldway) y pase automático a Altas ----- */
+async function modalIngreso(id) {
+  const c = IG.lista.find(x => x.id === id); let p = null; try { p = await API.datosCandidato(id); } catch (e) { }
+  if (!p) { const sp = splitNombre(c.nombre); p = { nombre_pila: sp.n, apellido_p: sp.ap, apellido_m: sp.am, telefono: c.telefono || '' }; }
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(720px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>🙌 ${c.estatus === 'Ingresó' ? 'Datos del ingreso' : 'Confirmar ingreso'}</h3><div class="who">${esc(c.nombre)} · ${fdate(c.fecha_programada)} · IDPDV ${c.idpdv || '—'} ${esc((tienda(c.idpdv) || {}).nombre || '')}</div>
+    <div class="note">Confirma los datos como se capturan en Fieldway. Al guardar, el ingreso pasa a <b>Altas</b> (aquí queda el histórico) para que se genere su usuario.</div>
+    ${identidadCampos(p, 'ci-')}<div class="row2"><div class="fld"><label>Hora de ingreso</label><input id="ci-hora" type="time" value="${esc(hh5(c.hora_ingreso))}"></div><div></div></div>
+    <div class="warn" id="ci-warn" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="ci-ok">${c.estatus === 'Ingresó' ? 'Guardar datos' : 'Confirmar y pasar a Altas'}</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  $('ci-ok').onclick = async () => {
+    const d = idLeer('ci-'), er = idErrores(d), w = $('ci-warn'); if (er.length) { w.hidden = false; w.innerHTML = er.map(esc).join('<br>'); return; }
+    $('ci-ok').disabled = true;
+    try { await API.confirmarIngreso(id, d, $('ci-hora').value || null); c.estatus = 'Ingresó'; c.telefono = d.telefono; c.hora_ingreso = $('ci-hora').value || null; c.nombre = [d.nombre_pila, d.apellido_p, d.apellido_m].filter(Boolean).join(' ').toUpperCase(); cerrarM(); toast('Ingreso confirmado: pasa a Altas'); tSeguimiento(); }
+    catch (e) { $('ci-ok').disabled = false; w.hidden = false; w.textContent = 'No se pudo guardar: ' + (e.message || e); }
+  };
 }
 function modalReagendar(id) {
   const c = IG.lista.find(x => x.id === id);
-  $('modal').innerHTML = `<div class="mbox"><h3>🔁 Reagendar</h3><div class="who">${esc(c.nombre)} · estaba para ${fdate(c.fecha_programada)}</div><div class="fld"><label>Nueva fecha</label><input type="date" id="m-f" value="${addD(HOY, 1)}" min="${HOY}"></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="m-ok">Reagendar</button></div></div>`; $('modal').hidden = false;
+  $('modal').innerHTML = `<div class="mbox"><h3>🔁 Reagendar</h3><div class="who">${esc(c.nombre)} · estaba para ${fdate(c.fecha_programada)}</div><div class="row2"><div class="fld"><label>Nueva fecha</label><input type="date" id="m-f" value="${addD(HOY, 1)}" min="${HOY}"></div><div class="fld"><label>Hora de ingreso</label><input type="time" id="m-h" value="${esc(hh5(c.hora_ingreso))}"></div></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="m-ok">Reagendar</button></div></div>`; $('modal').hidden = false;
   $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
-  $('m-ok').onclick = async () => { const f = $('m-f').value; if (!f) return; try { await API.actualizarCandidato(id, { fecha_programada: f, estatus: 'Programado', reagendas: (c.reagendas || 0) + 1 }); c.fecha_programada = f; c.estatus = 'Programado'; c.reagendas = (c.reagendas || 0) + 1; cerrarM(); toast('Reagendado para ' + fdate(f)); tSeguimiento(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } };
+  $('m-ok').onclick = async () => { const f = $('m-f').value; if (!f) return; try { const patch = { fecha_programada: f, estatus: 'Programado', reagendas: (c.reagendas || 0) + 1, hora_ingreso: $('m-h').value || null }; await API.actualizarCandidato(id, patch); Object.assign(c, patch); cerrarM(); toast('Reagendado para ' + fdate(f) + ' (queda el historial del cambio)'); tSeguimiento(); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } };
 }
 
-/* ----- esquema de ingresos (como el que envía RH a Operaciones) y mensaje ----- */
+/* ----- alta individual y edición de lo capturado ----- */
+function modalCandidato(id) {
+  const c = id ? IG.lista.find(x => x.id === id) : null, v = k => esc(c ? (c[k] == null ? '' : c[k]) : ''), t = c ? tienda(c.idpdv) : null;
+  const sel = (idc, lista, val, ph) => `<select id="${idc}"><option value="">${ph || '— elige —'}</option>${lista.map(([a, b]) => `<option value="${esc(a)}" ${String(a) === String(val) ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>`;
+  const cat = IG.cat;
+  $('modal').innerHTML = `<div class="mbox wide" style="width:min(760px,96vw);max-height:92vh;overflow:auto" role="dialog" aria-modal="true"><h3>${c ? '✏️ Editar posible ingreso' : '➕ Nuevo posible ingreso'}</h3>
+    <datalist id="cd-tl">${Object.values(S.cat.tiendas).map(x => `<option value="${x.idpdv} · ${esc(x.nombre)} (${esc(x.cadena || '')} · ${esc(x.estado || '')})">`).join('')}</datalist><datalist id="cd-ing"></datalist>
+    <div class="row2"><div class="fld"><label>Fecha de ingreso *</label><input type="date" id="cd-f" value="${v('fecha_programada') || HOY}"></div><div class="fld"><label>Hora de ingreso</label><input type="time" id="cd-h" value="${esc(hh5(c && c.hora_ingreso))}"></div></div>
+    <div class="row2"><div class="fld"><label>Nombre completo del candidato *</label><input id="cd-n" value="${v('nombre')}" autocomplete="off"></div><div class="fld"><label>Teléfono de contacto (10 dígitos)</label><input id="cd-t" inputmode="numeric" value="${v('telefono')}"></div></div>
+    <div class="fld"><label>Tienda * (IDPDV o nombre)</label><input id="cd-p" list="cd-tl" value="${t ? esc(c.idpdv + ' · ' + t.nombre + ' (' + (t.cadena || '') + ' · ' + (t.estado || '') + ')') : ''}" placeholder="Escribe IDPDV o nombre…" oninput="cdIng()"></div>
+    <div class="row2"><div class="fld"><label>Medio *</label>${sel('cd-fu', cat.fuentes.map(x => [x.id, x.fuente]), c && c.fuente_id)}</div><div class="fld"><label>Generado por (puesto)</label>${sel('cd-g', cat.generado.map(x => [x, x]), c && c.generado_por)}</div></div>
+    <div class="row2"><div class="fld"><label>Reclutado por *</label><select id="cd-r"></select></div><div class="fld"><label>Experiencia</label>${sel('cd-ex', cat.experiencia.map(x => [x, x]), c && c.experiencia)}</div></div>
+    <div class="row2"><div class="fld"><label>Acompañamiento (puesto)</label>${sel('cd-a', cat.acomp.map(x => [x, x]), c && c.acompanamiento)}</div><div class="fld"><label>Ingresa (nombre)</label><input id="cd-i" list="cd-ing" value="${v('acompanado_por')}" autocomplete="off"></div></div>
+    <div class="row2"><div class="fld"><label>Referido por</label><input id="cd-rf" value="${v('referido_por')}"></div><div class="fld"><label>Comentarios</label><input id="cd-c" value="${v('comentarios')}"></div></div>
+    <div class="warn" id="cd-warn" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="cd-ok">Guardar</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
+  const pintaRecl = () => { const sv = $('cd-r').value || (c ? String(c.reclutador_id || '') : (S.me && S.me.reclutador_id ? String(S.me.reclutador_id) : '')); $('cd-r').innerHTML = '<option value="">— elige —</option>' + reclPorPuesto($('cd-g').value).map(x => `<option value="${x.id}" ${String(x.id) === sv ? 'selected' : ''}>${esc(x.nombre)}</option>`).join(''); };
+  $('cd-g').onchange = pintaRecl; $('cd-a').onchange = cdIng; pintaRecl(); cdIng();
+  $('cd-ok').onclick = () => candGuardar(id);
+}
+function cdIng() { const dl = $('cd-ing'); if (!dl) return; dl.innerHTML = nombresIngresa($('cd-a').value, parseInt($('cd-p').value, 10)).map(n => `<option value="${esc(n)}">`).join(''); }
+async function candGuardar(id) {
+  const g = k => limpia($(k).value), w = $('cd-warn'), idp = parseInt(g('cd-p'), 10), tel = g('cd-t').replace(/\D/g, ''), e = [];
+  if (!$('cd-f').value) e.push('Falta la fecha de ingreso.'); if (g('cd-n').length < 5) e.push('Escribe el nombre completo.'); if (!idp || !tienda(idp)) e.push('Elige una tienda de la lista (empieza con su IDPDV).');
+  if (!$('cd-fu').value) e.push('Elige el medio.'); if (!$('cd-r').value) e.push('Elige quién reclutó.'); if (tel && tel.length !== 10) e.push('El teléfono debe tener 10 dígitos.');
+  if (e.length) { w.hidden = false; w.innerHTML = e.map(esc).join('<br>'); return; }
+  const row = { nombre: g('cd-n').replace(/\s+/g, ' ').toUpperCase(), telefono: tel || null, idpdv: idp, fecha_programada: $('cd-f').value, hora_ingreso: $('cd-h').value || null, fuente_id: +$('cd-fu').value, reclutador_id: +$('cd-r').value, generado_por: $('cd-g').value || null,
+    experiencia: $('cd-ex').value || null, acompanamiento: $('cd-a').value || null, acompanado_por: g('cd-i') || null, referido_por: g('cd-rf') || null, comentarios: g('cd-c') || null };
+  $('cd-ok').disabled = true;
+  try {
+    if (id) { const c = IG.lista.find(x => x.id === id); if (row.fecha_programada !== c.fecha_programada && PEND.includes(c.estatus)) row.reagendas = (c.reagendas || 0) + 1; await API.actualizarCandidato(id, row); Object.assign(c, row); toast('Cambios guardados (queda el historial)'); }
+    else { await API.insertarCandidatos([{ ...row, fecha_captura: HOY }]); await cargarCands(); toast('Posible ingreso guardado'); }
+    cerrarM(); if (IG.tab === 'captura') IG.tab = 'seguimiento'; vIngresos();
+  } catch (x) { $('cd-ok').disabled = false; w.hidden = false; w.textContent = 'No se pudo guardar: ' + (x.message || x); }
+}
+
+/* ----- esquema por región, gerente y cadena (pestaña Resumen) ----- */
 const CADS = ['Coppel', 'Elektra', 'Suburbia', 'Cimaco'];
-function esquemaHtml(rows, titulo) {
+function esquemaHtml(rows) {
   const cad = [...CADS, ...new Set(rows.map(c => (tienda(c.idpdv) || {}).cadena).filter(x => x && !CADS.includes(x)))];
   return `<div>` + arbol(rows, [...cad.map(c => ({ h: c, f: a => a.filter(x => (tienda(x.idpdv) || {}).cadena === c).length })), { h: 'Total general', f: a => a.length, cero: true }], { titulo: 'REGIÓN / GERENTE / SUPERVISOR / TIENDA', abrir: 2 }) + '</div>';
 }
-function modalOperaciones() {
-  const d = IG.opd || addD(HOY, 1);
-  const g = IG.lista.filter(c => okAlc(c) && c.fecha_programada === d && [...PEND, 'Ingresó'].includes(c.estatus));
-  const por = {}; g.forEach(c => { const e = (tienda(c.idpdv) || {}).estado || 'Sin tienda'; (por[e] = por[e] || []).push(c); });
-  const txt = `📲 *Ingresos programados – ${fdia(d)}*\n\n*${g.length} ingresos programados* (${g.filter(c => c.estatus === 'Confirmado').length} confirmados)\n\n` + Object.entries(por).sort((a, b) => b[1].length - a[1].length).map(([e, v]) => `• ${e}: ${v.length} (${v.filter(c => c.estatus === 'Confirmado').length} confirmados)`).join('\n');
-  $('modal').innerHTML = `<div class="mbox wide"><h3>📲 Mensaje y esquema para Operaciones</h3><div class="fld"><label>Día</label><input type="date" id="op-d" value="${d}"></div><div id="op-esq">${esquemaHtml(g, 'RESUMEN DE POSIBLES INGRESOS')}</div><div class="fld"><label>Texto para WhatsApp</label><textarea id="op-t" rows="7">${esc(txt)}</textarea></div>
-    <div class="mfoot"><button class="btn" onclick="cerrarM()">Cerrar</button><button class="btn" onclick="capturaCopiar($('op-esq'),'Posibles ingresos · ${fdia(d)}','Operaciones')">📋 Copiar imagen</button><button class="btn" onclick="capturaDescargar($('op-esq'),'Posibles ingresos · ${fdia(d)}','Operaciones','esquema_ingresos')">📸 Descargar imagen</button><button class="btn primary" onclick="navigator.clipboard.writeText($('op-t').value).then(()=>toast('Texto copiado'))">📋 Copiar texto</button></div></div>`; $('modal').hidden = false;
-  $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); }; $('op-d').onchange = e => { IG.opd = e.target.value; modalOperaciones(); };
+function tResumen() {
+  const r = rangoLibre(), base = IG.lista.filter(okAlc).filter(c => c.fecha_programada >= r.desde && c.fecha_programada <= r.hasta && (PEND.includes(c.estatus) || c.estatus === 'Ingresó'));
+  $('ig-body').innerHTML = sect('Esquema por región, gerente y cadena', '🗺️') + `<p class="note">${fmt(base.length)} ingresos (pendientes e ingresados) · ${esc(rangoTxt(r))}. Es el esquema que se comparte con Operaciones; cambia el periodo arriba.</p>
+    <div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('esq-wrap'),'Esquema de posibles ingresos · ${esc(rangoTxt(r))}',subFiltros(),'esquema_ingresos')">📸 Imagen</button><button class="btn sm" onclick="capturaCopiar($('esq-wrap'),'Esquema de posibles ingresos · ${esc(rangoTxt(r))}',subFiltros())">📋 Copiar imagen</button></div><div id="esq-wrap" class="cap-pad">${esquemaHtml(base)}</div>`;
+  drawAll();
 }
 
 /* ----- resumen y conversión ----- */
 const VER = [['cand', 'Candidato'], ['supervisor', 'Supervisor'], ['zona_rrhh', 'Gerencia RR.HH.'], ['rrhh', 'RR.HH.'], ['recl', 'Reclutador'], ['fuente', 'Medio'], ['estado', 'Estado'], ['region', 'Región']];
-function tResumen() {
-  const per = IG.per, hasta = IG.dh || addD(HOY, 14), desde = IG.dd || (per === 'all' ? '0000' : addD(HOY, -(+per)));
+function tDetalle() {
+  const rr = rangoLibre(), desde = rr.desde, hasta = rr.hasta;
   const base = IG.lista.filter(okAlc).filter(x => x.fecha_programada >= desde && x.fecha_programada <= hasta);
   const cerr = base.filter(x => !PEND.includes(x.estatus)), ing = cerr.filter(x => x.estatus === 'Ingresó'), cnt = e => cerr.filter(x => x.estatus === e).length;
   const PAL = [C.or, C.bl, C.gr, C.pu, C.te, C.am, C.rd, '#7B8794', '#B0467B'];
   const pie = (rows, keyf, namef, o = {}) => { const g = new Map(); rows.forEach(x => { const k = keyf(x); g.set(k, (g.get(k) || 0) + 1); }); let it = [...g].map(([k, v]) => ({ n: namef(k), v })).sort((a, b) => b.v - a.v); if (it.length > 8) { const r = it.slice(7).reduce((a, b) => a + b.v, 0); it = it.slice(0, 7).concat([{ n: 'Otros', v: r }]); } return donut(it.map((x, i) => ({ ...x, c: PAL[i % PAL.length] })), { best: 1, sub: o.sub || 'candidatos' }); };
   const conv = (keyf, namef, min) => { const g = new Map(); cerr.forEach(x => { const k = keyf(x); const o = g.get(k) || { n: 0, i: 0 }; o.n++; if (x.estatus === 'Ingresó') o.i++; g.set(k, o); }); return [...g].filter(([, o]) => o.n >= min).map(([k, o]) => ({ n: namef(k), v: o.i / o.n * 100, s: `${o.i}/${o.n}`, c: o.i / o.n >= 0.75 ? C.gr : o.i / o.n >= 0.6 ? C.am : C.rd })).sort((a, b) => b.v - a.v).slice(0, 10); };
-  let h = barraFiltros('tResumen', IG.lista.map(c => tienda(c.idpdv)).filter(Boolean), ['region', 'gerente', 'supervisor', 'zona_rrhh', 'rrhh', 'cadena']);
-  h += `<div class="tools"><span>Periodo:</span><select onchange="IG.per=this.value;IG.dd=null;IG.dh=null;tResumen()">${[['30', 'Últimos 30 días'], ['60', 'Últimos 60 días'], ['90', 'Últimos 90 días'], ['all', 'Todo lo cargado']].map(([v, t]) => `<option value="${v}" ${IG.per === v && !IG.dd ? 'selected' : ''}>${t}</option>`).join('')}</select><span>o fechas:</span><input type="date" value="${desde === '0000' ? '' : desde}" onchange="IG.dd=this.value;tResumen()"> <input type="date" value="${hasta}" onchange="IG.dh=this.value;tResumen()"><span class="muted">${fmt(cerr.length)} candidatos con resultado</span></div>`;
+  let h = '';
+  h += `<div class="tools"><span class="muted">${fmt(cerr.length)} candidatos con resultado en el periodo de arriba</span></div>`;
   h += `<div class="kpis"><div class="kpi"><div class="l">🧑‍💼 Programados</div><div class="v">${fmt(cerr.length)}</div></div><div class="kpi"><div class="l">🙌 Ingresaron</div><div class="v" style="color:var(--green)">${fmt(ing.length)}</div></div><div class="kpi"><div class="l">📈 Conversión</div><div class="v">${cerr.length ? (ing.length / cerr.length * 100).toFixed(2) + '%' : '—'}</div></div><div class="kpi"><div class="l">🚫 No llegó</div><div class="v" style="color:var(--red)">${cnt('No llegó')}</div></div><div class="kpi"><div class="l">✖️ Declinó</div><div class="v" style="color:var(--red)">${cnt('Declinó')}</div></div><div class="kpi"><div class="l">📵 No contesta</div><div class="v" style="color:var(--amber)">${cnt('No contesta')}</div></div></div>`;
   const res = ['Ingresó', 'No llegó', 'Declinó', 'No contesta', 'Reagenda'].map((e, i) => ({ n: e, v: cnt(e), c: [C.gr, C.rd, C.am, C.dk, C.gy][i] }));
   h += `<div class="grid g3"><div class="card"><h3>🎯 Resultado de los candidatos</h3>${donut(res, { sub: 'candidatos' })}</div><div class="card"><h3>🏆 Ingresos por reclutador</h3>${pie(ing, x => x.reclutador_id, nombreRecl, { sub: 'ingresos' })}</div><div class="card"><h3>📣 Ingresos por medio</h3>${pie(ing, x => x.fuente_id, nombreFuente, { sub: 'ingresos' })}</div></div>`;
@@ -1212,7 +1310,7 @@ function tResumen() {
   h += `<div class="grid g2"><div class="card"><h3>🥇 Mejor conversión por medio</h3><p class="note">Ingresos ÷ candidatos con resultado (mín. 10).</p>${hbars(conv(x => x.fuente_id, nombreFuente, 10), C.gr, { pct: 1 })}</div><div class="card"><h3>🥇 Mejor conversión por reclutador</h3><p class="note">Mín. 15 candidatos.</p>${hbars(conv(x => x.reclutador_id, nombreRecl, 15), C.gr, { pct: 1 })}</div></div>`;
   // tabla única con vista seleccionable
   const vista = IG.ver || 'cand';
-  h += sect('Detalle', '🧾') + `<div class="tools"><span>Ver por:</span><select onchange="IG.ver=this.value;tResumen()">${VER.map(([k, n]) => `<option value="${k}" ${vista === k ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="muted">Mismo periodo y filtros de arriba (elige un solo día con las fechas para el día completo)</span></div>`;
+  h += sect('Detalle', '🧾') + `<div class="tools"><span>Ver por:</span><select onchange="IG.ver=this.value;tDetalle()">${VER.map(([k, n]) => `<option value="${k}" ${vista === k ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="muted">Mismo periodo y filtros de arriba (elige un solo día con las fechas para el día completo)</span></div>`;
   TB = {};
   if (vista === 'cand') {
     h += tbl('t-ig', [{ h: 'Fecha', v: c => c.fecha_programada, r: c => fdate(c.fecha_programada), w: 82 }, { h: 'Candidato', t: 1, v: c => c.nombre, w: 210, r: c => `<b>${esc(c.nombre)}</b>` }, { h: 'Estatus', t: 1, v: c => c.estatus, r: c => `<span class="pill ${ESTC[c.estatus] || 'x'}">${esc(c.estatus)}</span>` }, { h: 'IDPDV', v: c => c.idpdv }, { h: 'Tienda', t: 1, v: c => (tienda(c.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: c => (tienda(c.idpdv) || {}).cadena }, { h: 'Estado', t: 1, v: c => (tienda(c.idpdv) || {}).estado },
@@ -1225,8 +1323,6 @@ function tResumen() {
     h += tbl('t-ig', [{ h: VER.find(x => x[0] === vista)[1], t: 1, v: r => r.n, w: 230, r: r => `<b>${esc(r.n)}</b>` }, { h: 'Candidatos', v: r => r.tot }, { h: '⏳ Pendientes', v: r => r.pr }, { h: '🙌 Ingresos', v: r => r.i, r: r => `<b class="cell-green">${r.i}</b>` }, { h: '📈 Conversión', v: r => pn(r.i, r.ce), r: r => r.ce ? `<span class="pill ${r.i / r.ce >= 0.75 ? 'g' : r.i / r.ce >= 0.6 ? 'a' : 'r'}">${(r.i / r.ce * 100).toFixed(0)}%</span>` : '—' }, { h: '🚫 No llegó', v: r => r.nl }, { h: '✖️ Declinó', v: r => r.d }, { h: '📵 No contesta', v: r => r.nc }],
       rows, { fix: 1, csv: 1, png: 1, file: 'posibles_ingresos_' + vista, titulo: 'Posibles ingresos por ' + VER.find(x => x[0] === vista)[1], sort: 3, dir: -1, maxh: '65vh' });
   }
-  const dd = IG.dd && IG.dd === IG.dh ? IG.dd : null;
-  h += sect('Esquema por región, gerente y cadena', '🗺️') + `<p class="note">Igual al que se envía a Operaciones. ${dd ? '' : 'Elige un solo día arriba (mismas fecha en ambos campos) para el esquema del día; mientras tanto suma el periodo.'}</p><div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('esq-wrap'),'Esquema de posibles ingresos',subFiltros(),'esquema_ingresos')">📸 Imagen</button><button class="btn sm" onclick="capturaCopiar($('esq-wrap'),'Esquema de posibles ingresos',subFiltros())">📋 Copiar</button></div><div id="esq-wrap" class="cap-pad">${esquemaHtml(base.filter(c => PEND.includes(c.estatus) || c.estatus === 'Ingresó'), 'POSIBLES INGRESOS')}</div>`;
   $('ig-body').innerHTML = h; drawAll();
 }
 
@@ -2259,6 +2355,68 @@ async function perfilGuardar(id) {
   const b = BJ.lista.find(x => x.id === id); const rec = $('pf-rec').value; if (!rec) { toast('Elige si es recontratable'); return; }
   try { const res = (PF.lista.get(b.usuario + '|' + b.fecha) || {}).resumen; await API.guardarPerfilBaja({ p_usuario: b.usuario, p_fecha: b.fecha, p_resumen: (res && res.veredicto) ? res : await perfilCalc(b.usuario), p_recontratable: rec, p_nota: limpia($('pf-nota').value) || null }); toast('Perfil guardado'); cerrarM(); vBajas(); }
   catch (e) { toast(e.message || e); }
+}
+
+/* >>> 07h_identidad.js */
+/* ====================================================================== IDENTIDAD DEL CANDIDATO: RFC / CURP (primeras posiciones) Y VENTANA DE CONFIRMACIÓN ======================================================================
+   Del nombre y la fecha de nacimiento se pueden calcular las primeras posiciones: RFC = 10 caracteres (4 letras + AAMMDD) y CURP = 16 (4 letras + AAMMDD + sexo + estado + 3 consonantes).
+   La homoclave del RFC (3) y los 2 últimos caracteres de la CURP los asignan el SAT y RENAPO: se completan a mano. El NSS siempre es manual. */
+const PART_NOM = /^(DE|DEL|LA|LAS|LOS|LE|LES|Y|MC|MAC|VON|VAN|SAN|SANTA)$/;
+const PALABRAS_MALAS = new Set('BUEI BUEY CACA CACO CAGA CAGO CAKA CAKO COGE COGI COJA COJE COJI COJO CULO FETO GUEY JOTO KACA KACO KAGA KAGO KAKA KAKO KOGE KOGI KOJA KOJE KOJI KOJO KULO LILO LOCA LOCO LOKA LOKO MAME MAMO MEAR MEAS MEON MIAR MION MOCO MOKO MULA MULO NACA NACO PEDA PEDO PENE PIPI PITO POPO PUTA PUTO QULO RATA ROBA ROBE ROBO RUIN SENO TETA VACA VAGA VAGO VAKA VUEI VUEY WUEI WUEY'.split(' '));
+const ESTADOS_NAC = [['AS', 'Aguascalientes'], ['BC', 'Baja California'], ['BS', 'Baja California Sur'], ['CC', 'Campeche'], ['CL', 'Coahuila'], ['CM', 'Colima'], ['CS', 'Chiapas'], ['CH', 'Chihuahua'], ['DF', 'Ciudad de México'], ['DG', 'Durango'], ['GT', 'Guanajuato'], ['GR', 'Guerrero'], ['HG', 'Hidalgo'], ['JC', 'Jalisco'], ['MC', 'Estado de México'], ['MN', 'Michoacán'], ['MS', 'Morelos'], ['NT', 'Nayarit'], ['NL', 'Nuevo León'], ['OC', 'Oaxaca'], ['PL', 'Puebla'], ['QT', 'Querétaro'], ['QR', 'Quintana Roo'], ['SP', 'San Luis Potosí'], ['SL', 'Sinaloa'], ['SR', 'Sonora'], ['TC', 'Tabasco'], ['TS', 'Tamaulipas'], ['TL', 'Tlaxcala'], ['VZ', 'Veracruz'], ['YN', 'Yucatán'], ['ZS', 'Zacatecas'], ['NE', 'Nacido en el extranjero']];
+const ESTADOS_CIVIL = ['Soltero(a)', 'Casado(a)', 'Unión libre', 'Divorciado(a)', 'Viudo(a)'];
+function idLimpia(s) {
+  const t = String(s || '').toUpperCase().replace(/Ñ/g, '\u0001').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\u0001/g, 'X').replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const w = t.split(' ').filter(Boolean); while (w.length > 1 && PART_NOM.test(w[0])) w.shift(); return w.join(' ');
+}
+function idNombre(s) { const w = idLimpia(s).split(' '); return w.length > 1 && /^(JOSE|MARIA|MA|J)$/.test(w[0]) ? w.slice(1).join(' ') : w.join(' '); }
+const VOCALES = 'AEIOU';
+function idLetras(nombre, ap, am, curp) {
+  const a = idLimpia(ap), m = idLimpia(am), n = idNombre(nombre); if (!a || !n) return '';
+  let v = ''; for (const ch of a.slice(1)) if (VOCALES.includes(ch)) { v = ch; break; }
+  let w = a[0] + (v || 'X') + (m ? m[0] : 'X') + n[0];
+  if (PALABRAS_MALAS.has(w)) w = curp ? w[0] + 'X' + w.slice(2) : w.slice(0, 3) + 'X';
+  return w;
+}
+const idAAMMDD = f => f && /^\d{4}-\d{2}-\d{2}$/.test(f) ? f.slice(2, 4) + f.slice(5, 7) + f.slice(8, 10) : '';
+function rfcBase(nombre, ap, am, fnac) { const l = idLetras(nombre, ap, am, false), d = idAAMMDD(fnac); return l && d ? l + d : ''; }
+function curpBase(nombre, ap, am, fnac, genero, estado) {
+  const l = idLetras(nombre, ap, am, true), d = idAAMMDD(fnac); if (!l || !d || !genero || !estado) return '';
+  const cons = s => { for (const ch of String(s || '').slice(1)) if (/[A-Z]/.test(ch) && !VOCALES.includes(ch)) return ch; return 'X'; };
+  return l + d + (genero === 'Hombre' ? 'H' : 'M') + estado + cons(idLimpia(ap)) + cons(idLimpia(am)) + cons(idNombre(nombre));
+}
+/* separa "JUAN CARLOS PEREZ DE LA CRUZ" en nombre, paterno y materno (apellidos compuestos con partículas) */
+function splitNombre(full) {
+  const t = String(full || '').trim().replace(/\s+/g, ' ').split(' ').filter(Boolean); if (t.length < 2) return { n: t.join(' '), ap: '', am: '' };
+  const toma = () => { let b = [t.pop()]; while (t.length > 1 && PART_NOM.test(t[t.length - 1].toUpperCase())) b.unshift(t.pop()); return b.join(' '); };
+  if (t.length === 2) return { n: t[0], ap: t[1], am: '' };
+  const am = toma(), ap = toma(); return { n: t.join(' '), ap, am };
+}
+
+/* campos de la ventana de confirmación (mismos que pide Fieldway para crear el usuario) */
+function identidadCampos(p, pre) {
+  const req = (id, lbl, html) => `<div class="fld"><label>${lbl}</label>${html}</div>`, v = k => esc((p && p[k]) || '');
+  return `<div class="row2">${req(pre + 'nom', 'Nombre(s) *', `<input id="${pre}nom" value="${v('nombre_pila')}" autocomplete="off">`)}${req(pre + 'ap', 'Apellido paterno *', `<input id="${pre}ap" value="${v('apellido_p')}" autocomplete="off">`)}</div>
+    <div class="row2">${req(pre + 'am', 'Apellido materno', `<input id="${pre}am" value="${v('apellido_m')}" autocomplete="off">`)}${req(pre + 'mail', 'Correo electrónico', `<input id="${pre}mail" type="email" value="${v('correo')}" autocomplete="off">`)}</div>
+    <div class="row2">${req(pre + 'fn', 'Fecha de nacimiento *', `<input id="${pre}fn" type="date" value="${v('fecha_nacimiento')}" max="${addD(HOY, -16 * 365)}" oninput="idRfcAuto('${pre}')">`)}${req(pre + 'tel', 'Teléfono de contacto * (10 dígitos)', `<input id="${pre}tel" inputmode="numeric" value="${v('telefono')}" autocomplete="off">`)}</div>
+    <div class="row2">${req(pre + 'gen', 'Género *', `<select id="${pre}gen"><option value="">— elige —</option>${['Hombre', 'Mujer'].map(g => `<option ${p && p.genero === g ? 'selected' : ''}>${g}</option>`).join('')}</select>`)}${req(pre + 'ec', 'Estado civil *', `<select id="${pre}ec"><option value="">— elige —</option>${ESTADOS_CIVIL.map(g => `<option ${p && p.estado_civil === g ? 'selected' : ''}>${g}</option>`).join('')}</select>`)}</div>
+    ${req(pre + 'rfc', 'RFC (13 caracteres)', `<div class="rfc-row"><input id="${pre}rfc" maxlength="13" style="text-transform:uppercase" value="${v('rfc')}" autocomplete="off" placeholder="Genera la base y completa la homoclave"><button type="button" class="btn sm" onclick="idRfcGenerar('${pre}')">⚙️ Generar base (10)</button></div><small class="muted">La base sale del nombre y la fecha de nacimiento. La homoclave (3 últimos caracteres) se consulta en el SAT y se escribe a mano.</small>`)}`;
+}
+function idRfcGenerar(pre) {
+  const g = k => limpia($(pre + k).value), base = rfcBase(g('nom'), g('ap'), g('am'), $(pre + 'fn').value);
+  if (!base) { toast('Para generar el RFC captura nombre, apellido paterno y fecha de nacimiento'); return; }
+  const cur = $(pre + 'rfc').value.toUpperCase(); $(pre + 'rfc').value = base + (cur.length > 10 ? cur.slice(10) : ''); $(pre + 'rfc').focus();
+}
+function idRfcAuto(pre) { const r = $(pre + 'rfc'); if (r && !r.value) { const b = rfcBase(limpia($(pre + 'nom').value), limpia($(pre + 'ap').value), limpia($(pre + 'am').value), $(pre + 'fn').value); if (b) r.placeholder = 'Base sugerida: ' + b + ' + homoclave'; } }
+function idLeer(pre) {
+  const g = k => limpia($(pre + k).value);
+  return { nombre_pila: g('nom'), apellido_p: g('ap'), apellido_m: g('am') || null, correo: g('mail') || null, fecha_nacimiento: $(pre + 'fn').value || null, telefono: g('tel').replace(/\D/g, ''), genero: $(pre + 'gen').value, estado_civil: $(pre + 'ec').value, rfc: g('rfc').toUpperCase() || null };
+}
+function idErrores(d) {
+  const e = []; if (!d.nombre_pila) e.push('Falta el nombre.'); if (!d.apellido_p) e.push('Falta el apellido paterno.'); if (!d.fecha_nacimiento) e.push('Falta la fecha de nacimiento.');
+  if (!d.genero) e.push('Elige el género.'); if (!d.estado_civil) e.push('Elige el estado civil.'); if (d.telefono.length !== 10) e.push('El teléfono debe tener 10 dígitos.');
+  if (d.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.correo)) e.push('El correo no es válido.'); if (d.rfc && !/^[A-ZÑ&]{4}\d{6}[A-Z0-9]{3}$/.test(d.rfc)) e.push('El RFC debe tener 13 caracteres: 4 letras, 6 dígitos y la homoclave.');
+  return e;
 }
 
 /* >>> 08_demo_reportes.js */
