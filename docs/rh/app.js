@@ -1478,6 +1478,11 @@ Real.auditoria = async function () {
   const { data: ps } = await sb.from('perfiles').select('id,nombre'); const nom = Object.fromEntries((ps || []).map(p => [p.id, p.nombre]));
   return (data || []).map(r => ({ ...r, quien: r.usuario ? (nom[r.usuario] || 'usuario') : 'sistema' }));
 };
+Real.historialDe = async function (u) { const { data, error } = await sb.from('relaciones_laborales').select('*').eq('usuario_fieldwy', u).order('numero'); if (error) throw error; return data || []; };
+Real.vinculosDe = async function (u) { const { data, error } = await sb.from('vinculos_usuario').select('*').or(`usuario_a.eq.${u},usuario_b.eq.${u}`); if (error) throw error; return data || []; };
+Real.vincular = async function (a, b, motivo) { const { error } = await sb.rpc('vincular_usuarios', { p_a: a, p_b: b, p_motivo: motivo || null }); if (error) throw new Error(error.message); };
+Real.desvincular = async function (a, b) { const { error } = await sb.rpc('desvincular_usuarios', { p_a: a, p_b: b }); if (error) throw new Error(error.message); };
+Demo.historialDe = async () => []; Demo.vinculosDe = async () => []; Demo.vincular = async () => { }; Demo.desvincular = async () => { };
 Demo.sueldosDe = async () => []; Demo.bancariosDe = async () => ({ completo: false, d: null }); Demo.guardarBancarios = async () => { }; Demo.cambiarSueldo = async () => { }; Demo.auditoria = async () => [];
 
 /* ----- pantalla ----- */
@@ -1501,9 +1506,17 @@ async function sbElegir(c) {
   SB.su = []; SB.ba = null;
   if (can('sueldos', 'ver')) { try { SB.su = await API.sueldosDe(u); } catch (e) { errs.push('Sueldos: ' + (e.message || e)); } }
   if (can('datos_bancarios', 'ver') || can('bancarios_vista', 'ver')) { try { SB.ba = await API.bancariosDe(u); } catch (e) { errs.push('Datos bancarios: ' + (e.message || e)); } }
+  let hist = [], vin = [];
+  if (can('colaboradores', 'ver')) { try { [hist, vin] = await Promise.all([API.historialDe(u), API.vinculosDe(u)]); } catch (e) { errs.push('Historial: ' + (e.message || e)); } }
   const vig = SB.su.find(x => !x.vigente_hasta);
   let h = `<div class="bj-card"><div><b>${esc(c.nombre)}</b><br><small>${esc(u)} · ${esc(c.empresa || 'sin razón social')} · ${esc(c.estatus || '')}</small></div><div><b>${esc(t.nombre || 'Sin tienda')}</b><br><small>${esc([t.cadena, t.estado, t.supervisor].filter(Boolean).join(' · '))}</small></div></div>`;
   h += errs.map(e => `<div class="warn">${esc(e)}</div>`).join('');
+  if (hist.length) {
+    h += sect('Historial laboral', '🕘') + `<div class="tw"><table class="dt"><thead><tr><th>#</th><th class="t">Tipo</th><th>Ingreso</th><th>Baja</th><th class="t">Estatus</th><th class="t">Calidad del dato</th></tr></thead><tbody>${hist.map(x => `<tr><td>${x.numero}</td><td class="t">${esc(x.tipo)}</td><td>${x.fecha_ingreso ? fdate(x.fecha_ingreso) : '—'}</td><td>${x.fecha_baja ? fdate(x.fecha_baja) : '—'}</td><td class="t">${esc(x.estatus)}</td><td class="t">${x.calidad === 'revisar' ? `<span class="pill" style="background:#fdf1de;color:#8a5a00" title="${esc(x.nota || '')}">Revisar</span> <small>${esc(x.nota || '')}</small>` : 'Correcto' + (x.nota ? ` <small>${esc(x.nota)}</small>` : '')}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  if (vin.length || can('usuarios', 'editar')) {
+    h += `<div class="note">${vin.length ? 'Misma persona que: ' + vin.map(v => { const o = v.usuario_a === u ? v.usuario_b : v.usuario_a; return `<b>${esc(o)}</b>${can('usuarios', 'editar') ? ` <a href="#" onclick="sbDesvincular('${esc(u)}','${esc(o)}');return false" title="Quitar vínculo">✕</a>` : ''}`; }).join(', ') : 'Sin usuarios vinculados.'}${can('usuarios', 'editar') ? ' <button class="btn sm" onclick="sbVincular()">🔗 Vincular con otro usuario</button>' : ''}</div>`;
+  }
   if (can('sueldos', 'ver')) {
     h += sect('Sueldo', '💵') + `<div class="kpis">${kp('Sueldo mensual vigente', vig ? dinero(vig.sueldo_mensual) : '—', vig ? 'desde ' + fdate(vig.vigente_desde) : 'sin sueldo capturado', vig ? C.gr : C.gy, null, '💵')}${kp('Bono fijo', vig ? dinero(vig.bono_fijo) : '—', 'vigente', C.gy, null, '🎯')}</div>`;
     h += `<div class="tools">${can('sueldos', 'editar') ? '<button class="btn primary" onclick="sbSueldoForm()">✏️ Cambiar sueldo</button>' : '<span class="muted">Solo administrador, analista y nómina pueden cambiar sueldos.</span>'}</div>`;
@@ -1523,6 +1536,12 @@ async function sbElegir(c) {
   if (!can('sueldos', 'ver') && SB.ba === null && !can('datos_bancarios', 'crear')) h += '<div class="warn">Tu usuario no tiene acceso a sueldos ni a datos bancarios.</div>';
   det.innerHTML = h;
 }
+async function sbVincular() {
+  const c = SB.sel, otro = prompt(`Usuario Fieldway de la MISMA persona que ${c.usuario_fieldwy} (por ejemplo el mismo con GB al final):`, ''); if (otro === null) return;
+  const o = mayus(otro); if (!o) return; const motivo = prompt('Motivo del vínculo (opcional):', 'Misma persona con otro usuario') || '';
+  try { await API.vincular(c.usuario_fieldwy, o, motivo); toast('Usuarios vinculados'); sbElegir(c); } catch (e) { toast('No se pudo vincular: ' + (e.message || e)); }
+}
+async function sbDesvincular(a, b) { if (!confirm(`¿Quitar el vínculo entre ${a} y ${b}?`)) return; try { await API.desvincular(a, b); toast('Vínculo quitado'); sbElegir(SB.sel); } catch (e) { toast('No se pudo: ' + (e.message || e)); } }
 function sbSueldoForm() {
   const c = SB.sel, vig = SB.su.find(x => !x.vigente_hasta), fld = (l, id, ex, v) => `<div class="fld"><label>${l}</label><input id="sb-${id}" ${ex || ''} value="${esc(v == null ? '' : v)}"></div>`;
   $('modal').innerHTML = `<div class="mbox" role="dialog" aria-modal="true"><h3>✏️ Cambiar sueldo</h3><div class="who">${esc(c.nombre)} · ${esc(c.usuario_fieldwy)}</div>
