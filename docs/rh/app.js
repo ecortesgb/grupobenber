@@ -395,7 +395,7 @@ function fbPintar() {
   if (!S.cat || !$('filterbar')) return;
   const v = fbVista(), sinFb = !!v.sinFiltros;
   document.body.classList.toggle('sin-fb', sinFb); if (sinFb) return;
-  const gen = (typeof R !== 'undefined' && R.meta && R.meta.generado) ? R.meta.generado : '';
+  const gen = (typeof R !== 'undefined' && R.meta && R.meta.generado) ? R.meta.generado : (S.gen || '');
   $('fb-act').textContent = gen ? '🕒 Actualizado: ' + gen : '';
   $('pbar').innerHTML = v.per && typeof R !== 'undefined' && R.loaded && R.meta ? periodoHTML('render', { dia: v.per === 'dia' }) : '';
   const abierta = !$('fb-row').classList.contains('est-cerrada');
@@ -421,6 +421,9 @@ function fbEstructura() { const r = $('fb-row'); r.classList.toggle('est-cerrada
   sbPin.addEventListener('click', e => { e.stopPropagation(); rail = !rail; fbLs.set('gb_sb_rail', rail ? '1' : '0'); menu(); });
   window.addEventListener('resize', panel); panel(); menu();
 })();
+
+Real.generado = async function () { const { data } = await sb.from('rep_meta').select('valor').eq('clave', 'ventana').maybeSingle(); return data && data.valor ? data.valor.generado : ''; };
+Demo.generado = async () => 'datos de ejemplo';
 
 /* >>> 03_reportes.js */
 /* ====================================================================== REPORTES: RESUMEN · PENALIZACIÓN · DETALLE DE CHECKS · HC ====================================================================== */
@@ -716,7 +719,7 @@ const VISTAS = [
   { k: 'altas', ic: '🆕', n: 'Altas', mod: 'colaboradores', f: vAltas },
   { k: 'expedientes', ic: '🗂️', n: 'Expedientes', mod: 'expedientes', f: vExpedientes },
   { k: 'bandeja', ic: '🚨', n: 'Posibles bajas', mod: 'alertas', f: vBandeja },
-  { k: 'vigentes', ic: '🩺', n: 'Motivos de ausencias', mod: 'ausencias', f: vVigentes },
+  { k: 'vigentes', ic: '🩺', n: 'Motivos de ausencia', mod: 'ausencias', f: vVigentes },
   { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas },
   { k: 'finiquitos', ic: '🧾', n: 'Finiquitos', mod: 'finiquitos', f: vFiniquitos },
   { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos, sinFiltros: true },
@@ -781,13 +784,13 @@ function vVigentes() {
   const rows = todos.filter(v => okT(v.t.nombre ? v.t : null) && (!S.f.mot || v.motivo === S.f.mot)).sort((a, b) => a.faltan - b.faltan);
   const porMot = {}; rows.forEach(r => porMot[r.motivo] = (porMot[r.motivo] || 0) + 1);
   const MI = { 'Vacaciones': '🏖️', 'Incapacidad (IMSS)': '🏥', 'Permiso especial': '📝', 'Tema médico (particular)': '🩺', 'No localizado': '❓' };
-  let h = cab('Motivos de ausencias', 'Promotores con ausencia registrada que sigue vigente hoy, y cuándo regresan.', 'mochila') + barraFiltros('vVigentes', todos.map(v => v.t).filter(t => t.nombre), ['zona_rrhh', 'rrhh', 'supervisor', 'region', 'cadena']);
+  let h = cab('Motivos de ausencia', 'Promotores con ausencia registrada que sigue vigente hoy, y cuándo regresan.', 'mochila') + barraFiltros('vVigentes', todos.map(v => v.t).filter(t => t.nombre), ['zona_rrhh', 'rrhh', 'supervisor', 'region', 'cadena']);
   h += `<div class="kpis"><div class="kpi"><div class="l">🩺 Vigentes</div><div class="v">${fmt(rows.length)}</div><div class="s">hoy</div></div>${Object.entries(porMot).map(([m, c]) => `<div class="kpi"><div class="l">${MI[m] || ''} ${esc(m)}</div><div class="v">${c}</div></div>`).join('')}<div class="kpi"><div class="l">⏰ Regresan en ≤ 3 días</div><div class="v" style="color:var(--orange-n)">${rows.filter(r => r.faltan <= 3).length}</div></div></div>`;
   h += `<div class="tools" data-nocap><span>Motivo:</span><select onchange="S.f.mot=this.value;vVigentes()"><option value="">Todos</option>${[...new Set(todos.map(v => v.motivo))].sort().map(m => `<option ${S.f.mot === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>`;
   TB = {};
   h += tbl('t-vig', [{ h: 'Usuario', t: 1, v: r => r.usuario, w: 112 }, { h: 'Promotor', t: 1, v: r => r.nombre, w: 210, r: r => `<b>${esc(r.nombre)}</b>` }, { h: 'Motivo', t: 1, v: r => r.motivo, r: r => `<span class="pill b">${MI[r.motivo] || ''} ${esc(r.motivo)}</span>` }, { h: 'Inicio', v: r => r.inicio, r: r => fdate(r.inicio) }, { h: 'Días', v: r => r.dias }, { h: 'Regresa', v: r => r.regreso, r: r => fdate(r.regreso) },
     { h: 'Faltan', v: r => r.faltan, r: r => `<span class="pill ${r.faltan <= 0 ? 'r' : r.faltan <= 3 ? 'a' : 'x'}">${r.faltan <= 0 ? '⏰ hoy' : r.faltan + ' d'}</span>` }, { h: 'Tienda', t: 1, v: r => r.t.nombre || '' }, { h: 'Estado', t: 1, v: r => r.t.estado }, { h: 'Supervisor', t: 1, v: r => r.t.supervisor }, { h: 'Gerente', t: 1, v: r => r.t.gerente }, { h: 'Gerencia RR.HH.', t: 1, v: r => r.t.zona_rrhh }, { h: 'RR.HH.', t: 1, v: r => r.t.rrhh }],
-    rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'ausencias_vigentes', titulo: 'Motivos de ausencias', sort: 6, dir: 1, maxh: '72vh' });
+    rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'ausencias_vigentes', titulo: 'Motivos de ausencia', sort: 6, dir: 1, maxh: '72vh' });
   $('content').innerHTML = h; drawAll();
 }
 
@@ -2013,6 +2016,7 @@ async function entrar() {
     [S.alertas, S.vigentes] = await Promise.all([can('alertas', 'ver') ? API.alertas() : [], can('ausencias', 'ver') ? API.vigentes() : []]);
     const primera = VISTAS.find(v => !v.soon && can(v.mod, 'ver')); S.view = primera ? primera.k : 'bandeja';
     nav(); render();
+    API.generado().then(g => { S.gen = g; fbPintar(); }).catch(() => { });
   } catch (e) { await API.logout(); mostrarLogin(e.message || String(e)); }
 }
 function mostrarLogin(msg) { $('app').hidden = true; $('login').hidden = false; $('lg-msg').textContent = msg || ''; $('lg-u').focus(); }
