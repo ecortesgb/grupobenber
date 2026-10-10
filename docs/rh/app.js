@@ -2270,9 +2270,9 @@ async function vVacantes() {
     const vac = items.filter(i => i.vac), puede = can('vacantes', 'editar');
     const cnt = k => items.filter(i => i.estado === k).length;
     let h = cab('Vacantes', 'Tiendas y posiciones sin cobertura real. Una tienda sigue cubierta mientras su promotor no sea baja ni tenga ausencia registrada. Confirma la vacante con fecha compromiso y motivo, o márcala cubierta.', 'mochila');
-    h += `<div class="tools" data-nocap>${[['gestion', '📋 Gestión de vacantes'], ['resumen', '📊 Resumen gráfico']].map(([k, n]) => `<button class="chip ${VC.tab === k ? 'on' : ''}" onclick="VC.tab='${k}';vVacantes()">${n}</button>`).join('')}</div>`;
+    h += `<div class="tools" data-nocap>${[['gestion', '📋 Gestión de vacantes'], ['resumen', '🗺️ Resumen'], ['graficas', '📊 Gráficas']].map(([k, n]) => `<button class="chip ${VC.tab === k ? 'on' : ''}" onclick="VC.tab='${k}';vVacantes()">${n}</button>`).join('')}</div>`;
     h += `<div class="kpis">${kp('Tiendas con vacante', fmt(vac.length), `${fmt(vac.filter(i => i.tipo === 'Tienda vacante').length)} completas · ${fmt(vac.filter(i => i.tipo === 'Posiciones faltantes').length)} con posiciones faltantes`, vac.length ? C.rd : C.gr, null, '🏬')}${kp('Posiciones faltantes', fmt(vac.reduce((a, i) => a + i.falt, 0)), 'suma de posiciones sin cubrir', C.am, null, '🧍')}${kp('Por confirmar', fmt(cnt('Por confirmar')), 'falta fecha compromiso y motivo', C.am, "VC.est='Por confirmar';VC.tab='gestion';vVacantes()", '❓')}${kp('Compromisos vencidos', fmt(items.filter(vencida).length), `${fmt(items.filter(proxima).length)} vencen en 3 días o menos`, items.filter(vencida).length ? C.rd : C.gr, "VC.est='vencidas';VC.tab='gestion';vVacantes()", '⏰')}${kp('En seguimiento', fmt(cnt('En seguimiento')), 'sin checks, pero su promotor aún no es baja', C.bl, "ir('bandeja')", '🔎')}</div>`;
-    h += VC.tab === 'resumen' ? vacResumenHTML(items, r) : vacGestionHTML(items, r, puede);
+    h += VC.tab === 'graficas' ? vacResumenHTML(items, r) : VC.tab === 'resumen' ? vacTablaHTML(items, r) : vacGestionHTML(items, r, puede);
     $('content').innerHTML = h; drawAll();
   });
 }
@@ -2361,6 +2361,20 @@ function vacResumenHTML(items, r) {
 async function vacInsignia() {
   if (!can('vacantes', 'ver')) return;
   try { const g = await API.vacGestion(); S.vacBadge = g.filter(x => x.estado === 'Confirmada' && x.fecha_compromiso && diffD(x.fecha_compromiso, HOY) <= 3).length; nav(); } catch (e) { }
+}
+
+/* ---- Resumen: tabla agrupada (región > gerente > supervisor > tienda) con una columna por cadena y total; solo el número de vacantes ---- */
+const VC_MET = [['total', 'Total (tiendas vacantes + posiciones faltantes)'], ['pdv', 'Vacantes PDV (tiendas completas)'], ['pos', 'Posiciones faltantes']];
+function vacTablaHTML(items, r) {
+  VC.met = VC.met || 'total';
+  const val = i => (VC.met !== 'pos' && i.tipo === 'Tienda vacante' ? 1 : 0) + (VC.met !== 'pdv' && i.tipo === 'Posiciones faltantes' ? i.falt : 0);
+  const filas = items.filter(i => i.vac).map(i => ({ idpdv: i.id, v: val(i) })).filter(x => x.v > 0), cad = x => (tienda(x.idpdv) || {}).cadena;
+  const cads = [...new Set(filas.map(cad).filter(Boolean))].sort((a, b) => (b === 'Coppel') - (a === 'Coppel') || a.localeCompare(b, 'es')), total = filas.reduce((a, x) => a + x.v, 0);
+  const titulo = 'Vacantes · ' + VC_MET.find(m => m[0] === VC.met)[1] + ' · corte al ' + fdate(r.hasta);
+  return sect('Resumen de vacantes por región, gerente y cadena', '🗺️') + `<div class="tools" data-nocap><span>Contar:</span>${VC_MET.map(([k, n]) => `<button class="chip ${VC.met === k ? 'on' : ''}" onclick="VC.met='${k}';vVacantes()">${n}</button>`).join('')}
+    <button class="btn sm" onclick="capturaDescargar($('vac-esq'),'${titulo}',subFiltros(),'resumen_vacantes')">📸 Imagen</button><button class="btn sm" onclick="capturaCopiar($('vac-esq'),'${titulo}',subFiltros())">📋 Copiar imagen</button></div>
+    <p class="note">${fmt(total)} en total · corte al ${fdate(r.hasta)}. Abre cada nivel con ⊞. Las tiendas cubiertas por RH o con promotor asignado no cuentan como vacante.</p>
+    <div id="vac-esq" class="cap-pad">${filas.length ? arbol(filas, [...cads.map(c => ({ h: c, f: a => a.filter(x => cad(x) === c).reduce((s, x) => s + x.v, 0) })), { h: 'Total general', f: a => a.reduce((s, x) => s + x.v, 0), cero: true }], { titulo: 'REGIÓN / GERENTE / SUPERVISOR / TIENDA', abrir: 2 }) : '<div class="card empty"><img src="' + img('triunfo') + '" alt="">Sin vacantes con estos filtros.</div>'}</div>`;
 }
 
 /* >>> 07g_perfil_baja.js */
