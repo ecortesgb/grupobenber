@@ -351,7 +351,7 @@ const logoCad = c => LOGO[c] ? `<img class="cadena-logo" src="${img(LOGO[c])}" a
 const R = { loaded: false, T: [], hc: [], uc: {}, bajasLive: new Map(), solo: true, rach: 'todas', est: '', estA: '', estC: '', cadenaPen: true };
 Real.reporte = async function () {
   const [m, t, h, u, bj] = await Promise.all([sb.from('rep_meta').select('valor').eq('clave', 'ventana').maybeSingle(), todo(() => sb.from('rep_tienda').select('*')), todo(() => sb.from('rep_hc').select('*')), todo(() => sb.from('rep_ultimo_check').select('*')),
-    todo(() => sb.from('bajas').select('usuario_fieldwy,fecha_baja').gte('fecha_baja', addD(HOY, -200)))]);
+    todo(() => sb.from('bajas').select('usuario_fieldwy,fecha_baja').is('anulada_en', null).gte('fecha_baja', addD(HOY, -200)))]);
   if (!m.data) throw new Error('Todavía no hay reportes publicados. Corre publicar_reporte.py.');
   return { meta: m.data.valor, tiendas: t, hc: h, uc: u, bajas: bj };
 };
@@ -374,7 +374,7 @@ const xsF = () => R.T.filter(x => okT(x.t));
 const MV = { loaded: false, ing: [], baj: [], reing: [], vinc: {}, revisar: 0 };
 Real.movs = async function () {
   const desde = addD(HOY, -125);
-  const [i, b] = await Promise.all([todo(() => sb.from('candidatos').select('id,fecha_programada,idpdv,reclutador_id,fuente_id,usuario_fieldwy').eq('estatus', 'Ingresó').gte('fecha_programada', desde)), todo(() => sb.from('bajas').select('usuario_fieldwy,fecha_baja,idpdv,motivo').gte('fecha_baja', desde))]);
+  const [i, b] = await Promise.all([todo(() => sb.from('candidatos').select('id,fecha_programada,idpdv,reclutador_id,fuente_id,usuario_fieldwy').eq('estatus', 'Ingresó').gte('fecha_programada', desde)), todo(() => sb.from('bajas').select('usuario_fieldwy,fecha_baja,idpdv,motivo').is('anulada_en', null).gte('fecha_baja', desde))]);
   // del historial laboral (opcional: si falla, el reporte sigue igual): reingresos, usuarios vinculados como una misma persona y cuántos periodos están por revisar
   let reing = [], vinc = {}, revisar = 0;
   try { reing = (await todo(() => sb.from('v_eventos_laborales').select('fecha,idpdv,usuario_fieldwy,persona').eq('evento', 'Reingreso').gte('fecha', desde))).map(x => ({ f: x.fecha, idpdv: x.idpdv, u: x.usuario_fieldwy })); } catch (e) { }
@@ -1114,10 +1114,10 @@ Real.buscarColab = async function (q) {
   if (error) throw error; return data || [];
 };
 Real.bajasPrevias = async function (usuario) {
-  const { data } = await sb.from('bajas').select('id,fecha_baja,motivo').eq('usuario_fieldwy', usuario).gte('fecha_baja', addD(HOY, -45)); return data || [];
+  const { data } = await sb.from('bajas').select('id,fecha_baja,motivo').is('anulada_en', null).eq('usuario_fieldwy', usuario).gte('fecha_baja', addD(HOY, -45)); return data || [];
 };
 Real.bajasLista = async function (desde) {
-  let q = () => { let x = sb.from('bajas').select('id,usuario_fieldwy,fecha_baja,ultimo_dia_laborado,motivo,marca_destino,adeudo_monto,adeudo_detalle,finiquito_estatus,idpdv,comentarios,capturado_en,colaboradores(nombre,idpdv,empresa),encuesta_salida(baja_id)').order('fecha_baja', { ascending: false }); if (desde) x = x.gte('fecha_baja', desde); return x; };
+  let q = () => { let x = sb.from('bajas').select('id,usuario_fieldwy,fecha_baja,ultimo_dia_laborado,motivo,marca_destino,adeudo_monto,adeudo_detalle,finiquito_estatus,idpdv,comentarios,capturado_en,colaboradores(nombre,idpdv,empresa),encuesta_salida(baja_id)').is('anulada_en', null).order('fecha_baja', { ascending: false }); if (desde) x = x.gte('fecha_baja', desde); return x; };
   const r = await todo(q);
   return r.map(b => ({ id: b.id, usuario: b.usuario_fieldwy, nombre: (b.colaboradores || {}).nombre || b.usuario_fieldwy, empresa: (b.colaboradores || {}).empresa, fecha: b.fecha_baja, ultimo: b.ultimo_dia_laborado, motivo: b.motivo, marca: b.marca_destino, adeudo: +b.adeudo_monto || 0, adeudoDet: b.adeudo_detalle, finq: b.finiquito_estatus, idpdv: b.idpdv || (b.colaboradores || {}).idpdv, com: b.comentarios, cap: b.capturado_en, enc: !!(b.encuesta_salida && (Array.isArray(b.encuesta_salida) ? b.encuesta_salida.length : b.encuesta_salida.baja_id)) }));
 };
@@ -1177,13 +1177,13 @@ async function vBajas() {
     { h: 'Finiquito', t: 1, v: b => FINQ.indexOf(b.finq), r: b => puedeFin ? `<select class="finq" onchange="cambiaFinq(${b.id},this.value)">${FINQ.map(f => `<option ${f === b.finq ? 'selected' : ''}>${f}</option>`).join('')}</select>` : esc(b.finq) },
     { h: 'Adeudo', v: b => b.adeudo, r: b => b.adeudo ? `<b class="cell-red">$${fmt(b.adeudo)}</b>` : '—' }, { h: 'Tienda', t: 1, v: b => (tienda(b.idpdv) || {}).nombre || '' }, { h: 'Cadena', t: 1, v: b => (tienda(b.idpdv) || {}).cadena }, { h: 'Región', t: 1, v: b => (tienda(b.idpdv) || {}).region },
     { h: 'Gerente', t: 1, v: b => (tienda(b.idpdv) || {}).gerente }, { h: 'Supervisor', t: 1, v: b => (tienda(b.idpdv) || {}).supervisor }, { h: 'Comentarios', t: 1, v: b => b.com || '' },
-    ...(can('bajas', 'borrar') ? [{ h: '', v: () => '', r: b => `<button class="rsv" onclick="anularBaja(${b.id})" title="Elimina la baja y deja al colaborador activo">Anular</button>` }] : [])
+    ...(can('bajas', 'borrar') ? [{ h: '', v: () => '', r: b => `<button class="rsv" onclick="anularBaja(${b.id})" title="Marca la baja como anulada (queda guardada con su motivo) y deja al colaborador activo">Anular</button>` }] : [])
   ], rows, { fix: 2, search: 1, csv: 1, png: 1, file: 'bajas', titulo: 'Bajas registradas', sort: 0, dir: -1, maxh: '70vh', lim: 500 });
   $('content').innerHTML = h; drawAll();
 }
 async function cambiaFinq(id, est) { try { await API.actualizarFiniquito(id, est); const b = BJ.lista.find(x => x.id === id); if (b) b.finq = est; toast('Finiquito: ' + est); } catch (e) { toast('No se pudo guardar: ' + (e.message || e)); } }
 async function anularBaja(id) {
-  const b = BJ.lista.find(x => x.id === id); if (!b || !confirm(`¿Anular la baja de ${b.nombre} (${fdate(b.fecha)})?\nSe elimina la baja y el colaborador vuelve a quedar activo.`)) return;
+  const b = BJ.lista.find(x => x.id === id); if (!b || !confirm(`¿Anular la baja de ${b.nombre} (${fdate(b.fecha)})?\nLa baja queda anulada (se conserva con su motivo) y el colaborador vuelve a quedar activo.`)) return;
   const motivo = prompt('Motivo de la anulación (obligatorio; queda en Auditoría):', ''); if (motivo === null) return; if (limpia(motivo).length < 5) { toast('Escribe el motivo de la anulación (mínimo 5 caracteres)'); return; }
   try { await API.anularBaja(b, limpia(motivo)); MV.loaded = false; R.vivo = false; toast('Baja anulada'); vBajas(); } catch (e) { toast('No se pudo anular: ' + (e.message || e)); }
 }
