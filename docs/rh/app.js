@@ -2777,13 +2777,16 @@ const claveTemporal = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpq
 function cambiarClaveObligatoria(temp) {
   return new Promise(res => {
     $('modal').innerHTML = `<div class="mbox" style="width:min(460px,96vw)" role="dialog" aria-modal="true"><h3>🔐 Elige tu contraseña</h3><div class="note">Tu contraseña actual es temporal. Escribe una propia para seguir: mínimo 6 caracteres con al menos una letra y un número; también puedes usar símbolos.</div>
+      <div class="fld"><label>Contraseña temporal actual</label><input id="cc-0" type="password" autocomplete="current-password" value="${esc(temp || '')}"></div>
       <div class="fld"><label>Nueva contraseña</label><input id="cc-1" type="password" autocomplete="new-password"></div><div class="fld"><label>Repite la nueva contraseña</label><input id="cc-2" type="password" autocomplete="new-password"></div>
-      <div class="warn" id="cc-w" hidden></div><div class="mfoot"><button class="btn primary" id="cc-ok">Guardar y entrar</button></div></div>`; $('modal').hidden = false; $('modal').onclick = null; ponerOjo('cc-1'); ponerOjo('cc-2'); $('cc-1').focus();
+      <div class="warn" id="cc-w" hidden></div><div class="mfoot"><button class="btn primary" id="cc-ok">Guardar y entrar</button></div></div>`; $('modal').hidden = false; $('modal').onclick = null; ponerOjo('cc-0'); ponerOjo('cc-1'); ponerOjo('cc-2'); $(temp ? 'cc-1' : 'cc-0').focus();
     $('cc-ok').onclick = async () => {
-      const a = $('cc-1').value, b = $('cc-2').value, w = $('cc-w'); w.hidden = false;
-      if (!claveValida(a, temp)) { w.textContent = 'Mínimo 6 caracteres, con al menos una letra y un número, y distinta de la temporal.'; return; } if (a !== b) { w.textContent = 'Las dos contraseñas no coinciden.'; return; }
+      const act = $('cc-0').value, a = $('cc-1').value, b = $('cc-2').value, w = $('cc-w'); w.hidden = false;
+      if (!act) { w.textContent = 'Escribe tu contraseña temporal actual.'; return; }
+      if (!claveValida(a, act)) { w.textContent = 'Mínimo 6 caracteres, con al menos una letra y un número, y distinta de la temporal.'; return; } if (a !== b) { w.textContent = 'Las dos contraseñas no coinciden.'; return; }
       $('cc-ok').disabled = true;
-      try { const { error } = await sb.auth.updateUser({ password: a }); if (error) throw error; const r = await sb.rpc('clave_cambiada'); if (r.error) throw r.error; cerrarM(); toast('Contraseña actualizada'); res(); }
+      try { const ses = (await sb.auth.getSession()).data.session, rr = await fetch(CFG.url + '/auth/v1/user', { method: 'PUT', headers: { 'Content-Type': 'application/json', apikey: CFG.key, Authorization: 'Bearer ' + ses.access_token }, body: JSON.stringify({ password: a, current_password: act }) });
+        if (!rr.ok) { const j = await rr.json().catch(() => ({})); throw new Error(j.error_code === 'current_password_invalid' ? 'La contraseña temporal actual no es correcta.' : (j.msg || 'No se pudo cambiar la contraseña')); } const r = await sb.rpc('clave_cambiada'); if (r.error) throw r.error; cerrarM(); toast('Contraseña actualizada'); res(); }
       catch (e) { $('cc-ok').disabled = false; w.textContent = 'No se pudo cambiar: ' + (e.message || e); }
     };
   });
