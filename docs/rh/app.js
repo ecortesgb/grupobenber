@@ -653,7 +653,7 @@ async function vChecks() {
     const mix = {}; prim.forEach(x => mix[x.estatus_check] = (mix[x.estatus_check] || 0) + 1);
     let h = cab('Detalle de checks', 'Cada check de cada promotor con horarios, tiempos, rangos y resultado, y la venta registrada del día para confirmar la justificación por productividad.', 'sim') + barraFiltros('vChecks') + barraPeriodo('vChecks', { dia: true });
     h += `<div class="tools" data-nocap>${[['checks', '🧾 Checks'], ['errores', '🛠️ Errores de check']].map(([k, n]) => `<button class="chip ${CKS.tab === k ? 'on' : ''}" onclick="CKS.tab='${k}';vChecks()">${n}</button>`).join('')}</div>`;
-    if (CKS.tab === 'errores') { $('content').innerHTML = h + erroresCheckHTML(r, rows, prim, errores); drawAll(); return; }
+    if (CKS.tab === 'errores') { if (can('justificaciones', 'ver')) await cargarJustSolicitadas(); $('content').innerHTML = h + erroresCheckHTML(r, rows, prim, errores); drawAll(); return; }
     h += `<div class="kpis">${kp('Checks evaluados', fmt(prim.length), 'todos los del periodo, incluidos abiertos', null, null, '🧾')}${kp('Promotores con check', fmt(prom), fdate(r.desde) + ' – ' + fdate(r.hasta), null, null, '🧍')}${kp('Cumplen (regla de pago)', pc1(ok.length, prim.length), fmt(ok.length) + ' checks', colorPct(pn(ok.length, prim.length)), null, '✅')}${kp('Con error', fmt(errores.length), `${fmt(conJ)} con venta · ${fmt(sinVta)} sin venta · ${fmt(noAp)} no justificables`, errores.length ? C.rd : C.gr, null, '⚠️')}${kp('Cumple por productividad', pc1(prod, prim.length), fmt(prod) + ' checks', C.pu, null, '💸')}${kp('Ventas registradas', fmt(vtas), 'en días con check', null, null, '🛒')}</div>`;
     // gráfica: promotores que checaron bien / mal
     const cuenta = x => ({ b: new Set(x.filter(y => OKF.includes(y.estatus_final)).map(y => y.usuario)).size, m: new Set(x.filter(y => !OKF.includes(y.estatus_final)).map(y => y.usuario)).size, n: x.length, c: x.filter(y => OKF.includes(y.estatus_final)).length });
@@ -764,7 +764,7 @@ function erroresCheckHTML(r, rows, prim, errores) {
   const porSup = new Map(); delDia.forEach(x => { const k = sup(x); if (!porSup.has(k)) porSup.set(k, []); porSup.get(k).push(x); });
   h += `<div id="err-dia" class="err-dia">${delDia.length ? [...porSup].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([s, xs]) => `<div class="err-sup"><h4>🧭 ${esc(s)} <small>${xs.length} error${xs.length === 1 ? '' : 'es'}</small></h4>${xs.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(x => {
     const t = tienda(x.idpdv) || {}, jt = justTxt(x), p = JUSTP[jt];
-    return `<div class="err-card"><div class="err-h"><b>${esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(t.nombre || 'IDPDV ' + x.idpdv)}</small></div><div>${pillx((ERRI[x.estatus_check] || '') + ' ' + errNom(x.estatus_check), NOJUST.includes(x.estatus_check) ? 'r' : 'a')} ${pillx(p[1], p[0])}${x.registros ? ` <small class="muted">${x.registros} venta${x.registros === 1 ? '' : 's'}</small>` : ''}</div><div class="err-fix">💡 ${esc(ERRFIX[x.estatus_check] || 'Revisar el check con el supervisor.')}</div></div>`;
+    return `<div class="err-card"><div class="err-h"><b>${esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(t.nombre || 'IDPDV ' + x.idpdv)}</small></div><div>${pillx((ERRI[x.estatus_check] || '') + ' ' + errNom(x.estatus_check), NOJUST.includes(x.estatus_check) ? 'r' : 'a')} ${pillx(p[1], p[0])}${x.registros ? ` <small class="muted">${x.registros} venta${x.registros === 1 ? '' : 's'}</small>` : ''}</div><div class="err-fix">💡 ${esc(ERRFIX[x.estatus_check] || 'Revisar el check con el supervisor.')}</div>${justBtn(x)}</div>`;
   }).join('')}</div>`).join('') : '<div class="card empty"><img src="' + img('triunfo') + '" alt="">Sin errores de check ese día con este filtro.</div>'}</div>`;
 
   /* ---- del periodo: acumulado ---- */
@@ -790,6 +790,13 @@ function erroresCsv(que) {
   if (!ERR_CTX) return; const xs = que === 'dia' ? ERR_CTX.delDia : ERR_CTX.errF;
   finBajar('errores_check_' + (que === 'dia' ? ERR_CTX.dia : 'periodo') + '.csv', [['fecha', 'usuario', 'promotor', 'idpdv', 'tienda', 'supervisor', 'gerente', 'error', 'ventas', 'justifica', 'como_corregirlo'],
     ...xs.map(x => { const t = tienda(x.idpdv) || {}; return [x.fecha, x.usuario, x.nombre, x.idpdv, t.nombre, t.supervisor, t.gerente, errNom(x.estatus_check), x.registros, justTxt(x), ERRFIX[x.estatus_check] || '']; })]);
+}
+
+/* justificación: RH la solicita y nómina la aprueba (Nómina > Justificaciones) */
+function justBtn(x) {
+  const js = NM.justMap && NM.justMap.get(x.usuario + '|' + x.fecha);
+  if (js) return `<div data-nocap>${pillx('📝 Justificación ' + js.toLowerCase(), js === 'Aprobada' ? 'g' : 'a')}</div>`;
+  return can('justificaciones', 'crear') ? `<div data-nocap><button class="btn sm" onclick="justSolicitar('${x.usuario}','${x.fecha}','${x.estatus_check}','${String(x.nombre).replace(/['"\\]/g, '')}')">📝 Solicitar justificación</button></div>` : '';
 }
 
 /* >>> 03c_categoria.js */
@@ -843,12 +850,13 @@ const VISTAS = [
   { k: 'bajas', ic: '📤', n: 'Bajas y encuesta', mod: 'bajas', f: vBajas, per: 'libre' },
   { k: 'vacantes', ic: '🏬', n: 'Vacantes', mod: 'vacantes', f: vVacantes, per: true },
   { k: 'finiquitos', ic: '🧾', n: 'Finiquitos', mod: 'finiquitos', f: vFiniquitos },
-  { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos, sinFiltros: true },
+  { k: 'nomina', ic: '💵', n: 'Nómina', mod: 'nomina', f: vNomina, sinFiltros: true },
+  { k: 'sueldos', ic: '💳', n: 'Sueldos y bancarios', mod: 'sueldos', f: vSueldos, sinFiltros: true, oculto: true },
   { k: 'auditoria', ic: '🧾', n: 'Auditoría', mod: 'auditoria', f: vAuditoria, sinFiltros: true }
 ];
 
 function nav() {
-  $('nav').innerHTML = VISTAS.filter(v => v.sep || can(v.mod, 'ver')).map(v => v.sep ? `<div class="nav-sep">${v.n}</div>` : `<div class="nav-item ${v.k === S.view ? 'active' : ''} ${v.soon ? 'off' : ''}" ${v.soon ? '' : `onclick="ir('${v.k}')"`}><span class="ic">${v.ic}</span>${v.n}${v.soon ? '<span class="soon">pronto</span>' : ''}${v.k === 'vacantes' && S.vacBadge ? `<span class="nav-badge" title="Compromisos de cobertura vencidos o que vencen en 3 días">${S.vacBadge}</span>` : ''}</div>`).join('');
+  $('nav').innerHTML = VISTAS.filter(v => !v.oculto && (v.sep || can(v.mod, 'ver'))).map(v => v.sep ? `<div class="nav-sep">${v.n}</div>` : `<div class="nav-item ${v.k === S.view ? 'active' : ''} ${v.soon ? 'off' : ''}" ${v.soon ? '' : `onclick="ir('${v.k}')"`}><span class="ic">${v.ic}</span>${v.n}${v.soon ? '<span class="soon">pronto</span>' : ''}${v.k === 'vacantes' && S.vacBadge ? `<span class="nav-badge" title="Compromisos de cobertura vencidos o que vencen en 3 días">${S.vacBadge}</span>` : ''}</div>`).join('');
 }
 function ir(k) { S.view = k; $('sidebar').classList.remove('open'); nav(); render(); window.scrollTo(0, 0); }
 function render() { const v = VISTAS.find(x => x.k === S.view); if (typeof fbPintar === 'function') fbPintar(); if (v && v.f) v.f(); }
@@ -1694,7 +1702,7 @@ async function altaUsuario(candId) {
     <div id="au-rec"></div>
     <div class="row2"><div class="fld"><label>Tipo de sueldo *</label><select id="au-ts"><option value="">— elige —</option><option>Regular</option><option>Vida cara</option><option>Frontera</option></select></div><div class="fld"><label>¿Asegurado en el IMSS? *</label><select id="au-aseg"><option value="">— elige —</option><option>Sí</option><option>No</option></select></div></div>
     <div class="row2">${fld('Monto de crédito Infonavit ($, si tiene)', 'minf', '', 'type="number" min="0" step="0.01"')}<div class="fld"><label>¿Es reingreso?</label><select id="au-tipo"><option value="">No, es nuevo</option><option>Reingreso</option></select></div></div>
-    ${veSueldo ? `<div class="row2">${fld('Sueldo ($, opcional)', 'suel', '', 'type="number" min="0" step="0.01"')}${fld('Bono fijo ($, opcional)', 'bono', '', 'type="number" min="0" step="0.01"')}</div>` : ''}
+    ${veSueldo ? `<div class="row2">${fld('Sueldo semanal ($)', 'suel', '', 'type="number" min="0" step="0.01"')}${fld('Bono fijo ($, opcional)', 'bono', '', 'type="number" min="0" step="0.01"')}</div>` : ''}
     <div class="note">Reingreso: usa el <b>mismo usuario Fieldway</b> que tenía (debe estar en baja). Solo si no está cargado a la agencia, crea uno nuevo con <b>GB</b> al final.</div>
     <div class="warn" id="au-warn" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="au-ok">Guardar usuario</button></div></div>`;
   $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
@@ -1854,9 +1862,9 @@ async function sbElegir(c) {
     h += `<div class="note">${vin.length ? 'Misma persona que: ' + vin.map(v => { const o = v.usuario_a === u ? v.usuario_b : v.usuario_a; return `<b>${esc(o)}</b>${can('usuarios', 'editar') ? ` <a href="#" onclick="sbDesvincular('${esc(u)}','${esc(o)}');return false" title="Quitar vínculo">✕</a>` : ''}`; }).join(', ') : 'Sin usuarios vinculados.'}${can('usuarios', 'editar') ? ' <button class="btn sm" onclick="sbVincular()">🔗 Vincular con otro usuario</button>' : ''}</div>`;
   }
   if (can('sueldos', 'ver')) {
-    h += sect('Sueldo', '💵') + `<div class="kpis">${kp('Sueldo mensual vigente', vig ? dinero(vig.sueldo_mensual) : '—', vig ? 'desde ' + fdate(vig.vigente_desde) : 'sin sueldo capturado', vig ? C.gr : C.gy, null, '💵')}${kp('Bono fijo', vig ? dinero(vig.bono_fijo) : '—', 'vigente', C.gy, null, '🎯')}</div>`;
+    h += sect('Sueldo', '💵') + `<div class="kpis">${kp('Sueldo semanal vigente', vig ? dinero(vig.sueldo_semanal) : '—', vig ? 'desde ' + fdate(vig.vigente_desde) : 'sin sueldo capturado', vig ? C.gr : C.gy, null, '💵')}${kp('Bono fijo', vig ? dinero(vig.bono_fijo) : '—', 'vigente', C.gy, null, '🎯')}</div>`;
     h += `<div class="tools">${can('sueldos', 'editar') ? '<button class="btn primary" onclick="sbSueldoForm()">✏️ Cambiar sueldo</button>' : '<span class="muted">Solo administrador, analista y nómina pueden cambiar sueldos.</span>'}</div>`;
-    h += SB.su.length ? `<div class="tw"><table class="dt"><thead><tr><th>Desde</th><th>Hasta</th><th>Sueldo mensual</th><th>Bono fijo</th><th class="t">Motivo</th></tr></thead><tbody>${SB.su.map(x => `<tr><td>${fdate(x.vigente_desde)}</td><td>${x.vigente_hasta ? fdate(x.vigente_hasta) : '<b>vigente</b>'}</td><td>${dinero(x.sueldo_mensual)}</td><td>${dinero(x.bono_fijo)}</td><td class="t">${esc(x.motivo || '')}</td></tr>`).join('')}</tbody></table></div>` : '';
+    h += SB.su.length ? `<div class="tw"><table class="dt"><thead><tr><th>Desde</th><th>Hasta</th><th>Sueldo semanal</th><th>Bono fijo</th><th class="t">Motivo</th></tr></thead><tbody>${SB.su.map(x => `<tr><td>${fdate(x.vigente_desde)}</td><td>${x.vigente_hasta ? fdate(x.vigente_hasta) : '<b>vigente</b>'}</td><td>${dinero(x.sueldo_semanal)}</td><td>${dinero(x.bono_fijo)}</td><td class="t">${esc(x.motivo || '')}</td></tr>`).join('')}</tbody></table></div>` : '';
   }
   if (SB.ba !== null || can('datos_bancarios', 'crear')) {
     h += sect('Datos bancarios', '💳'); const b = SB.ba && SB.ba.d;
@@ -1881,7 +1889,7 @@ async function sbDesvincular(a, b) { if (!confirm(`¿Quitar el vínculo entre ${
 function sbSueldoForm() {
   const c = SB.sel, vig = SB.su.find(x => !x.vigente_hasta), fld = (l, id, ex, v) => `<div class="fld"><label>${l}</label><input id="sb-${id}" ${ex || ''} value="${esc(v == null ? '' : v)}"></div>`;
   $('modal').innerHTML = `<div class="mbox" role="dialog" aria-modal="true"><h3>✏️ Cambiar sueldo</h3><div class="who">${esc(c.nombre)} · ${esc(c.usuario_fieldwy)}</div>
-    <div class="row2">${fld('Sueldo mensual ($) *', 'monto', 'type="number" min="0" step="0.01"', vig ? vig.sueldo_mensual : '')}${fld('Bono fijo ($)', 'bono', 'type="number" min="0" step="0.01"', vig ? vig.bono_fijo : '')}</div>
+    <div class="row2">${fld('Sueldo semanal ($) *', 'monto', 'type="number" min="0" step="0.01"', vig ? vig.sueldo_semanal : '')}${fld('Bono fijo ($)', 'bono', 'type="number" min="0" step="0.01"', vig ? vig.bono_fijo : '')}</div>
     <div class="row2">${fld('Aplica desde *', 'desde', 'type="date"', HOY)}${fld('Motivo', 'motivo', 'placeholder="Ej. ajuste anual"', '')}</div>
     <div class="note">El sueldo anterior se cierra un día antes de la fecha elegida y queda en el historial.</div><div class="warn" id="sb-warn" hidden></div>
     <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="sb-ok">Guardar</button></div></div>`;
@@ -2581,6 +2589,144 @@ async function ausGuardar() {
   const c = AU.sel; if (!c) return; const w = $('an-warn'), b = $('an-ok'); b.disabled = true; b.textContent = 'Guardando…';
   try { await API.ausNueva({ usuario: c.usuario_fieldwy, motivo: $('an-mot').value, inicio: $('an-ini').value, dias: +$('an-dias').value, comentarios: $('an-com').value }); cerrarM(); toast('Ausencia registrada: ' + c.nombre); AU.rng = null; S.alertas = (S.alertas || []).filter(x => x.usuario !== c.usuario_fieldwy); nav(); vAusencias(); }
   catch (e) { b.disabled = false; b.textContent = 'Guardar ausencia'; w.hidden = false; w.textContent = 'No se pudo guardar: ' + (e.message || e); }
+}
+
+/* >>> 07j_nomina.js */
+/* ====================================================================== NÓMINA SEMANAL ======================================================================
+   Se paga SEMANA VENCIDA lo que se trabajó (también a quien ya causó baja). Por promotor y día cuenta como pagable un día con check Correcto, justificado por venta/Telefónica
+   o con una justificación aprobada por nómina. Pago = sueldo semanal ÷ 7 × días pagables; con 6 o más días pagables se paga el sueldo semanal completo (igual el bono fijo).
+   Al cerrar la semana se guarda una foto (lote) que no se puede duplicar: si después se aprueba una justificación, sale un lote de AJUSTE con la diferencia.
+   El layout de pago sale del lote. RH solicita justificaciones desde Errores de check; nómina las aprueba aquí. Las reglas las valida también la base de datos. */
+const NM = { tab: 'semana', ini: null, emp: '', alertas: false, sueldos: new Map(), just: [], lotes: [], calc: null };
+const chunk = (a, n) => { const o = []; for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n)); return o; };
+Real.nomSueldos = async function () { const r = await todo(() => sb.from('sueldos_historial').select('usuario_fieldwy,sueldo_semanal,bono_fijo,vigente_desde,vigente_hasta')); return r; };
+Real.nomJust = async function () { return todo(() => sb.from('nomina_justificaciones').select('*,colaboradores(nombre,idpdv)').order('solicitada_en', { ascending: false })); };
+Real.nomLotes = async function () { const { data, error } = await sb.from('nomina_lotes').select('*').order('id', { ascending: false }).limit(60); if (error) throw error; return data || []; };
+Real.nomPagos = async function (lote) { const { data, error } = await sb.from('nomina_pagos').select('*').eq('lote_id', lote).order('empresa').order('nombre'); if (error) throw error; return data || []; };
+Real.nomColab = async function (us) { let o = []; for (const c of chunk(us, 150)) { const { data } = await sb.from('colaboradores').select('usuario_fieldwy,nombre,empresa,estatus,idpdv').in('usuario_fieldwy', c); o = o.concat(data || []); } return o; };
+Real.nomBanc = async function (us) { let o = []; for (const c of chunk(us, 150)) { const { data } = await sb.from('datos_bancarios').select('usuario_fieldwy,banco,titular,clabe,cuenta,tarjeta').in('usuario_fieldwy', c); o = o.concat(data || []); } return o; };
+Real.solJust = async function (a) { return Real.finRpc('solicitar_justificacion', a); };
+Real.resJust = async function (id, ap, nota) { return Real.finRpc('resolver_justificacion', { p_id: id, p_aprobar: ap, p_nota: nota || null }); };
+Real.nomCerrar = async function (sem, ini, filas, nota) { return Real.finRpc('nomina_cerrar_semana', { p_semana: sem, p_ini: ini, p_filas: filas, p_nota: nota || null }); };
+Real.nomPagado = async function (id, f, ref) { return Real.finRpc('nomina_marcar_pagado', { p_lote: id, p_fecha: f, p_referencia: ref }); };
+Demo.nomSueldos = async () => []; Demo.nomJust = async () => []; Demo.nomLotes = async () => []; Demo.nomPagos = async () => []; Demo.nomColab = async us => us.map(u => ({ usuario_fieldwy: u, nombre: u, empresa: 'Benber SS', estatus: 'Activo' })); Demo.nomBanc = async () => [];
+Demo.solJust = async () => 1; Demo.resJust = async () => { }; Demo.nomCerrar = async () => 1; Demo.nomPagado = async () => { };
+
+const NM_DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'], NM_VALIDO = ['Cumple', 'Cumple Productividad', 'Cumple Telefonica'];
+const mon = n => '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pagoSemana = (s, n) => Math.round((n >= 6 ? s : s * n / 7) * 100) / 100;
+function sueldoVig(u, ini) { const fin = addD(ini, 6); const l = (NM.sueldos.get(u) || []).filter(x => x.vigente_desde <= fin && (!x.vigente_hasta || x.vigente_hasta >= ini)).sort((a, b) => b.vigente_desde.localeCompare(a.vigente_desde)); return l[0] || null; }
+
+async function nominaCargar() {
+  const [su, ju, lo] = await Promise.all([API.nomSueldos(), API.nomJust(), API.nomLotes()]);
+  NM.sueldos = new Map(); su.forEach(x => { if (!NM.sueldos.has(x.usuario_fieldwy)) NM.sueldos.set(x.usuario_fieldwy, []); NM.sueldos.get(x.usuario_fieldwy).push(x); }); NM.just = ju; NM.lotes = lo;
+}
+async function nominaCalcular(ini) {
+  const fin = addD(ini, 6), rows = (await checksRango(ini, fin)).filter(x => x.estatus_final !== 'Otro Check'), por = new Map();
+  rows.forEach(r => { if (!por.has(r.usuario)) por.set(r.usuario, { usuario: r.usuario, nombre: r.nombre, rows: [] }); por.get(r.usuario).rows.push(r); });
+  const jsem = NM.just.filter(j => j.fecha >= ini && j.fecha <= fin && j.estado !== 'Rechazada');
+  jsem.filter(j => j.estado === 'Aprobada').forEach(j => { if (!por.has(j.usuario_fieldwy)) por.set(j.usuario_fieldwy, { usuario: j.usuario_fieldwy, nombre: (j.colaboradores || {}).nombre || j.usuario_fieldwy, rows: [] }); });
+  const us = [...por.keys()], colab = new Map((await API.nomColab(us)).map(c => [c.usuario_fieldwy, c]));
+  const out = [...por.values()].map(p => {
+    const dias = [], det = []; let ok = 0, jv = 0, jn = 0, er = 0, ab = 0;
+    for (let d = 0; d < 7; d++) {
+      const f = addD(ini, d), rs = p.rows.filter(r => r.fecha === f), apr = jsem.some(j => j.usuario_fieldwy === p.usuario && j.fecha === f && j.estado === 'Aprobada');
+      let c = '';
+      if (rs.some(r => r.estatus_final === 'Cumple')) { c = 'ok'; ok++; } else if (rs.some(r => r.estatus_final === 'Cumple Productividad' || r.estatus_final === 'Cumple Telefonica')) { c = 'jv'; jv++; } else if (apr) { c = 'jn'; jn++; }
+      else if (rs.some(r => esErr(r) || r.estatus_final === 'No Cumple')) { c = 'er'; er++; } else if (rs.length) { c = 'ab'; ab++; }
+      dias.push(c === 'ok' || c === 'jv' || c === 'jn' ? 1 : 0); det.push(c);
+    }
+    const n = dias.reduce((a, b) => a + b, 0), sv = sueldoVig(p.usuario, ini), co = colab.get(p.usuario) || {};
+    const s = sv ? +sv.sueldo_semanal : null, b = sv ? +(sv.bono_fijo || 0) : 0, importe = s == null ? 0 : pagoSemana(s, n), bono = pagoSemana(b, n);
+    const pend = NM.just.some(j => j.usuario_fieldwy === p.usuario && j.estado === 'Solicitada' && j.fecha >= ini && j.fecha <= fin);
+    return { usuario: p.usuario, nombre: co.nombre || p.nombre, empresa: co.empresa || '', estatus: co.estatus || '', idpdv: co.idpdv, dias, det, n, ok, jv, jn, er, ab, conCheck: new Set(p.rows.map(r => r.fecha)).size, s, b, importe, bono, total: importe + bono, pend };
+  }).filter(r => r.conCheck || r.n);
+  const bn = new Map((await API.nomBanc(out.filter(r => r.n).map(r => r.usuario))).map(x => [x.usuario_fieldwy, x]));
+  out.forEach(r => { r.banc = bn.get(r.usuario) || {}; });
+  return out.sort((a, b) => a.empresa.localeCompare(b.empresa, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+}
+const nmAlertas = r => [r.s == null && r.n > 0 && 'Sin sueldo', r.n > 0 && !r.banc.clabe && 'Sin CLABE', r.estatus === 'Baja' && 'Baja', r.pend && 'Justificación pendiente'].filter(Boolean);
+
+async function vNomina() {
+  await conReporte('Nómina', 'pulgares', async () => {
+    await nominaCargar();
+    const W = ventana().slice(-12).reverse(); if (!NM.ini || !W.some(w => w.ini === NM.ini)) NM.ini = (W.find(w => addD(w.ini, 6) < HOY) || W[0]).ini;
+    const ini = NM.ini, venc = addD(ini, 6) < HOY, w = W.find(x => x.ini === ini) || {};
+    let h = cab('Nómina', 'Pago por check válido de la semana vencida: sueldo semanal ÷ 7 por cada día pagable (con 6 o más se paga el sueldo semanal completo), incluso a quien ya causó baja. Cierra la semana para generar el lote y el layout de pago.', 'pulgares');
+    const pendJ = NM.just.filter(j => j.estado === 'Solicitada').length;
+    h += `<div class="tools" data-nocap>${[['semana', '🧮 Semana'], ['just', '📝 Justificaciones (' + pendJ + ')'], ['lotes', '📦 Lotes y layout (' + NM.lotes.length + ')']].map(([k, n]) => `<button class="chip ${NM.tab === k ? 'on' : ''}" onclick="NM.tab='${k}';vNomina()">${n}</button>`).join('')}${can('sueldos', 'ver') ? '<button class="btn sm" onclick="ir(\'sueldos\')">💳 Sueldos y bancarios ›</button>' : ''}</div>`;
+    TB = {};
+    if (NM.tab === 'just') h += nomJustHTML();
+    else if (NM.tab === 'lotes') h += nomLotesHTML();
+    else {
+      const calc = await nominaCalcular(ini); NM.calc = calc;
+      const emps = [...new Set(calc.map(r => r.empresa).filter(Boolean))].sort(), vis = calc.filter(r => (!NM.emp || r.empresa === NM.emp) && (!NM.alertas || nmAlertas(r).length));
+      const tot = vis.reduce((a, r) => a + r.total, 0), sinS = calc.filter(r => r.s == null && r.n).length, sinC = calc.filter(r => r.n && !r.banc.clabe).length;
+      h += `<div class="tools" data-nocap><span>Semana:</span><select onchange="NM.ini=this.value;vNomina()">${W.map(x => `<option value="${x.ini}" ${x.ini === ini ? 'selected' : ''}>${esc(x.w)} · ${fdate(x.ini)} al ${fdate(addD(x.ini, 6))}${addD(x.ini, 6) >= HOY ? ' (en curso)' : ''}</option>`).join('')}</select>
+        <span>Razón social:</span><select onchange="NM.emp=this.value;vNomina()"><option value="">Todas</option>${emps.map(e => `<option ${NM.emp === e ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select><button class="chip ${NM.alertas ? 'on' : ''}" onclick="NM.alertas=!NM.alertas;vNomina()">⚠️ Solo con alertas</button>
+        <button class="btn sm" onclick="nomPrevia()">⬇ Layout de vista previa</button>${can('nomina', 'editar') ? `<button class="btn primary" ${venc ? '' : 'disabled title="La semana todavía no termina"'} onclick="nomCerrar()">📦 Cerrar semana y generar lote</button>` : ''}</div>`;
+      h += `<div class="kpis">${kp('Promotores con pago', fmt(vis.filter(r => r.n).length), esc(w.w || ''), null, null, '🧍')}${kp('Total a pagar', mon(tot), 'con los filtros elegidos', C.gr, null, '💵')}${kp('Sin sueldo cargado', fmt(sinS), 'no se pueden pagar', sinS ? C.rd : C.gr, null, '❗')}${kp('Sin CLABE', fmt(sinC), 'el layout sale sin cuenta', sinC ? C.am : C.gr, null, '🏦')}${kp('Justificaciones pendientes', fmt(pendJ), 'las aprueba nómina', pendJ ? C.am : C.gr, "NM.tab='just';vNomina()", '📝')}</div>`;
+      const dc = { ok: '✅', jv: '💸', jn: '🛡️', er: '🔴', ab: '🔵', '': '·' };
+      h += `<p class="note">Cada día: ✅ correcto · 💸 justificado por venta o Telefónica · 🛡️ justificado por nómina · 🔴 error sin justificar · 🔵 abierto · · sin check. Solo cuentan los tres primeros.</p>` +
+        tbl('t-nom', [{ h: 'Razón social', t: 1, v: r => r.empresa }, { h: 'Usuario', t: 1, v: r => r.usuario, w: 112 }, { h: 'Promotor', t: 1, v: r => r.nombre, w: 220, r: r => `<b>${esc(r.nombre)}</b>` },
+          ...NM_DIAS.map((d, i) => ({ h: d, v: r => r.dias[i], r: r => dc[r.det[i]] })), { h: 'Días con check', v: r => r.conCheck }, { h: 'Correctos', v: r => r.ok }, { h: 'Just. venta', v: r => r.jv }, { h: 'Just. nómina', v: r => r.jn }, { h: 'Errores', v: r => r.er, r: r => r.er ? `<span class="cell-red">${r.er}</span>` : '0' }, { h: 'Días a pagar', v: r => r.n, r: r => `<b>${r.n}</b>` },
+          { h: 'Sueldo semanal', v: r => r.s || 0, r: r => r.s == null ? '—' : mon(r.s) }, { h: 'Importe', v: r => r.importe, r: r => mon(r.importe) }, { h: 'Bono', v: r => r.bono, r: r => r.bono ? mon(r.bono) : '—' }, { h: 'Total', v: r => r.total, r: r => `<b>${mon(r.total)}</b>` },
+          { h: 'Banco', t: 1, v: r => r.banc.banco || '' }, { h: 'CLABE', t: 1, v: r => r.banc.clabe || '' }, { h: 'Alertas', t: 1, v: r => nmAlertas(r).length, r: r => nmAlertas(r).map(a => pillx(a, a === 'Baja' ? 'x' : 'a')).join(' ') }],
+          vis, { fix: 3, search: 1, csv: 1, png: 1, file: 'nomina_' + (w.w || ini), titulo: 'Nómina · ' + (w.w || '') + ' · ' + fdate(ini) + ' al ' + fdate(addD(ini, 6)), sort: 2, dir: 1, maxh: '65vh', lim: 800 });
+    }
+    $('content').innerHTML = h; drawAll();
+  });
+}
+
+/* ---- layout estándar de pago (CSV) ---- */
+const LAYOUT_COLS = ['semana', 'razon_social', 'usuario', 'nombre', 'banco', 'titular', 'clabe', 'cuenta', 'tarjeta', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom', 'dias_pagados', 'sueldo_semanal', 'importe_sueldo', 'bono', 'total_a_pagar', 'concepto', 'lote'];
+const layoutFila = (sem, r, lote) => [sem, r.empresa, r.usuario, r.nombre, r.banc.banco, r.banc.titular, r.banc.clabe, r.banc.cuenta, r.banc.tarjeta, ...r.dias, r.n, r.s, r.importe, r.bono, r.total, r.concepto || 'Semana', lote || ''];
+function nomPrevia() { const w = ventana().find(x => x.ini === NM.ini) || {}, xs = (NM.calc || []).filter(r => r.n && (!NM.emp || r.empresa === NM.emp)); if (!xs.length) { toast('No hay pagos que exportar'); return; } finBajar('layout_nomina_VISTA_PREVIA_' + (w.w || NM.ini) + '.csv', [LAYOUT_COLS, ...xs.map(r => layoutFila(w.w, r, ''))]); }
+async function nomCerrar() {
+  const w = ventana().find(x => x.ini === NM.ini) || {}, xs = (NM.calc || []).filter(r => r.n > 0);
+  const sinS = xs.filter(r => r.s == null); if (sinS.length && !confirm(`${sinS.length} promotor(es) no tienen sueldo semanal cargado y NO entrarán al lote (${sinS.slice(0, 5).map(r => r.nombre).join(', ')}…). ¿Continuar?`)) return;
+  const filas = xs.filter(r => r.s != null).map(r => ({ usuario: r.usuario, dias: r.dias })); if (!filas.length) { toast('No hay nada que pagar en esta semana'); return; }
+  const nota = prompt('Nota del lote (opcional)', ''); if (nota === null) return;
+  try { const id = await API.nomCerrar(w.w, NM.ini, filas, limpia(nota)); toast('Lote ' + id + ' generado: ya puedes descargar el layout'); NM.tab = 'lotes'; vNomina(); } catch (e) { toast(e.message || e); }
+}
+
+/* ---- lotes ---- */
+function nomLotesHTML() {
+  const edita = can('nomina', 'editar');
+  return `<p class="note">Cada lote es la foto de lo pagado de una semana; una persona no se paga dos veces la misma semana. Si luego se aprueba una justificación, al cerrar de nuevo esa semana sale un lote de AJUSTE con la diferencia.</p>` +
+    tbl('t-lot', [{ h: 'Lote', v: l => l.id, w: 60 }, { h: 'Semana', t: 1, v: l => l.semana, r: l => `<b>${esc(l.semana)}</b><br><small class="muted">${fdate(l.semana_ini)} al ${fdate(addD(l.semana_ini, 6))}</small>` }, { h: 'Generado', v: l => l.creado_en, r: l => fdate(String(l.creado_en).slice(0, 10)) }, { h: 'Pagos', v: l => l.n }, { h: 'Total', v: l => +l.total, r: l => `<b>${mon(l.total)}</b>` },
+      { h: 'Estatus', t: 1, v: l => l.estatus, r: l => l.estatus === 'Pagado' ? pillx('✔ Pagado ' + fdate(l.fecha_pago) + ' · ' + esc(l.referencia || ''), 'g') : pillx('Generado', 'a') }, { h: 'Nota', t: 1, v: l => l.nota || '', w: 200 },
+      { h: '', v: () => '', r: l => `<button class="rsv" onclick="nomLayout(${l.id})">⬇ Layout</button>${edita && l.estatus !== 'Pagado' ? ` <button class="rsv" onclick="nomPagar(${l.id})">💵 Marcar pagado</button>` : ''}` }], NM.lotes, { fix: 1, csv: 1, file: 'lotes_nomina', titulo: 'Lotes de nómina', sort: 0, dir: -1, maxh: '65vh' });
+}
+async function nomLayout(id) {
+  const l = NM.lotes.find(x => x.id === id); let ps; try { ps = await API.nomPagos(id); } catch (e) { toast(e.message || e); return; }
+  finBajar(`layout_nomina_${l.semana}_lote${id}.csv`, [LAYOUT_COLS, ...ps.map(p => [p.semana, p.empresa, p.usuario_fieldwy, p.nombre, p.banco, p.titular, p.clabe, p.cuenta, p.tarjeta, ...p.dias, p.dias_pagados, p.sueldo_semanal, p.importe, p.bono, p.total, p.concepto, id])]);
+}
+function nomPagar(id) {
+  $('modal').innerHTML = `<div class="mbox" style="width:min(460px,96vw)" role="dialog" aria-modal="true"><h3>💵 Marcar lote pagado</h3><div class="note">Se marca una sola vez y no se puede deshacer.</div><div class="fld"><label>Fecha de pago</label><input id="np-f" type="date" max="${HOY}" value="${HOY}"></div><div class="fld"><label>Referencia del pago</label><input id="np-r" placeholder="Folio de dispersión, SPEI…"></div>
+    <div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" onclick="nomPagarOk(${id})">Confirmar pago</button></div></div>`; $('modal').hidden = false;
+}
+async function nomPagarOk(id) { try { await API.nomPagado(id, $('np-f').value, limpia($('np-r').value)); toast('Lote marcado como pagado'); cerrarM(); vNomina(); } catch (e) { toast(e.message || e); } }
+
+/* ---- justificaciones ---- */
+function nomJustHTML() {
+  const edita = can('nomina', 'editar'), est = NM.jest || 'Solicitada', xs = NM.just.filter(j => !est || j.estado === est);
+  return `<div class="tools" data-nocap>${['Solicitada', 'Aprobada', 'Rechazada', ''].map(e => `<button class="chip ${est === e ? 'on' : ''}" onclick="NM.jest='${e}';vNomina()">${e || 'Todas'} (${e ? NM.just.filter(j => j.estado === e).length : NM.just.length})</button>`).join('')}<span class="muted">RH las solicita desde Detalle de checks › Errores de check; aquí se aprueban para que el día cuente como pagable.</span></div>` +
+    tbl('t-jus', [{ h: 'Día', v: j => j.fecha, r: j => fdate(j.fecha) }, { h: 'Usuario', t: 1, v: j => j.usuario_fieldwy }, { h: 'Promotor', t: 1, v: j => (j.colaboradores || {}).nombre || '', w: 210, r: j => `<b>${esc((j.colaboradores || {}).nombre || j.usuario_fieldwy)}</b>` }, { h: 'Error', t: 1, v: j => ERRN[j.error] || j.error || '' , r: j => esc(ERRN[j.error] || j.error || '—') },
+      { h: 'Motivo de RH', t: 1, v: j => j.motivo, w: 300 }, { h: 'Estatus', t: 1, v: j => j.estado, r: j => pillx(j.estado, j.estado === 'Aprobada' ? 'g' : j.estado === 'Rechazada' ? 'r' : 'a') }, { h: 'Resolución', t: 1, v: j => j.nota_resolucion || '', w: 200 },
+      { h: '', v: () => '', r: j => edita && j.estado === 'Solicitada' ? `<button class="rsv" onclick="nomResolver(${j.id},true)">✔ Aprobar</button> <button class="rsv" onclick="nomResolver(${j.id},false)">✖ Rechazar</button>` : '' }], xs, { fix: 3, search: 1, csv: 1, png: 1, file: 'justificaciones', titulo: 'Justificaciones', sort: 0, dir: -1, maxh: '65vh' });
+}
+async function nomResolver(id, ap) {
+  let nota = null; if (!ap) { nota = prompt('¿Por qué se rechaza? (mínimo 5 caracteres)', ''); if (nota === null) return; if (limpia(nota).length < 5) { toast('Escribe el motivo'); return; } } else nota = prompt('Nota de aprobación (opcional)', '') || null;
+  try { await API.resJust(id, ap, nota && limpia(nota)); toast(ap ? 'Justificación aprobada' : 'Justificación rechazada'); vNomina(); } catch (e) { toast(e.message || e); }
+}
+/* solicitud desde Errores de check */
+async function cargarJustSolicitadas() { try { const j = await API.nomJust(); NM.justMap = new Map(j.filter(x => x.estado !== 'Rechazada').map(x => [x.usuario_fieldwy + '|' + x.fecha, x.estado])); } catch (e) { NM.justMap = new Map(); } }
+function justSolicitar(usuario, fecha, error, nombre) {
+  $('modal').innerHTML = `<div class="mbox" style="width:min(520px,96vw)" role="dialog" aria-modal="true"><h3>📝 Solicitar justificación</h3><div class="who">${esc(nombre)} · ${esc(usuario)} · ${fdate(fecha)}<br>${esc(ERRN[error] || error || '')}</div>
+    <div class="note">Nómina revisa la solicitud: si la aprueba, ese día cuenta como pagable aunque el check tenga error o no tenga venta.</div><div class="fld"><label>Motivo (mínimo 10 caracteres)</label><textarea id="js-m" placeholder="Qué pasó, evidencia, quién lo confirma…"></textarea></div>
+    <div class="warn" id="js-w" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="js-ok">Enviar a nómina</button></div></div>`; $('modal').hidden = false;
+  $('js-ok').onclick = async () => { try { await API.solJust({ p_usuario: usuario, p_fecha: fecha, p_error: error, p_motivo: limpia($('js-m').value) }); cerrarM(); toast('Justificación solicitada: nómina la revisará'); await cargarJustSolicitadas(); if (S.view === 'checks') vChecks(); } catch (e) { $('js-w').hidden = false; $('js-w').textContent = e.message || e; } };
 }
 
 /* >>> 08_demo_reportes.js */
