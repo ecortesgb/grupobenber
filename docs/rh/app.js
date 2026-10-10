@@ -2770,18 +2770,18 @@ function ponerOjo(inputId) {   // envuelve un input de contraseña existente con
   const b = document.createElement('button'); b.type = 'button'; b.className = 'pw-eye'; b.tabIndex = -1; b.title = 'Mostrar u ocultar'; b.setAttribute('aria-label', 'Mostrar u ocultar la contraseña'); b.textContent = '👁';
   b.onclick = () => { i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? '👁' : '🙈'; }; w.appendChild(b);
 }
-const claveValida = (c, temp) => c.length >= 6 && c !== temp;   // mínimo 6 caracteres; letras, números y símbolos permitidos
+const claveValida = (c, temp) => c.length >= 6 && /[A-Za-z]/.test(c) && /[0-9]/.test(c) && c !== temp;   // mínimo 6 caracteres; letras, números y símbolos permitidos
 const claveTemporal = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', r = crypto.getRandomValues(new Uint8Array(9)); return 'GB-' + [...r].map(x => A[x % A.length]).join(''); };
 
 /* primer ingreso (o clave reiniciada): elegir contraseña propia antes de entrar */
 function cambiarClaveObligatoria(temp) {
   return new Promise(res => {
-    $('modal').innerHTML = `<div class="mbox" style="width:min(460px,96vw)" role="dialog" aria-modal="true"><h3>🔐 Elige tu contraseña</h3><div class="note">Tu contraseña actual es temporal. Escribe una propia para seguir: mínimo 6 caracteres; puedes usar letras, números y símbolos.</div>
+    $('modal').innerHTML = `<div class="mbox" style="width:min(460px,96vw)" role="dialog" aria-modal="true"><h3>🔐 Elige tu contraseña</h3><div class="note">Tu contraseña actual es temporal. Escribe una propia para seguir: mínimo 6 caracteres con al menos una letra y un número; también puedes usar símbolos.</div>
       <div class="fld"><label>Nueva contraseña</label><input id="cc-1" type="password" autocomplete="new-password"></div><div class="fld"><label>Repite la nueva contraseña</label><input id="cc-2" type="password" autocomplete="new-password"></div>
       <div class="warn" id="cc-w" hidden></div><div class="mfoot"><button class="btn primary" id="cc-ok">Guardar y entrar</button></div></div>`; $('modal').hidden = false; $('modal').onclick = null; ponerOjo('cc-1'); ponerOjo('cc-2'); $('cc-1').focus();
     $('cc-ok').onclick = async () => {
       const a = $('cc-1').value, b = $('cc-2').value, w = $('cc-w'); w.hidden = false;
-      if (!claveValida(a, temp)) { w.textContent = 'Mínimo 6 caracteres y distinta de la temporal.'; return; } if (a !== b) { w.textContent = 'Las dos contraseñas no coinciden.'; return; }
+      if (!claveValida(a, temp)) { w.textContent = 'Mínimo 6 caracteres, con al menos una letra y un número, y distinta de la temporal.'; return; } if (a !== b) { w.textContent = 'Las dos contraseñas no coinciden.'; return; }
       $('cc-ok').disabled = true;
       try { const { error } = await sb.auth.updateUser({ password: a }); if (error) throw error; const r = await sb.rpc('clave_cambiada'); if (r.error) throw r.error; cerrarM(); toast('Contraseña actualizada'); res(); }
       catch (e) { $('cc-ok').disabled = false; w.textContent = 'No se pudo cambiar: ' + (e.message || e); }
