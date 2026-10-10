@@ -524,6 +524,10 @@ function medTienda(x, dias, last) {
   return { ps, chk, cuota, pctCh: Math.min(chk / cuota * 100, 100), falt: Math.max(0, cuota - chk), adic: Math.max(0, chk - cuota), dimA, promA, pctA: Math.min(promA / dimA * 100, 100), difA: promA - dimA, dimC, promC, pctC: Math.min(promC / dimC * 100, 100), difC: promC - dimC, ult };
 }
 function estatusTienda(x, dias) {
+  if (dias.length === 1) {   // un solo día: solo cubierta o descubierta (cualquier check válido o abierto cubre; un check con error no cubre)
+    const ps = posc(x.t), c = cdv(x, dias[0]), cob = c > 0 ? 'Cubierta' : 'Descubierta';
+    return { cob, asi: ps <= 1 ? cob : c > ps ? 'Posc Adic' : c >= ps ? 'Cubierta' : c > 0 ? 'Posc Desc' : 'Descubierta' };
+  }
   const last2 = dias.slice(-2).reverse(), ps = posc(x.t), r = last2.length ? cdv(x, last2[0]) : 0, a = last2.length > 1 ? cdv(x, last2[1]) : null; let cob;
   if (a == null) cob = r > 0 ? 'Cubierta' : 'Descubierta'; else cob = r > 0 && a > 0 ? 'Cubierta' : r === 0 && a === 0 ? 'Vacante' : 'Descubierta';
   const A = a || 0; let asi;
@@ -557,11 +561,12 @@ async function vResumen() {
     h += `<div class="grid g3">${embudo('🏬 Cobertura PDV', [{ n: "Total PDV's", v: cur.n, c: C.bl }, { n: 'Dimensionamiento', v: cur.dP, c: '#3D6FB6' }, { n: 'Cubiertos (prom. diario)', v: cur.pP, c: C.gr }, { n: 'Descubiertos', v: Math.max(0, -cur.difP), c: C.rd }])}
       ${embudo('🧍 Asistencia Promotor', [{ n: 'Posiciones autorizadas', v: cur.posc, c: C.bl }, { n: 'Dimensionamiento', v: cur.dM, c: '#3D6FB6' }, { n: 'Asistieron (prom. diario)', v: cur.pM, c: C.gr }, { n: 'Sin asistir', v: Math.max(0, -cur.difM), c: C.rd }])}
       ${embudo('✅ Checks vs cuota', [{ n: 'Cuota de checks (periodo)', v: cur.cuota, c: C.bl }, { n: 'Checks válidos', v: cur.chk, c: C.gr }, { n: 'Faltantes', v: Math.max(0, cur.cuota - cur.chk), c: C.rd }, { n: 'Adicionales', v: cur.exc, c: C.am }])}</div>`;
+    h += await coberturaDonas(xs, dias);
     const cads = [...new Set(xs.map(x => x.t.cadena).filter(Boolean))];
     const cadRows = cads.map(c => { const m = medidas(xs.filter(y => y.t.cadena === c), dias); return { c, n: m.n, p: m.pctP, a: m.pctM }; }).filter(q => q.n).sort((a, b) => b.n - a.n);
     const st = xs.filter(x => (x.t.posiciones || 0) > 0).map(x => ({ x, s: estatusTienda(x, dias) })), ce = { Cubierta: 0, Descubierta: 0, Vacante: 0 }; st.forEach(z => ce[z.s.cob]++);
     h += `<div class="grid g2"><div class="card"><h3>🏪 Cobertura por cadena</h3><p class="note">% Cobertura PDV (barra) y % Asistencia Promotor.</p>${cadRows.map(q => `<div class="cadena-row">${logoCad(q.c)}<div class="cadena-track"><i style="width:${q.p || 0}%;background:${colorPct(q.p)}"></i></div><b class="cadena-val" style="color:${colorPct(q.p)}">${f1(q.p)}%</b><span class="muted" style="min-width:96px;text-align:right">asist. ${f1(q.a)}%</span></div>`).join('')}</div>
-      <div class="card"><h3>🚦 Estatus de tiendas (últimos 2 días)</h3><p class="note">Cubierta: check los 2 días · Descubierta: falta 1 día · Vacante: 2 días sin check.</p>${donut(['Cubierta', 'Descubierta', 'Vacante'].map((n, k) => ({ n, v: ce[n], c: COBC[k] })), { sub: 'tiendas' })}</div></div>`;
+      <div class="card"><h3>🚦 Estatus de tiendas (${dias.length === 1 ? fdate(dias[0]) : 'últimos 2 días'})</h3><p class="note">${dias.length === 1 ? 'Un solo día: Cubierta si tuvo check (aunque esté abierto) · Descubierta si no tuvo o solo tuvo errores.' : 'Cubierta: check los 2 días · Descubierta: falta 1 día · Vacante: 2 días sin check.'}</p>${donut(['Cubierta', 'Descubierta', 'Vacante'].map((n, k) => ({ n, v: ce[n], c: COBC[k] })), { sub: 'tiendas' })}</div></div>`;
     const labs = sems.map(w => w.w.slice(3));
     const est4 = sems.map(w => { const e = { Cubierta: 0, Descubierta: 0, Vacante: 0 }; xs.filter(x => (x.t.posiciones || 0) > 0).forEach(x => e[estatusTienda(x, w.dias).cob]++); return e; });
     const rotS = sems.map(w => { const hcS = hcPromX({ desde: w.desde, hasta: w.hasta }, () => true); const b = MV.baj.filter(x => x.f >= w.desde && x.f <= w.hasta && okI(x.idpdv)).length; return hcS ? b / hcS * 100 : null; });
@@ -746,6 +751,21 @@ async function hcCsvPersonal() {
       d.fecha_nacimiento, d.genero, d.estado_civil, d.telefono, d.correo, m(d.curp), m(d.rfc), m(d.nss), d.talla, d.infonavit == null ? '' : d.infonavit ? 'Sí' : 'No', d.contacto_emergencia]; })]);
 }
 
+/* ---- cobertura real: posiciones y tiendas del último día del periodo (para mostrar cómo estamos de verdad) ---- */
+async function coberturaDonas(xs, dias) {
+  const d = dias[dias.length - 1], ts = xs.filter(x => (x.t.posiciones || 0) > 0); let aut = 0, cub = 0, tC = 0, tP = 0, tD = 0;
+  ts.forEach(x => { const ps = posc(x.t), c = cdv(x, d); aut += ps; cub += Math.min(c, ps); if (c >= ps) tC++; else if (c > 0) tP++; else tD++; });
+  let aus = []; try { await asegurarAus(d, d); aus = AU.lista.filter(a => a.inicio <= d && a.regreso > d && okI(a.idpdv)); } catch (e) { }
+  const falta = Math.max(0, aut - cub), mot = {}; aus.forEach(a => { mot[a.motivo] = (mot[a.motivo] || 0) + 1; });
+  const COLM = { 'Vacaciones': C.bl, 'Incapacidad (IMSS)': C.pu, 'Permiso especial': C.te, 'Tema médico (particular)': C.ye, 'No localizado': C.dk }, items = [{ n: 'Cubiertas', v: cub, c: C.gr }]; let usado = 0;
+  Object.entries(mot).sort((a, b) => b[1] - a[1]).forEach(([m, n]) => { const v = Math.min(n, falta - usado); if (v > 0) { items.push({ n: (AU_MI[m] || '') + ' ' + m, v, c: COLM[m] || C.gy }); usado += v; } });
+  items.push({ n: 'Descanso / descubiertas', v: Math.max(0, falta - usado), c: C.rd });
+  const pct = aut ? Math.round(cub / aut * 1000) / 10 : 0, pctT = ts.length ? Math.round(tC / ts.length * 1000) / 10 : 0;
+  return `<div class="grid g2" id="dona-cob"><div class="card"><h3>🧍 Posiciones autorizadas · ${fdate(d)}</h3><p class="note"><b>${fmt(aut)}</b> posiciones autorizadas: <b>${fmt(cub)}</b> cubiertas (${pct}%). Lo que falta se reparte entre ausencias registradas y descanso o posición descubierta.</p>${donut(items, { sub: 'posiciones' })}</div>
+    <div class="card"><h3>🏬 Tiendas · ${fdate(d)}</h3><p class="note"><b>${fmt(ts.length)}</b> tiendas autorizadas: <b>${fmt(tC)}</b> con todas sus posiciones cubiertas (${pctT}%).</p>${donut([{ n: 'Cubiertas', v: tC, c: C.gr }, { n: 'Parcialmente cubiertas', v: tP, c: C.am }, { n: 'Descubiertas', v: tD, c: C.rd }], { sub: 'tiendas' })}</div></div>
+    <div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('dona-cob'),'Cobertura real · ${fdate(d)}',subFiltros(),'cobertura_real')">📸 Imagen de la cobertura</button><button class="btn sm" onclick="capturaCopiar($('dona-cob'),'Cobertura real · ${fdate(d)}',subFiltros())">📋 Copiar imagen</button></div>`;
+}
+
 /* >>> 03b_errores_check.js */
 /* ====================================================================== DETALLE DE CHECKS · ERRORES DE CHECK ======================================================================
    Subsección de Detalle de checks. Por día: tarjetas por promotor con el tipo de error, su tienda y supervisor y la forma sugerida de corregirlo, para mandar como imagen por WhatsApp
@@ -767,9 +787,11 @@ const errFiltra = (xs, just) => xs.filter(x => !just || (just === 'con' ? justTx
 const errNom = k => ERRN[k] || k;
 
 function erroresCheckHTML(r, rows, prim, errores) {
+  const subTabs = `<div class="tools" data-nocap>${[['errores', '🛠️ Errores de check'], ['abiertos', '🟦 Sin cerrar check']].map(([k, n]) => `<button class="chip ${(CKS.sub || 'errores') === k ? 'on' : ''}" onclick="CKS.sub='${k}';vChecks()">${n}</button>`).join('')}</div>`;
+  if ((CKS.sub || 'errores') === 'abiertos') return subTabs + abiertosHTML(r, prim);
   const just = CKS.just, errF = errFiltra(errores, just), sup = x => (tienda(x.idpdv) || {}).supervisor || 'Sin supervisor';
   const unDia = r.desde === r.hasta, hoy = unDia && r.hasta === HOY, MAXC = 200;
-  let h = `<div class="tools" data-nocap>${ERR_JUST.map(([k, n]) => `<button class="chip ${just === k ? 'on' : ''}" onclick="CKS.just='${k}';vChecks()">${n}</button>`).join('')}<span class="muted">Fuera de rango, equipo duplicado y sin check de salida no se justifican con venta. El periodo es el de la barra de arriba.</span></div>`;
+  let h = subTabs + `<div class="tools" data-nocap>${ERR_JUST.map(([k, n]) => `<button class="chip ${just === k ? 'on' : ''}" onclick="CKS.just='${k}';vChecks()">${n}</button>`).join('')}<span class="muted">Fuera de rango, equipo duplicado y sin check de salida no se justifican con venta. El periodo es el de la barra de arriba.</span></div>`;
   h += `<div class="kpis">${kp('Errores', fmt(errF.length), `${fdate(r.desde)}${unDia ? '' : ' – ' + fdate(r.hasta)} · ${fmt(prim.length)} checks evaluados`, errF.length ? C.rd : C.gr, null, '🛠️')}${kp('Promotores con error', fmt(new Set(errF.map(x => x.usuario)).size), `de ${fmt(new Set(prim.map(x => x.usuario)).size)} que checaron`, null, null, '🧍')}${kp('% de checks con error', pc1(errF.length, prim.length), 'sobre los checks evaluados', null, null, '📉')}${kp('Sin justificar con venta', fmt(errF.filter(x => justTxt(x) !== 'Con venta').length), 'siguen pendientes de corregir', C.am, null, '🔴')}</div>`;
 
   /* ---- tarjetas para WhatsApp (todo el periodo elegido arriba, agrupadas por supervisor) ---- */
@@ -812,6 +834,33 @@ function justBtn(x) {
   const js = NM.justMap && NM.justMap.get(x.usuario + '|' + x.fecha);
   if (js) return `<div data-nocap>${pillx('📝 Justificación ' + js.toLowerCase(), js === 'Aprobada' ? 'g' : 'a')}</div>`;
   return can('justificaciones', 'crear') ? `<div data-nocap><button class="btn sm" onclick="justSolicitar('${x.usuario}','${x.fecha}','${x.estatus_check}','${String(x.nombre).replace(/[^\p{L} .-]/gu, '')}')">📝 Solicitar justificación</button></div>` : '';
+}
+
+/* ---- promotores que no cerraron su check ---- */
+function abiertosHTML(r, prim) {
+  const ab = prim.filter(x => x.estatus_check === 'Abierto'), unDia = r.desde === r.hasta, hoy = unDia && r.hasta === HOY, MAXC = 200, sup = x => (tienda(x.idpdv) || {}).supervisor || 'Sin supervisor';
+  const titulo = 'Checks sin cerrar · ' + fdate(r.desde) + (unDia ? '' : ' al ' + fdate(r.hasta));
+  let h = `<div class="kpis">${kp('Checks sin cerrar', fmt(ab.length), `${fdate(r.desde)}${unDia ? '' : ' – ' + fdate(r.hasta)}`, ab.length ? C.am : C.gr, null, '🟦')}${kp('Promotores', fmt(new Set(ab.map(x => x.usuario)).size), 'con al menos un check abierto', null, null, '🧍')}${kp('Con venta', fmt(ab.filter(x => x.registros > 0).length), 'trabajaron pero no cerraron', null, null, '💸')}${kp('% de los checks', pc1(ab.length, prim.length), 'abiertos sobre los evaluados', null, null, '📉')}</div>`;
+  const vis = ab.slice().sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, MAXC);
+  h += sect('Recordatorio: cerrar el check al terminar', '🟦') + `<div class="tools" data-nocap><button class="btn sm" onclick="capturaDescargar($('ab-dia'),'${titulo}',subFiltros(),'checks_sin_cerrar')">📸 Imagen para WhatsApp</button><button class="btn sm" onclick="capturaCopiar($('ab-dia'),'${titulo}',subFiltros())">📋 Copiar imagen</button><button class="btn sm" onclick="abiertosCsv()">⬇ CSV</button>
+    <span class="muted">${hoy ? 'Hoy todavía puede estar laborando: úsalo al cierre del día.' : unDia ? 'Día anterior: ya debieron cerrarlo.' : 'Varios días: cada tarjeta trae su fecha.'}${ab.length > MAXC ? ` Mostrando los ${MAXC} más recientes de ${fmt(ab.length)}; el CSV trae todos.` : ''}</span></div>`;
+  const por = new Map(); vis.forEach(x => { const k = sup(x); if (!por.has(k)) por.set(k, []); por.get(k).push(x); });
+  h += `<div id="ab-dia" class="err-dia">${vis.length ? [...por].sort((a, b) => a[0].localeCompare(b[0], 'es')).map(([s, xs]) => `<div class="err-sup"><h4>🧭 ${esc(s)} <small>${xs.length} sin cerrar</small></h4>${xs.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es') || b.fecha.localeCompare(a.fecha)).map(x => {
+    const t = tienda(x.idpdv) || {};
+    return `<div class="err-card"><div class="err-h"><b>${esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(t.nombre || 'IDPDV ' + x.idpdv)}${unDia ? '' : ' · ' + fdate(x.fecha)}</small></div><div>${pillx('🟦 Check abierto', 'b')} <small class="muted">entrada ${hh(x.hora_in)}${x.registros ? ' · ' + x.registros + ' venta' + (x.registros === 1 ? '' : 's') : ''}</small></div><div class="err-fix">💡 Recordarle cerrar su check de salida al terminar la jornada. Si ya salió y no lo cerró, pedirle el cierre al supervisor para no perder el día.</div></div>`;
+  }).join('')}</div>`).join('') : '<div class="card empty"><img src="' + img('triunfo') + '" alt="">Nadie dejó checks sin cerrar en este periodo.</div>'}</div>`;
+  const pu = new Map(); ab.forEach(x => { const g = pu.get(x.usuario) || { u: x.usuario, n: x.nombre, id: x.idpdv, d: 0 }; g.d++; g.id = x.idpdv; pu.set(x.usuario, g); });
+  TB = {};
+  h += sect('Promotores con más checks sin cerrar', '🧍') + tbl('t-ab-per', [{ h: 'Usuario', t: 1, v: q => q.u, w: 112 }, { h: 'Promotor', t: 1, v: q => q.n, w: 230, r: q => `<b>${esc(q.n)}</b>` }, { h: 'Tienda (último)', t: 1, v: q => (tienda(q.id) || {}).nombre || '' }, { h: 'Supervisor', t: 1, v: q => (tienda(q.id) || {}).supervisor }, { h: 'Días sin cerrar', v: q => q.d, r: q => `<b>${q.d}</b>` }],
+    [...pu.values()], { fix: 2, search: 1, csv: 1, png: 1, file: 'checks_sin_cerrar_por_promotor', titulo: 'Checks sin cerrar por promotor · ' + fdate(r.desde) + ' al ' + fdate(r.hasta), sort: 4, dir: -1, maxh: '50vh', lim: 500 });
+  ERR_AB = { ab, r };
+  return h;
+}
+let ERR_AB = null;
+function abiertosCsv() {
+  if (!ERR_AB) return; const r = ERR_AB.r;
+  finBajar('checks_sin_cerrar_' + r.desde + (r.desde === r.hasta ? '' : '_a_' + r.hasta) + '.csv', [['fecha', 'usuario', 'promotor', 'idpdv', 'tienda', 'supervisor', 'gerente', 'entrada', 'ventas'],
+    ...ERR_AB.ab.map(x => { const t = tienda(x.idpdv) || {}; return [x.fecha, x.usuario, x.nombre, x.idpdv, t.nombre, t.supervisor, t.gerente, hh(x.hora_in), x.registros]; })]);
 }
 
 /* >>> 03c_categoria.js */
@@ -1074,24 +1123,36 @@ function aExperiencia(v) {
 }
 const CAMPOS = [
   { k: 'fecha', h: 'Fecha de ingreso', w: 128, tipo: 'date' }, { k: 'nombre', h: 'Nombre del candidato', w: 210 }, { k: 'tel', h: 'Teléfono de contacto', w: 128 }, { k: 'idpdv', h: 'IDPDV', w: 96 },
-  { k: 'fuente', h: 'Medio', w: 140, tipo: 'sel' }, { k: 'generado', h: 'Generado por (puesto)', w: 140, tipo: 'sel' }, { k: 'recl', h: 'Reclutado por', w: 150, tipo: 'sel' },
+  { k: 'fuente', h: 'Medio', w: 140, tipo: 'sel' }, { k: 'generado', h: 'Generado por (puesto)', w: 140, tipo: 'sel' }, { k: 'recl', h: 'Reclutado por', w: 170, tipo: 'nom' },
   { k: 'experiencia', h: 'Experiencia', w: 170, tipo: 'sel' }, { k: 'acomp', h: 'Acompañamiento (puesto)', w: 150, tipo: 'sel' }, { k: 'ingresa', h: 'Ingresa', w: 160, tipo: 'ing' }, { k: 'hora', h: 'Hora de ingreso', w: 100, tipo: 'time' },
   { k: 'referido', h: 'Referido por', w: 130 }, { k: 'coment', h: 'Comentarios', w: 180 }
 ];
-const filaVacia = () => ({ fecha: '', nombre: '', tel: '', idpdv: '', fuente: '', generado: '', recl: S.me && S.me.reclutador_id ? String(S.me.reclutador_id) : '', experiencia: '', acomp: '', ingresa: '', hora: '', referido: '', coment: '' });
-/* reclutadores: si el catálogo trae el puesto de cada uno, al elegir "Generado por" solo salen los de ese puesto; si no, salen todos */
-const reclPorPuesto = p => { const L = IG.cat.recl, hay = L.some(x => x.puesto); return hay && p ? L.filter(x => !x.puesto || norm(x.puesto) === norm(p)) : L; };
-/* nombres sugeridos para "Ingresa" según el puesto de acompañamiento: Supervisor, Líder Telefónica (de la estructura) o Reclutador (catálogo) */
-function nombresIngresa(puesto, idpdv) {
-  const T = Object.values(S.cat.tiendas), uniq = a => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'es')), t = tienda(+idpdv);
-  if (puesto === 'Supervisor') { const l = uniq(T.map(x => x.supervisor)); return t && t.supervisor ? [t.supervisor, ...l.filter(x => x !== t.supervisor)] : l; }
-  if (puesto === 'Líder Telefónica') { const l = uniq(T.map(x => x.lider)); return t && t.lider ? [t.lider, ...l.filter(x => x !== t.lider)] : l; }
-  if (puesto === 'Reclutador') return IG.cat.recl.map(x => x.nombre);
-  return [];
+const filaVacia = () => ({ fecha: '', nombre: '', tel: '', idpdv: '', fuente: '', generado: '', recl: S.me && S.me.reclutador_id && IG.cat ? nombreReclDe(S.me.reclutador_id) : '', experiencia: '', acomp: '', ingresa: '', hora: '', referido: '', coment: '' });
+/* Nombres sugeridos según el puesto y la tienda (de la estructura de Maestra). Siempre se puede escribir un nombre a mano. */
+const esVacante = n => !n || /^VACANTE/i.test(String(n).trim());
+function personasPuesto(puesto, idpdv) {
+  const t = tienda(+idpdv), L = [];
+  if (t) {
+    if (puesto === 'Supervisor') L.push(t.supervisor);
+    else if (puesto === 'Gerente') L.push(t.gerente);
+    else if (puesto === 'RR.HH.') L.push(t.rrhh);
+    else if (puesto === 'Telefónica' || puesto === 'Líder Telefónica') L.push(t.lider, t.sub_terr);
+  }
+  if (puesto === 'Reclutador') IG.cat.recl.filter(x => !x.puesto || norm(x.puesto) === norm('Reclutador')).forEach(x => L.push(x.nombre));
+  return [...new Set(L.filter(n => !esVacante(n)).map(n => String(n).replace(/\s+/g, ' ').trim()))];
 }
+const nombresRecl = (generado, idpdv) => { const l = personasPuesto(generado, idpdv); return l.length ? l : IG.cat.recl.map(x => x.nombre); };   // sin puesto conocido: el catálogo completo
+const nombresIngresa = (puesto, idpdv) => personasPuesto(puesto, idpdv);
+const nombreReclDe = id => (IG.cat.recl.find(x => String(x.id) === String(id)) || {}).nombre || '';
+async function reclId(nombre, puesto) {   // el nombre escrito o elegido se busca en el catálogo; si no existe se crea
+  const n = norm(nombre), f = IG.cat.recl.find(x => norm(x.nombre) === n); if (f) return f.id;
+  const id = await API.reclAsegurar(String(nombre).replace(/\s+/g, ' ').trim(), puesto || null); IG.cat = await API.catIngresos(); return id;
+}
+Real.reclAsegurar = async function (nombre, puesto) { return Real.finRpc('reclutador_asegurar', { p_nombre: nombre, p_puesto: puesto }); };
+Demo.reclAsegurar = async function (nombre) { const id = 1000 + Math.floor(Math.random() * 9000); IG.cat.recl.push({ id, nombre }); return id; };
 function opcionesCampo(k, r) {
   const c = IG.cat;
-  if (k === 'fuente') return c.fuentes.map(x => [String(x.id), x.fuente]); if (k === 'recl') return reclPorPuesto(r && r.generado).map(x => [String(x.id), x.nombre]);
+  if (k === 'fuente') return c.fuentes.map(x => [String(x.id), x.fuente]); 
   if (k === 'generado') return c.generado.map(x => [x, x]); if (k === 'experiencia') return c.experiencia.map(x => [x, x]); if (k === 'acomp') return c.acomp.map(x => [x, x]); return [];
 }
 function valorPegado(k, t) {
@@ -1101,7 +1162,7 @@ function valorPegado(k, t) {
   if (k === 'tel') return t.replace(/\D/g, '').slice(-10);
   if (k === 'hora') { const m = t.match(/(\d{1,2})[:.](\d{2})/); return m ? pad(+m[1]) + ':' + m[2] : ''; }
   if (k === 'fuente') { const o = aOpcion(t, IG.cat.fuentes.map(x => x.fuente), MAPA_FUENTE); const f = IG.cat.fuentes.find(x => x.fuente === o); return f ? String(f.id) : ''; }
-  if (k === 'recl') { const nombre = t.replace(/\s+/g, ' ').trim(); const o = aOpcion(nombre, IG.cat.recl.map(x => x.nombre)); const f = IG.cat.recl.find(x => x.nombre === o); return f ? String(f.id) : ''; }
+  if (k === 'recl') return t.replace(/\s+/g, ' ').trim();
   if (k === 'generado') return aOpcion(t, IG.cat.generado, MAPA_GEN);
   if (k === 'experiencia') return aExperiencia(t);
   if (k === 'acomp') return aOpcion(t, IG.cat.acomp);
@@ -1112,7 +1173,7 @@ function errorFila(r) {
   if (!r.fecha) e.fecha = 'Falta la fecha'; else if (r.fecha < addD(HOY, -1)) e.fecha = 'Fecha pasada';
   if (r.nombre.trim().length < 5) e.nombre = 'Escribe nombre completo';
   if (!r.idpdv) e.idpdv = 'Falta IDPDV'; else if (!tienda(+r.idpdv)) e.idpdv = 'IDPDV no existe';
-  if (!r.fuente) e.fuente = 'Elige el medio'; if (!r.recl) e.recl = 'Elige reclutador'; if (r.tel && r.tel.length !== 10) e.tel = 'El teléfono debe tener 10 dígitos';
+  if (!r.fuente) e.fuente = 'Elige el medio'; if (!r.recl.trim()) e.recl = 'Escribe o elige quién reclutó'; if (r.tel && r.tel.length !== 10) e.tel = 'El teléfono debe tener 10 dígitos';
   return e;
 }
 const vacia = r => !r.fecha && !r.nombre && !r.idpdv && !r.fuente && !(r.generado || r.experiencia || r.referido || r.coment || r.tel || r.ingresa || r.hora);
@@ -1140,34 +1201,44 @@ async function asegurarCands(d, h) {   // carga solo lo que falta del rango pedi
 function tCaptura() {
   const prop = S.me.permisos.posibles_ingresos.alcance === 'propio';
   let h = `<div class="card"><div class="note">Copia las filas de tu Excel (sin encabezados) en este orden: <b>fecha · nombre · teléfono · IDPDV · medio · generado por (puesto) · reclutado por · experiencia · acompañamiento (puesto) · ingresa · hora de ingreso · referido por · comentarios</b>, haz clic en la primera celda y pega con <b>Ctrl+V</b>. También puedes escribir directo. Lo que no se reconozca queda en rojo para que lo corrijas.</div>
-  <datalist id="dl-ing"></datalist>
+  <datalist id="dl-tiendas">${tiendaListaOpts()}</datalist>
   <div class="tools"><button class="btn sm primary" onclick="modalCandidato()">➕ Nuevo ingreso individual</button><button class="btn sm" onclick="IG.grid.push(...Array.from({length:10},filaVacia));tCaptura()">+ 10 filas</button><button class="btn sm" onclick="limpiarVacias()">Quitar filas vacías</button><label class="btn sm xl-btn">📂 Cargar Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="importarExcel(this.files[0]);this.value=''"></label><button class="btn sm" onclick="IG.grid=Array.from({length:12},filaVacia);tCaptura()">Empezar de nuevo</button><span class="muted" id="g-res"></span><button class="btn primary" id="g-ok" style="margin-left:auto" onclick="guardarGrid()">Guardar candidatos</button></div>
   <div class="tbl-wrap grid-wrap"><table class="dt gt" id="gt"><thead><tr><th>#</th>${CAMPOS.map(c => `<th style="min-width:${c.w}px">${c.h}</th>`).join('')}<th></th></tr></thead><tbody>${IG.grid.map((r, i) => filaGrid(r, i)).join('')}</tbody></table></div></div>`;
   $('ig-body').innerHTML = h; resumenGrid();
   const t = $('gt');
-  t.addEventListener('change', e => { const el = e.target.closest('[data-r]'); if (!el || CAMPOS[+el.dataset.c].k !== 'generado') return; const i = +el.dataset.r, j = CAMPOS.findIndex(c => c.k === 'recl'), rs = t.querySelector('#gr' + i + ' select[data-c="' + j + '"]'); if (rs) { rs.innerHTML = '<option value=""></option>' + reclPorPuesto(IG.grid[i].generado).map(x => `<option value="${x.id}" ${String(x.id) === IG.grid[i].recl ? 'selected' : ''}>${esc(x.nombre)}</option>`).join(''); } });
+  t.addEventListener('change', e => { const el = e.target.closest('[data-r]'); if (el && ['generado', 'acomp', 'idpdv'].includes(CAMPOS[+el.dataset.c].k)) ingListas(+el.dataset.r); });
   t.addEventListener('paste', e => {
     const el = e.target.closest('[data-r]'); if (!el) return; const txt = (e.clipboardData || window.clipboardData).getData('text'); if (!txt || !/[\t\n]/.test(txt)) return; e.preventDefault();
     const r0 = +el.dataset.r, c0 = +el.dataset.c; const filas = txt.replace(/\r/g, '').split('\n'); if (filas[filas.length - 1] === '') filas.pop();
     filas.forEach((ln, i) => { while (IG.grid.length <= r0 + i) IG.grid.push(filaVacia()); ln.split('\t').forEach((v, j) => { const c = CAMPOS[c0 + j]; if (c) IG.grid[r0 + i][c.k] = valorPegado(c.k, v); }); });
     tCaptura(); toast(filas.length + ' fila' + (filas.length > 1 ? 's' : '') + ' pegada' + (filas.length > 1 ? 's' : ''));
   });
-  t.addEventListener('input', e => { const el = e.target.closest('[data-r]'); if (!el) return; const r = IG.grid[+el.dataset.r], k = CAMPOS[+el.dataset.c].k; r[k] = k === 'idpdv' ? el.value.replace(/\D/g, '') : el.value; if (k === 'idpdv') { const t2 = tienda(+r.idpdv); const s = $('ts' + el.dataset.r); if (s) s.textContent = t2 ? t2.nombre : (r.idpdv ? 'IDPDV no existe' : ''); el.title = ''; } marcar(+el.dataset.r); resumenGrid(); });
+  t.addEventListener('input', e => {
+    const el = e.target.closest('[data-r]'); if (!el) return; const r = IG.grid[+el.dataset.r], k = CAMPOS[+el.dataset.c].k;
+    if (k === 'idpdv') { const m = el.value.match(/^(\d+)\s*·/); const dig = m ? m[1] : el.value.replace(/\D/g, ''); if (m) el.value = dig; r.idpdv = dig; const t2 = tienda(+r.idpdv); const s2 = $('ts' + el.dataset.r); if (s2) s2.textContent = t2 ? t2.nombre : (r.idpdv ? 'IDPDV no existe' : ''); el.title = ''; if (t2) ingListas(+el.dataset.r); }
+    else r[k] = el.value;
+    marcar(+el.dataset.r); resumenGrid();
+  });
 }
+const tiendaListaOpts = () => Object.values(S.cat.tiendas).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es')).map(t => `<option value="${t.idpdv} · ${esc(t.nombre)} (${esc(t.cadena || '')} · ${esc(t.estado || '')})"></option>`).join('');
 function filaGrid(r, i) {
   const e = errorFila(r), vac = vacia(r);
   const celda = (c, j) => {
     const bad = !vac && e[c.k] ? 'bad' : '', ttl = !vac && e[c.k] ? ` title="${esc(e[c.k])}"` : '';
     if (c.tipo === 'sel') return `<td class="${bad}"${ttl}><select data-r="${i}" data-c="${j}"><option value=""></option>${opcionesCampo(c.k, r).map(([v, t]) => `<option value="${esc(v)}" ${v === r[c.k] ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></td>`;
     if (c.tipo === 'time') return `<td class="${bad}"${ttl}><input type="time" data-r="${i}" data-c="${j}" value="${esc(r.hora)}"></td>`;
-    if (c.tipo === 'ing') return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" list="dl-ing" value="${esc(r.ingresa)}" onfocus="IG.gi=${i};ingListaFila(${i})"></td>`;
+    if (c.tipo === 'ing') return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" list="dl-i${i}" value="${esc(r.ingresa)}" autocomplete="off"><datalist id="dl-i${i}">${nombresIngresa(r.acomp, r.idpdv).map(n => `<option value="${esc(n)}">`).join('')}</datalist></td>`;
+    if (c.tipo === 'nom') return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" list="dl-r${i}" value="${esc(r.recl)}" autocomplete="off"><datalist id="dl-r${i}">${nombresRecl(r.generado, r.idpdv).map(n => `<option value="${esc(n)}">`).join('')}</datalist></td>`;
     if (c.tipo === 'date') return `<td class="${bad}"${ttl}><input type="date" data-r="${i}" data-c="${j}" value="${esc(r.fecha)}"></td>`;
-    if (c.k === 'idpdv') { const t = tienda(+r.idpdv); return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" inputmode="numeric" value="${esc(r.idpdv)}"><small id="ts${i}" class="ts">${t ? esc(t.nombre) : (r.idpdv ? 'IDPDV no existe' : '')}</small></td>`; }
+    if (c.k === 'idpdv') { const t = tienda(+r.idpdv); return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" list="dl-tiendas" value="${esc(r.idpdv)}" autocomplete="off" placeholder="IDPDV o nombre"><small id="ts${i}" class="ts">${t ? esc(t.nombre) : (r.idpdv ? 'IDPDV no existe' : '')}</small></td>`; }
     return `<td class="${bad}"${ttl}><input data-r="${i}" data-c="${j}" value="${esc(r[c.k])}"></td>`;
   };
   return `<tr id="gr${i}" class="${vac ? 'vac' : ''}"><td class="n">${i + 1}</td>${CAMPOS.map(celda).join('')}<td><button class="btn sm" title="Quitar fila" onclick="IG.grid.splice(${i},1);tCaptura()">✕</button></td></tr>`;
 }
-function ingListaFila(i) { const r = IG.grid[i], dl = $('dl-ing'); if (dl) dl.innerHTML = nombresIngresa(r.acomp, r.idpdv).map(n => `<option value="${esc(n)}">`).join(''); }
+function ingListas(i) {   // al cambiar tienda o puesto se renuevan los nombres sugeridos de esa fila
+  const r = IG.grid[i], d1 = $('dl-r' + i), d2 = $('dl-i' + i);
+  if (d1) d1.innerHTML = nombresRecl(r.generado, r.idpdv).map(n => `<option value="${esc(n)}">`).join(''); if (d2) d2.innerHTML = nombresIngresa(r.acomp, r.idpdv).map(n => `<option value="${esc(n)}">`).join('');
+}
 function marcar(i) { const tr = $('gr' + i); if (!tr) return; const r = IG.grid[i], e = errorFila(r), vac = vacia(r); tr.classList.toggle('vac', vac); CAMPOS.forEach((c, j) => { const td = tr.children[j + 1]; if (td) td.classList.toggle('bad', !vac && !!e[c.k]); }); }
 function resumenGrid() {
   const llenas = IG.grid.filter(r => !vacia(r)), malas = llenas.filter(r => Object.keys(errorFila(r)).length);
@@ -1180,8 +1251,8 @@ function limpiarVacias() { IG.grid = IG.grid.filter(r => !vacia(r)); while (IG.g
 async function guardarGrid() {
   const llenas = IG.grid.filter(r => !vacia(r)); if (!llenas.length) return;
   const b = $('g-ok'); b.disabled = true; b.textContent = 'Guardando…';
-  const rows = llenas.map(r => ({ nombre: r.nombre.replace(/\s+/g, ' ').trim(), telefono: r.tel || null, hora_ingreso: r.hora || null, acompanado_por: r.ingresa.trim() || null, idpdv: +r.idpdv, fecha_captura: HOY, fecha_programada: r.fecha, reclutador_id: +r.recl, fuente_id: +r.fuente, generado_por: r.generado || null, experiencia: r.experiencia || null, acompanamiento: r.acomp || null, referido_por: r.referido.trim() || null, comentarios: r.coment.trim() || null }));
-  try { const n = await API.insertarCandidatos(rows); toast(n + ' candidato' + (n > 1 ? 's' : '') + ' guardado' + (n > 1 ? 's' : '')); IG.grid = Array.from({ length: 12 }, filaVacia); await cargarCands(); IG.tab = 'seguimiento'; vIngresos(); }
+  const rows = llenas.map(r => ({ nombre: r.nombre.replace(/\s+/g, ' ').trim(), telefono: r.tel || null, hora_ingreso: r.hora || null, acompanado_por: r.ingresa.trim() || null, idpdv: +r.idpdv, fecha_captura: HOY, fecha_programada: r.fecha, reclutador_id: null, fuente_id: +r.fuente, generado_por: r.generado || null, experiencia: r.experiencia || null, acompanamiento: r.acomp || null, referido_por: r.referido.trim() || null, comentarios: r.coment.trim() || null }));
+  try { for (let q = 0; q < llenas.length; q++) rows[q].reclutador_id = await reclId(llenas[q].recl, llenas[q].generado); const n = await API.insertarCandidatos(rows); toast(n + ' candidato' + (n > 1 ? 's' : '') + ' guardado' + (n > 1 ? 's' : '')); IG.grid = Array.from({ length: 12 }, filaVacia); await cargarCands(); IG.tab = 'seguimiento'; vIngresos(); }
   catch (e) { b.disabled = false; b.textContent = 'Guardar candidatos'; toast('No se pudo guardar: ' + (e.message || e)); }
 }
 
@@ -1286,25 +1357,26 @@ function modalCandidato(id) {
     <div class="row2"><div class="fld"><label>Nombre completo del candidato *</label><input id="cd-n" value="${v('nombre')}" autocomplete="off"></div><div class="fld"><label>Teléfono de contacto (10 dígitos)</label><input id="cd-t" inputmode="numeric" value="${v('telefono')}"></div></div>
     <div class="fld"><label>Tienda * (IDPDV o nombre)</label><input id="cd-p" list="cd-tl" value="${t ? esc(c.idpdv + ' · ' + t.nombre + ' (' + (t.cadena || '') + ' · ' + (t.estado || '') + ')') : ''}" placeholder="Escribe IDPDV o nombre…" oninput="cdIng()"></div>
     <div class="row2"><div class="fld"><label>Medio *</label>${sel('cd-fu', cat.fuentes.map(x => [x.id, x.fuente]), c && c.fuente_id)}</div><div class="fld"><label>Generado por (puesto)</label>${sel('cd-g', cat.generado.map(x => [x, x]), c && c.generado_por)}</div></div>
-    <div class="row2"><div class="fld"><label>Reclutado por *</label><select id="cd-r"></select></div><div class="fld"><label>Experiencia</label>${sel('cd-ex', cat.experiencia.map(x => [x, x]), c && c.experiencia)}</div></div>
+    <div class="row2"><div class="fld"><label>Reclutado por *</label><input id="cd-r" list="cd-rl" autocomplete="off" placeholder="Elige o escribe el nombre" value="${esc(c ? nombreReclDe(c.reclutador_id) : (S.me && S.me.reclutador_id ? nombreReclDe(S.me.reclutador_id) : ''))}"><datalist id="cd-rl"></datalist></div><div class="fld"><label>Experiencia</label>${sel('cd-ex', cat.experiencia.map(x => [x, x]), c && c.experiencia)}</div></div>
     <div class="row2"><div class="fld"><label>Acompañamiento (puesto)</label>${sel('cd-a', cat.acomp.map(x => [x, x]), c && c.acompanamiento)}</div><div class="fld"><label>Ingresa (nombre)</label><input id="cd-i" list="cd-ing" value="${v('acompanado_por')}" autocomplete="off"></div></div>
     <div class="row2"><div class="fld"><label>Referido por</label><input id="cd-rf" value="${v('referido_por')}"></div><div class="fld"><label>Comentarios</label><input id="cd-c" value="${v('comentarios')}"></div></div>
     <div class="warn" id="cd-warn" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="cd-ok">Guardar</button></div></div>`;
   $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); };
-  const pintaRecl = () => { const sv = $('cd-r').value || (c ? String(c.reclutador_id || '') : (S.me && S.me.reclutador_id ? String(S.me.reclutador_id) : '')); $('cd-r').innerHTML = '<option value="">— elige —</option>' + reclPorPuesto($('cd-g').value).map(x => `<option value="${x.id}" ${String(x.id) === sv ? 'selected' : ''}>${esc(x.nombre)}</option>`).join(''); };
-  $('cd-g').onchange = pintaRecl; $('cd-a').onchange = cdIng; pintaRecl(); cdIng();
+  const pintaRecl = () => { $('cd-rl').innerHTML = nombresRecl($('cd-g').value, parseInt($('cd-p').value, 10)).map(n => `<option value="${esc(n)}">`).join(''); };
+  $('cd-g').onchange = () => { pintaRecl(); cdIng(); }; $('cd-a').onchange = cdIng; $('cd-p').oninput = () => { pintaRecl(); cdIng(); }; pintaRecl(); cdIng();
   $('cd-ok').onclick = () => candGuardar(id);
 }
 function cdIng() { const dl = $('cd-ing'); if (!dl) return; dl.innerHTML = nombresIngresa($('cd-a').value, parseInt($('cd-p').value, 10)).map(n => `<option value="${esc(n)}">`).join(''); }
 async function candGuardar(id) {
   const g = k => limpia($(k).value), w = $('cd-warn'), idp = parseInt(g('cd-p'), 10), tel = g('cd-t').replace(/\D/g, ''), e = [];
   if (!$('cd-f').value) e.push('Falta la fecha de ingreso.'); if (g('cd-n').length < 5) e.push('Escribe el nombre completo.'); if (!idp || !tienda(idp)) e.push('Elige una tienda de la lista (empieza con su IDPDV).');
-  if (!$('cd-fu').value) e.push('Elige el medio.'); if (!$('cd-r').value) e.push('Elige quién reclutó.'); if (tel && tel.length !== 10) e.push('El teléfono debe tener 10 dígitos.');
+  if (!$('cd-fu').value) e.push('Elige el medio.'); if (!limpia($('cd-r').value)) e.push('Escribe o elige quién reclutó.'); if (tel && tel.length !== 10) e.push('El teléfono debe tener 10 dígitos.');
   if (e.length) { w.hidden = false; w.innerHTML = e.map(esc).join('<br>'); return; }
-  const row = { nombre: g('cd-n').replace(/\s+/g, ' ').toUpperCase(), telefono: tel || null, idpdv: idp, fecha_programada: $('cd-f').value, hora_ingreso: $('cd-h').value || null, fuente_id: +$('cd-fu').value, reclutador_id: +$('cd-r').value, generado_por: $('cd-g').value || null,
+  const row = { nombre: g('cd-n').replace(/\s+/g, ' ').toUpperCase(), telefono: tel || null, idpdv: idp, fecha_programada: $('cd-f').value, hora_ingreso: $('cd-h').value || null, fuente_id: +$('cd-fu').value, reclutador_id: null, generado_por: $('cd-g').value || null,
     experiencia: $('cd-ex').value || null, acompanamiento: $('cd-a').value || null, acompanado_por: g('cd-i') || null, referido_por: g('cd-rf') || null, comentarios: g('cd-c') || null };
   $('cd-ok').disabled = true;
   try {
+    row.reclutador_id = await reclId(limpia($('cd-r').value), $('cd-g').value);
     if (id) { const c = IG.lista.find(x => x.id === id); if (row.fecha_programada !== c.fecha_programada && PEND.includes(c.estatus)) row.reagendas = (c.reagendas || 0) + 1; await API.actualizarCandidato(id, row); Object.assign(c, row); toast('Cambios guardados (queda el historial)'); }
     else { await API.insertarCandidatos([{ ...row, fecha_captura: HOY }]); await cargarCands(); toast('Posible ingreso guardado'); }
     cerrarM(); if (IG.tab === 'captura') IG.tab = 'seguimiento'; vIngresos();
@@ -2525,7 +2597,7 @@ function identidadCampos(p, pre) {
     <div class="row2">${req(pre + 'am', 'Apellido materno', `<input id="${pre}am" value="${v('apellido_m')}" autocomplete="off">`)}${req(pre + 'mail', 'Correo electrónico', `<input id="${pre}mail" type="email" value="${v('correo')}" autocomplete="off">`)}</div>
     <div class="row2">${req(pre + 'fn', 'Fecha de nacimiento *', `<input id="${pre}fn" type="date" value="${v('fecha_nacimiento')}" max="${addD(HOY, -16 * 365)}" oninput="idRfcAuto('${pre}')">`)}${req(pre + 'tel', 'Teléfono de contacto * (10 dígitos)', `<input id="${pre}tel" inputmode="numeric" value="${v('telefono')}" autocomplete="off">`)}</div>
     <div class="row2">${req(pre + 'gen', 'Género *', `<select id="${pre}gen"><option value="">— elige —</option>${['Hombre', 'Mujer'].map(g => `<option ${p && p.genero === g ? 'selected' : ''}>${g}</option>`).join('')}</select>`)}${req(pre + 'ec', 'Estado civil *', `<select id="${pre}ec"><option value="">— elige —</option>${ESTADOS_CIVIL.map(g => `<option ${p && p.estado_civil === g ? 'selected' : ''}>${g}</option>`).join('')}</select>`)}</div>
-    ${req(pre + 'rfc', 'RFC (13 caracteres)', `<div class="rfc-row"><input id="${pre}rfc" maxlength="13" style="text-transform:uppercase" value="${v('rfc')}" autocomplete="off" placeholder="Genera la base y completa la homoclave"><button type="button" class="btn sm" onclick="idRfcGenerar('${pre}')">⚙️ Generar base (10)</button></div><small class="muted">La base sale del nombre y la fecha de nacimiento. La homoclave (3 últimos caracteres) se consulta en el SAT y se escribe a mano.</small>`)}`;
+    ${req(pre + 'rfc', 'RFC (13 caracteres)', `<div class="rfc-row"><input id="${pre}rfc" maxlength="13" style="text-transform:uppercase" value="${v('rfc')}" autocomplete="off" placeholder="Base de 10 o completo de 13"><button type="button" class="btn sm" onclick="idRfcGenerar('${pre}')">⚙️ Generar base (10)</button></div><small class="muted">La base (10 caracteres) sale del nombre y la fecha de nacimiento. La homoclave (3 últimos) es opcional: si la tienes, agrégala.</small>`)}`;
 }
 function idRfcGenerar(pre) {
   const g = k => limpia($(pre + k).value), base = rfcBase(g('nom'), g('ap'), g('am'), $(pre + 'fn').value);
@@ -2540,7 +2612,7 @@ function idLeer(pre) {
 function idErrores(d) {
   const e = []; if (!d.nombre_pila) e.push('Falta el nombre.'); if (!d.apellido_p) e.push('Falta el apellido paterno.'); if (!d.fecha_nacimiento) e.push('Falta la fecha de nacimiento.');
   if (!d.genero) e.push('Elige el género.'); if (!d.estado_civil) e.push('Elige el estado civil.'); if (d.telefono.length !== 10) e.push('El teléfono debe tener 10 dígitos.');
-  if (d.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.correo)) e.push('El correo no es válido.'); if (d.rfc && !/^[A-ZÑ&]{4}\d{6}[A-Z0-9]{3}$/.test(d.rfc)) e.push('El RFC debe tener 13 caracteres: 4 letras, 6 dígitos y la homoclave.');
+  if (d.correo && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.correo)) e.push('El correo no es válido.'); if (d.rfc && !/^[A-ZÑ&]{4}\d{6}([A-Z0-9]{3})?$/.test(d.rfc)) e.push('El RFC debe tener 10 caracteres (base) o 13 con la homoclave.');
   return e;
 }
 
@@ -2769,7 +2841,7 @@ async function nomPagarOk(id) { try { await API.nomPagado(id, $('np-f').value, l
 /* ---- justificaciones ---- */
 function nomJustHTML() {
   const edita = can('nomina', 'editar'), est = NM.jest || 'Solicitada', xs = NM.just.filter(j => !est || j.estado === est);
-  return `<div class="tools" data-nocap>${['Solicitada', 'Aprobada', 'Rechazada', ''].map(e => `<button class="chip ${est === e ? 'on' : ''}" onclick="NM.jest='${e}';vNomina()">${e || 'Todas'} (${e ? NM.just.filter(j => j.estado === e).length : NM.just.length})</button>`).join('')}<span class="muted">RH las solicita desde Detalle de checks › Errores de check; aquí se aprueban para que el día cuente como pagable.</span></div>` +
+  return `<div class="tools" data-nocap>${can('justificaciones', 'crear') ? '<button class="btn primary" onclick="justNueva()">➕ Nueva justificación</button>' : ''}${['Solicitada', 'Aprobada', 'Rechazada', ''].map(e => `<button class="chip ${est === e ? 'on' : ''}" onclick="NM.jest='${e}';vNomina()">${e || 'Todas'} (${e ? NM.just.filter(j => j.estado === e).length : NM.just.length})</button>`).join('')}<span class="muted">RH las solicita desde Detalle de checks › Errores de check; aquí se aprueban para que el día cuente como pagable.</span></div>` +
     tbl('t-jus', [{ h: 'Día', v: j => j.fecha, r: j => fdate(j.fecha) }, { h: 'Usuario', t: 1, v: j => j.usuario_fieldwy }, { h: 'Promotor', t: 1, v: j => (j.colaboradores || {}).nombre || '', w: 210, r: j => `<b>${esc((j.colaboradores || {}).nombre || j.usuario_fieldwy)}</b>` }, { h: 'Error', t: 1, v: j => ERRN[j.error] || j.error || '' , r: j => esc(ERRN[j.error] || j.error || '—') },
       { h: 'Motivo de RH', t: 1, v: j => j.motivo, w: 300 }, { h: 'Estatus', t: 1, v: j => j.estado, r: j => pillx(j.estado, j.estado === 'Aprobada' ? 'g' : j.estado === 'Rechazada' ? 'r' : 'a') }, { h: 'Resolución', t: 1, v: j => j.nota_resolucion || '', w: 200 },
       { h: '', v: () => '', r: j => edita && j.estado === 'Solicitada' ? `<button class="rsv" onclick="nomResolver(${j.id},true)">✔ Aprobar</button> <button class="rsv" onclick="nomResolver(${j.id},false)">✖ Rechazar</button>` : '' }], xs, { fix: 3, search: 1, csv: 1, png: 1, file: 'justificaciones', titulo: 'Justificaciones', sort: 0, dir: -1, maxh: '65vh' });
@@ -2786,6 +2858,27 @@ function justSolicitar(usuario, fecha, error, nombre) {
     <div class="warn" id="js-w" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="js-ok">Enviar a nómina</button></div></div>`; $('modal').hidden = false;
   $('js-ok').onclick = async () => { try { await API.solJust({ p_usuario: usuario, p_fecha: fecha, p_error: error, p_motivo: limpia($('js-m').value) }); cerrarM(); toast('Justificación solicitada: nómina la revisará'); await cargarJustSolicitadas(); if (S.view === 'checks') vChecks(); } catch (e) { $('js-w').hidden = false; $('js-w').textContent = e.message || e; } };
 }
+
+/* ---- capturar una justificación de cualquier persona del HC ---- */
+const JN = { res: [], sel: null, tm: null };
+function justNueva() {
+  JN.sel = null;
+  $('modal').innerHTML = `<div class="mbox" style="width:min(560px,96vw)" role="dialog" aria-modal="true"><h3>📝 Nueva justificación</h3>
+    <div class="fld"><label>Colaborador (usuario Fieldway o nombre)</label><input id="jn-q" autocomplete="off" placeholder="Escribe al menos 3 letras…" oninput="justBuscar(this.value)"></div><div id="jn-res"></div><div id="jn-sel"></div>
+    <div id="jn-resto" hidden><div class="row2"><div class="fld"><label>Día a justificar</label><input type="date" id="jn-f" value="${HOY}" max="${HOY}" min="${addD(HOY, -60)}"></div><div class="fld"><label>Qué pasó</label><select id="jn-e"><option value="">Sin check / otro</option>${Object.keys(ERRN).filter(k => k !== 'Cumple').map(k => `<option value="${esc(k)}">${esc((ERRI[k] || '') + ' ' + ERRN[k])}</option>`).join('')}</select></div></div>
+      <div class="fld"><label>Motivo (mínimo 10 caracteres)</label><textarea id="jn-m" placeholder="Qué pasó, evidencia, quién lo confirma…"></textarea></div></div>
+    <div class="warn" id="jn-w" hidden></div><div class="mfoot"><button class="btn" onclick="cerrarM()">Cancelar</button><button class="btn primary" id="jn-ok" disabled>Enviar a nómina</button></div></div>`;
+  $('modal').hidden = false; $('modal').onclick = e => { if (e.target.id === 'modal') cerrarM(); }; setTimeout(() => $('jn-q').focus(), 50);
+  $('jn-ok').onclick = async () => { const c = JN.sel; if (!c) return; try { await API.solJust({ p_usuario: c.usuario_fieldwy, p_fecha: $('jn-f').value, p_error: $('jn-e').value || null, p_motivo: limpia($('jn-m').value) }); cerrarM(); toast('Justificación enviada a nómina'); vNomina(); } catch (e) { $('jn-w').hidden = false; $('jn-w').textContent = e.message || e; } };
+}
+function justBuscar(q) {
+  clearTimeout(JN.tm); const r = $('jn-res'); if (limpiaQ(q).length < 3) { r.innerHTML = ''; return; }
+  JN.tm = setTimeout(async () => {
+    try { JN.res = await API.buscarColab(q); } catch (e) { r.innerHTML = `<div class="warn">${esc(e.message || e)}</div>`; return; }
+    r.innerHTML = JN.res.length ? `<div class="bj-list">${JN.res.map((c, i) => { const t = tienda(c.idpdv) || {}; return `<div class="bj-it" onclick="justElegir(JN.res[${i}])"><b>${esc(c.nombre)}</b><span>${esc(c.usuario_fieldwy)}</span><span>${esc(t.nombre || 'Sin tienda')}</span><span>${c.estatus === 'Baja' ? 'Baja' : ''}</span></div>`; }).join('')}</div>` : '<p class="muted">Sin coincidencias.</p>';
+  }, 280);
+}
+function justElegir(c) { JN.sel = c; const t = tienda(c.idpdv) || {}; $('jn-res').innerHTML = ''; $('jn-q').value = ''; $('jn-sel').innerHTML = `<div class="bj-card"><div><b>${esc(c.nombre)}</b><br><small>${esc(c.usuario_fieldwy)}</small></div><div><b>${esc(t.nombre || 'Sin tienda')}</b><br><small>${esc([t.cadena, t.estado, t.supervisor].filter(Boolean).join(' · '))}</small></div><div></div></div>`; $('jn-resto').hidden = false; $('jn-ok').disabled = false; }
 
 /* >>> 07k_exp_bancarios.js */
 /* ====================================================================== EXPEDIENTES · DATOS BANCARIOS ======================================================================
