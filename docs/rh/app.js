@@ -35,10 +35,10 @@ const Real = {
     const { data: p, error } = await sb.from('perfiles').select('*').eq('id', id).maybeSingle();
     if (error || !p) throw new Error('Tu usuario existe pero no tiene perfil asignado. Pide a un administrador que lo active.');
     const { data: pm } = await sb.from('permisos').select('*').eq('rol', p.rol);
-    return { id, debeCambiar: !!p.debe_cambiar_clave, nombre: p.nombre, rol: p.rol, rrhh: p.rrhh_nombre, zona: p.zona_rrhh, reclutador_id: p.reclutador_id, permisos: Object.fromEntries((pm || []).map(x => [x.modulo, x])) };
+    return { id, debeCambiar: !!p.debe_cambiar_clave, nombre: p.nombre, rol: p.rol, rrhh: p.rrhh_nombre, zona: p.zona_rrhh, reclutador_id: p.reclutador_id, reclutador_nombre: p.reclutador_nombre, permisos: Object.fromEntries((pm || []).map(x => [x.modulo, x])) };
   },
   async catalogos() {
-    const [t, ma, mb] = await Promise.all([todo(() => sb.from('tiendas').select('idpdv,nombre,cadena,estado,region,gerente,supervisor,rrhh,posiciones,zona_rrhh,clase,tipo_ekt,subdireccion_gb,sub_terr,lider')),
+    const [t, ma, mb] = await Promise.all([todo(() => sb.from('tiendas').select('idpdv,nombre,cadena,estado,region,gerente,supervisor,rrhh,reclutador,posiciones,zona_rrhh,clase,tipo_ekt,subdireccion_gb,sub_terr,lider')),
       sb.from('catalogo_motivos_ausencia').select('motivo').eq('activo', true), sb.from('catalogo_motivos_baja').select('motivo,tipo').eq('activo', true)]);
     return { tiendas: Object.fromEntries(t.map(x => [x.idpdv, x])), motAus: ma.data.map(x => x.motivo), motBaja: mb.data };
   },
@@ -3105,6 +3105,7 @@ async function entrar() {
     if (S.me.debeCambiar) { await cambiarClaveObligatoria(($('lg-p') || {}).value || ''); S.me = await API.me(); }   // clave temporal: se elige una propia antes de ver datos
     await mfaGate();   // admin/analista/nómina: código del celular
     S.cat = await API.catalogos();
+    soloMisTiendas();   // RH y reclutadores: filtros y listas solo con sus tiendas
     $('login').hidden = true; $('app').hidden = false;
     $('u-nombre').textContent = S.me.nombre; $('u-rol').textContent = NIVEL[S.me.rol] || S.me.rol;
     const alc = S.me.permisos.alertas; $('u-alc').textContent = S.me.rol === 'rh' && S.me.rrhh ? 'Estados de ' + S.me.rrhh : alc && alc.alcance === 'todo' ? 'Acceso general' : alc ? 'Alcance: ' + alc.alcance : '';
@@ -3139,3 +3140,10 @@ function exportClases() { document.body.classList.toggle('sin-csv', !puedeExport
   guarda('capturaDescargar', 'foto', 'Tu usuario no puede tomar fotos de las pantallas'); guarda('capturaCopiar', 'foto', 'Tu usuario no puede tomar fotos de las pantallas');
   guarda('tcsv', 'csv', 'Tu usuario no puede exportar archivos CSV'); guarda('finBajar', 'csv', 'Tu usuario no puede exportar archivos CSV');
 })();
+
+function soloMisTiendas() {
+  const r = S.me.permisos.reportes || {}, alc = r.alcance_ver || r.alcance, m = S.me, mismo = (a, b) => a && b && String(a).toUpperCase() === String(b).toUpperCase();
+  const ok = { estado: t => mismo(t.rrhh, m.rrhh), zona: t => mismo(t.zona_rrhh, m.zona), reclutador: t => mismo(t.reclutador, m.reclutador_nombre) }[alc];
+  if (!ok || !S.cat || !S.cat.tiendas) return;
+  S.cat.tiendas = Object.fromEntries(Object.entries(S.cat.tiendas).filter(([, t]) => ok(t)));
+}
