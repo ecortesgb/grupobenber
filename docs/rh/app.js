@@ -1933,8 +1933,9 @@ Real.cambiarSueldo = async function (u, d) {
   const { error } = await sb.rpc('cambiar_sueldo', { p_usuario: u, p_monto: d.monto, p_bono: d.bono, p_desde: d.desde, p_motivo: d.motivo || null });
   if (error) throw new Error(error.message);
 };
-Real.auditoria = async function () {
-  const { data, error } = await sb.from('auditoria').select('id,tabla,registro,accion,cambios,usuario,en').order('en', { ascending: false }).limit(500); if (error) throw error;
+Real.auditoria = async function (tipo) {
+  let q = sb.from('auditoria').select('id,tabla,registro,accion,cambios,usuario,en'); q = tipo === 'lecturas' ? q.eq('accion', 'LECTURA') : q.neq('accion', 'LECTURA');
+  const { data, error } = await q.order('en', { ascending: false }).limit(500); if (error) throw error;
   const { data: ps } = await sb.from('perfiles').select('id,nombre'); const nom = Object.fromEntries((ps || []).map(p => [p.id, p.nombre]));
   return (data || []).map(r => ({ ...r, quien: r.usuario ? (nom[r.usuario] || 'usuario') : 'sistema' }));
 };
@@ -2039,12 +2040,13 @@ function sbBancForm() {
 }
 
 /* ----- auditoría ----- */
+let AUD_T = 'cambios';
 async function vAuditoria() {
   $('content').innerHTML = cab('Auditoría', 'Últimos 500 cambios en colaboradores, bajas, usuarios, permisos, sueldos y datos sensibles. En datos bancarios y personales solo se guarda qué campo cambió, nunca su valor.', 'mochila') + '<div class="loading">Cargando…</div>';
-  let rows; try { rows = await API.auditoria(); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudo cargar: ${esc(e.message || e)}</div>`; return; }
+  let rows; try { rows = await API.auditoria(AUD_T); } catch (e) { $('content').innerHTML += `<div class="warn">No se pudo cargar: ${esc(e.message || e)}</div>`; return; }
   const resumen = c => { if (!c) return ''; const t = Object.entries(c).map(([k, v]) => v && typeof v === 'object' && 'antes' in v ? `${k}: ${String(v.antes)} → ${String(v.despues)}` : (typeof v === 'string' ? `${k} (${v})` : k)).join(' · '); return t.length > 160 ? t.slice(0, 157) + '…' : t; };
   TB = {};
-  $('content').innerHTML = cab('Auditoría', 'Últimos 500 cambios. En datos bancarios y personales solo se guarda qué campo cambió, nunca su valor.', 'mochila') + tbl('t-aud', [
+  $('content').innerHTML = cab('Auditoría', AUD_T === 'lecturas' ? 'Últimas 500 veces que alguien abrió datos personales, bancarios o sueldos (cuántos registros y de quién).' : 'Últimos 500 cambios. En datos bancarios y personales solo se guarda qué campo cambió, nunca su valor.', 'mochila') + `<div class="tools" data-nocap>${[['cambios', '✏️ Cambios'], ['lecturas', '👁️ Lecturas de datos sensibles']].map(([k, n]) => `<button class="chip ${AUD_T === k ? 'on' : ''}" onclick="AUD_T='${k}';vAuditoria()">${n}</button>`).join('')}</div>` + tbl('t-aud', [
     { h: 'Fecha y hora', v: r => r.en, r: r => fdate(String(r.en).slice(0, 10)) + ' ' + String(r.en).slice(11, 16), w: 130 }, { h: 'Quién', t: 1, v: r => r.quien }, { h: 'Tabla', t: 1, v: r => r.tabla }, { h: 'Registro', t: 1, v: r => r.registro || '' },
     { h: 'Acción', t: 1, v: r => r.accion }, { h: 'Cambios', t: 1, v: r => resumen(r.cambios), r: r => `<small>${esc(resumen(r.cambios))}</small>` }
   ], rows, { fix: 0, search: 1, csv: 1, file: 'auditoria', titulo: 'Auditoría', sort: 0, dir: -1, maxh: '72vh' });
@@ -2951,7 +2953,7 @@ async function vUsuarios() {
   let us; try { us = await API.usuariosLista(); } catch (e) { $('content').innerHTML += `<div class="warn">${esc(e.message || e)}</div>`; return; }
   const edita = can('usuarios', 'editar'); TB = {};
   let h = cab('Usuarios y acceso', 'Quién puede entrar. El acceso es con usuario y contraseña; las claves temporales se cambian al primer ingreso. Desactiva el acceso cuando alguien se va.', 'mochila');
-  h += `<div class="kpis">${kp('Con acceso', fmt(us.filter(u => u.activo).length), 'activos', C.gr, null, '🔓')}${kp('Sin acceso', fmt(us.filter(u => !u.activo).length), 'desactivados', C.gy, null, '🔒')}${kp('Falta cambiar clave', fmt(us.filter(u => u.activo && u.debe_cambiar_clave).length), 'todavía con clave temporal', C.am, null, '🔐')}</div>`;
+  h += `<div class="kpis">${kp('Con acceso', fmt(us.filter(u => u.activo).length), 'activos', C.gr, null, '🔓')}${kp('Sin acceso', fmt(us.filter(u => !u.activo).length), 'desactivados', C.gy, null, '🔒')}${kp('Sin entrar en 30+ días', fmt(us.filter(u => u.activo && (!u.ultimo_acceso || u.ultimo_acceso < addD(HOY, -30))).length), 'revisa si aún necesitan acceso', C.am, null, '🕓')}${kp('Falta cambiar clave', fmt(us.filter(u => u.activo && u.debe_cambiar_clave).length), 'todavía con clave temporal', C.am, null, '🔐')}</div>`;
   h += tbl('t-usr', [{ h: 'Usuario', t: 1, v: u => u.usuario, w: 160, r: u => `<b>${esc(u.usuario)}</b>` }, { h: 'Nombre', t: 1, v: u => u.nombre, w: 260 }, { h: 'Rol', t: 1, v: u => NIVEL_USR[u.rol] || u.rol }, { h: 'Alcance', t: 1, v: u => u.rrhh_nombre || u.zona_rrhh || 'General' },
     { h: 'Último acceso', v: u => u.ultimo_acceso || '', r: u => u.ultimo_acceso ? fdate(String(u.ultimo_acceso).slice(0, 10)) : '<span class="muted">nunca</span>' }, { h: 'Estatus', t: 1, v: u => u.activo ? (u.debe_cambiar_clave ? 1 : 2) : 0, r: u => !u.activo ? pillx('🔒 Sin acceso', 'x') : u.debe_cambiar_clave ? pillx('🔐 Clave temporal', 'a') : pillx('🟢 Activo', 'g') },
     ...(edita ? [{ h: '', v: () => '', r: u => `<button class="rsv" onclick="usrReiniciar('${u.id}','${esc(u.nombre).replace(/'/g, '')}')">🔑 Reiniciar clave</button> <button class="rsv" onclick="usrActivar('${u.id}',${!u.activo},'${esc(u.nombre).replace(/'/g, '')}')">${u.activo ? '🔒 Quitar acceso' : '🔓 Devolver acceso'}</button>` }] : [])],
