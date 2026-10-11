@@ -1,7 +1,7 @@
 # Instrucciones para Claude
 
-Nunca ejecutes el trabajo por tu cuenta.
-Delega siempre la tarea a un subagente.
+Delega a un subagente solo tareas grandes o que se puedan correr en paralelo.
+Las ediciones pequeñas hazlas directo con el modelo de la sesión.
 No uses siempre Fable.
 Usa Opus 5.5 para tareas más simples.
 
@@ -14,4 +14,4 @@ Usa Opus 5.5 para tareas más simples.
 ## Delegación
 - Un subagente por tarea. Planifica antes de ejecutar.
 - Ejecuta subagentes independientes en paralelo.
-- Lee el informe, nunca los archivos.
+- Cuando delegues, lee el informe del subagente, no vuelvas a leer los archivos.
