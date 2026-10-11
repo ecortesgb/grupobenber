@@ -195,6 +195,30 @@ body:not(.dir) .dir-only{display:none}
 .rk-v.g{color:var(--green)}.rk-v.r{color:var(--red)}
 .tools select,.tools input{max-width:100%}
 @media (max-width:640px){.dl-row{grid-template-columns:12px 1fr auto 46px}.tools .btn{margin-left:0}}
+
+/* ===== v6 · mes en curso (avance vs cuota, ritmo, cadenas) y estados vacíos ===== */
+.mes-card{margin-bottom:14px;padding:18px 20px}
+.mc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.mc-lbl{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)}
+.mc-big{font-size:38px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;margin-top:2px}.mc-big small{font-size:14px;font-weight:700;color:var(--text-muted);margin-left:6px}
+.mc-delta{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:800;flex-wrap:wrap}
+.mc-delta.up{background:#e6f4e6;color:var(--green)}.mc-delta.dn{background:#fbe6e6;color:var(--red)}.mc-delta.eq{background:var(--soft);color:var(--text-muted)}
+.mc-delta span{font-weight:600;color:var(--text-muted)}
+.mc-side{text-align:right;font-size:12px;font-weight:700;color:var(--text-muted)}.mc-side b{display:block;font-size:22px;color:var(--text);font-weight:800;font-variant-numeric:tabular-nums}
+.mc-bar{position:relative;height:14px;border-radius:8px;background:#E1E4E8;margin:30px 0 10px}
+.mc-bar>i{display:block;height:100%;border-radius:8px;transition:width .5s cubic-bezier(.22,.61,.36,1)}
+.mc-pace{position:absolute;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;background:var(--dark);border-radius:2px}
+.mc-pace::after{content:attr(data-l);position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:800;color:var(--dark);white-space:nowrap}
+.mc-pace.l::after{left:0;transform:none}.mc-pace.r::after{left:auto;right:0;transform:none}
+.mc-txt{font-size:12.5px;font-weight:600;color:var(--text-muted);line-height:1.65}.mc-txt b{color:var(--text)}
+.mc-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.mc-chip{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border-radius:12px;background:var(--soft);border:1px solid var(--line);font-size:12px;font-weight:700;min-width:0}
+.mc-chip svg{flex:0 0 auto}.mc-chip .nm{display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.mc-chip .nm small{font-size:10.5px;font-weight:600;color:var(--text-muted)}
+.mc-chip em{font-style:normal;font-size:11px;font-weight:800;margin-left:auto;padding-left:6px}.mc-side .sep{display:none}
+.empty-st{padding:22px 16px;text-align:center;color:var(--text-muted);font-weight:600;font-size:12.5px;line-height:1.55;white-space:normal}
+.empty-st b{color:var(--text)}table.dt td.empty-td{max-width:none;position:static;white-space:normal;text-align:center}.empty-st .ic{display:block;font-size:22px;margin-bottom:4px}
+@media (max-width:640px){.mc-big{font-size:30px}.mc-top{gap:6px}.mc-side{text-align:left;font-size:12px}.mc-side b{display:inline;font-size:12px;margin:0 3px}.mc-chip{flex:1 1 100%}.mc-side .sep{display:inline}}
 </style>
 <div id="app">
 <aside id="sidebar">
@@ -327,12 +351,14 @@ function dimTable(id,cols,dflt,extra){extra=extra||{};const st=ST[id]=ST[id]||{d
  const hd=`<tr><th class="s" data-c="-1">${dim.l}${st.sk===-1?(st.sd<0?' ▼':' ▲'):''}</th>${cols.map((c,j)=>`<th class="s ${c.c||''}" data-c="${j}">${c.l}${st.sk===j?(st.sd<0?' ▼':' ▲'):''}</th>`).join('')}</tr>`;
  const shown=rows.slice(0,400);
  box.innerHTML=(extra.kpis?`<div class="etiqueta-row">${extra.kpis(T0,rows)}</div>`:'')+`<div class="tools"><label>Ver por <select id="ds_${id}">${DIMS.map(d=>`<option value="${d.k}"${d.k===st.dim?' selected':''}>${d.l}</option>`).join('')}</select></label><button class="btn" id="cp_${id}">Exportar CSV</button><span>${fmt(rows.length)} filas${rows.length>400?' · se muestran 400 (el CSV trae todas)':''}</span></div>
- <div class="tbl-wrap" style="max-height:560px;overflow:auto"><table class="dt"><thead>${hd}</thead><tbody>${shown.map(o=>`<tr><td title="${o.name}">${o.name}</td>${cols.map(c=>`<td>${cellTxt(c,o)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length+1}" class="empty">Sin datos con los filtros actuales.</td></tr>`}</tbody></table></div>`;
+ <div class="tbl-wrap" style="max-height:560px;overflow:auto"><table class="dt"><thead>${hd}</thead><tbody>${shown.map(o=>`<tr><td title="${o.name}">${o.name}</td>${cols.map(c=>`<td>${cellTxt(c,o)}</td>`).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length+1}" class="empty-td">${EMPTY()}</td></tr>`}</tbody></table></div>`;
  const nw=box.querySelector('.tbl-wrap');nw.scrollLeft=sx;nw.scrollTop=sy;window.scrollTo(window.scrollX,wy);
  $('ds_'+id).onchange=e=>{st.dim=e.target.value;st.sk=dflt.sk??-1;st.sd=dflt.sd||-1;dimTable(id,cols,dflt,extra)};
  box.querySelectorAll('th.s').forEach(th=>th.onclick=()=>{const c=+th.dataset.c;st.sd=st.sk===c?-st.sd:(c===-1?1:-1);st.sk=c;dimTable(id,cols,dflt,extra)});
  $('cp_'+id).onclick=()=>exportCsv('centro-mando-'+id,[dim.l,...cols.map(c=>c.l)],rows.map(o=>[o.name,...cols.map(c=>cellCsv(c,o))]))}
 const tblBox=id=>`<div id="tb_${id}"></div>`;
+/* estado vacío: dice qué pasó y qué hacer, en lugar de dejar la tabla en blanco */
+const EMPTY=()=>`<div class="empty-st"><span class="ic">🔍</span>No hay datos con estos filtros.<br>Prueba con <b>✕ Quitar filtros</b> o elige otro periodo. Si esperabas ver datos, revisa que la base se haya actualizado (corte de pagos <b>${DATA.corte}</b>).</div>`;
 
 function ring(title,p,center,cap,rows){const r=52,c=2*Math.PI*r,v=p==null?0:Math.max(0,Math.min(100,p)),col=bc(p);
  return `<div class="card ring-card"><div class="ring-title"><img src="${mImg(p,'mini')}" alt="">${title}</div><div class="ring-wrap"><svg viewBox="0 0 134 134" width="134" height="134"><circle cx="67" cy="67" r="${r}" fill="none" stroke="#E1E4E8" stroke-width="14"/><circle cx="67" cy="67" r="${r}" fill="none" stroke="${col}" stroke-width="14" stroke-linecap="round" stroke-dasharray="${c*v/100} ${c}" transform="rotate(-90 67 67)"/></svg><div class="ring-center"><div class="n" style="color:${col}">${center}</div><div class="cap">${cap}</div></div></div>${rows.map(x=>`<div class="re-row">${x}</div>`).join('')}</div>`}
@@ -361,7 +387,7 @@ function base(){const gen=FI.filter(x=>x[1]<3),pag=gen.filter(x=>x[1]===0),ven=g
 const PAL=['#5C2483','#00509C','#1E7A1E','#F2790A','#B5179E','#0E8A8A','#D97706','#3B4048','#DC2626','#8B939E'];
 const PLC=(()=>{const c={};D.forEach(r=>{if(r[C.alta])c[r[C.plan]]=(c[r[C.plan]]||0)+1});const o=Object.keys(c).sort((a,b)=>c[b]-c[a]);const m={};o.forEach((k,j)=>m[k]=PAL[j%PAL.length]);return m})();
 const FMC={'Efectivo':'#8B939E','Tarjeta de débito':'#00509C','Tarjeta de crédito':'#5C2483','Sin dato':'#D5D9DF'};
-function donut(items,center,sub){const tt=sum(items,x=>x[1]);if(!tt)return '<p class="note">Sin datos con los filtros actuales.</p>';const r=56,c=2*Math.PI*r;let off=0,seg='';
+function donut(items,center,sub){const tt=sum(items,x=>x[1]);if(!tt)return EMPTY();const r=56,c=2*Math.PI*r;let off=0,seg='';
  items.forEach(([l,v,col])=>{if(!v)return;const len=c*v/tt;seg+=`<circle cx="80" cy="80" r="${r}" fill="none" stroke="${col}" stroke-width="26" stroke-dasharray="${Math.max(len-1.5,.5)} ${c-Math.max(len-1.5,.5)}" stroke-dashoffset="${-off}" transform="rotate(-90 80 80)"><title>${l}: ${fmt(v)} (${P(v/tt)})</title></circle>`;off+=len});
  return `<div class="donut"><div class="donut-svg"><svg viewBox="0 0 160 160" width="160" height="160" role="img">${seg}<text x="80" y="78" text-anchor="middle" style="font-size:20px;font-weight:800;fill:#17191D">${center}</text><text x="80" y="95" text-anchor="middle" style="font-size:10px">${sub||''}</text></svg></div><div class="donut-leg">${items.filter(x=>x[1]>0).map(([l,v,col])=>`<div class="dl-row"><i style="background:${col}"></i><span class="dl-n" title="${l}">${l}</span><b>${fmt(v)}</b><em>${P(v/tt)}</em></div>`).join('')}</div></div>`}
 const donutBox=(tit,items,c,s)=>`<div class="card"><div class="ring-title" style="margin-bottom:10px">${tit}</div>${donut(items,c,s)}</div>`;
@@ -391,10 +417,43 @@ function hist(){const idx=HM,pos=new Map(idx.map((m,j)=>[m,j])),k=idx.length;
  SF.forEach(i=>idx.forEach((m,j)=>cu[j]+=Q[i][m]));
  return {idx,al,q1d,q1p,dd,dp,dnc,cu,es,rg,ra}}
 const hcats=h=>h.idx.map(ml);
+/* ================= MES EN CURSO (sigue filtros de zona, ignora el filtro de periodo) =================
+   Último mes con altas: avance contra cuota, dónde deberías ir hoy (cuota × días transcurridos / días del mes),
+   ritmo diario contra el mes anterior y reparto por cadena. El día se toma del corte de pagos, que sale del mismo
+   archivo de altas; si el corte ya pasó de ese mes, el mes se trata como cerrado. */
+const CORTE_D=(()=>{const p=String(DATA.corte).split('-'),mo=MN.indexOf(p[1]);return mo<0||!p[2]?null:{d:+p[0],ym:`${p[2]}-${String(mo+1).padStart(2,'0')}`}})();
+const diasMes=m=>{const [y,mo]=M[m].split('-');return new Date(+y,+mo,0).getDate()};
+const arcMini=(f,col)=>{const r=11,c=2*Math.PI*r,v=Math.max(0,Math.min(1,f||0));return `<svg viewBox="0 0 28 28" width="28" height="28"><circle cx="14" cy="14" r="${r}" fill="#fff" stroke="#E1E4E8" stroke-width="3.5"/><circle cx="14" cy="14" r="${r}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c*v} ${c}" transform="rotate(-90 14 14)"/></svg>`};
+function mesCard(){const m=HM[HM.length-1];if(m==null)return '';
+ const m0=HM.length>1?HM[HM.length-2]:null,dm=diasMes(m),abierto=!!CORTE_D&&CORTE_D.ym===M[m],dia=abierto?Math.max(1,Math.min(CORTE_D.d,dm)):dm,resta=dm-dia;
+ const ac=new Map(),qc=new Map();let a=0,a0=0,q=0;
+ UA.forEach(i=>{const r=D[i];if(r[C.coh]===m){a++;ac.set(r[C.cad],(ac.get(r[C.cad])||0)+1)}else if(r[C.coh]===m0)a0++});
+ if(QMg[m])SF.forEach(i=>{const v=Q[i][m];if(v){q+=v;qc.set(S[i][C.cad],(qc.get(S[i][C.cad])||0)+v)}});
+ /* ritmo diario vs mes anterior (completo) */
+ const rd=a/dia,rd0=m0!=null&&a0?a0/diasMes(m0):null,dv=rd0?rd/rd0-1:null;
+ const dcls=dv==null||Math.abs(dv)<.005?'eq':dv>0?'up':'dn';
+ const delta=dv==null?'':`<div class="mc-delta ${dcls}">${dcls==='up'?'▲':dcls==='dn'?'▼':'■'} ${dv>0?'+':''}${(100*dv).toFixed(1)}% ritmo diario vs ${ml(m0)}<span>(${rd.toFixed(1)} vs ${rd0.toFixed(1)} altas/día)</span></div>`;
+ /* avance contra cuota y contra lo esperado a la fecha */
+ const esp=q*dia/dm,pr=esp?100*a/esp:null,col=q?bc(pr):'var(--silver-d)';
+ let bar='',txt='';
+ if(q){const w=Math.min(100,100*a/q),pl=100*dia/dm,side=pl<12?' l':pl>88?' r':'';
+  bar=abierto?`<div class="mc-bar" title="La línea negra marca dónde deberías ir hoy para cerrar en cuota"><i style="width:${w}%;background:${col}"></i><b class="mc-pace${side}" style="left:${pl}%" data-l="Hoy: ${fmt(esp)}"></b></div>`:`<div class="mc-bar"><i style="width:${w}%;background:${col}"></i></div>`;
+  const falt=Math.max(0,q-a),proj=rd*dm;
+  txt=abierto?`<b>${P(a/q)}</b> de la cuota (${fmt(a)} de ${fmt(q)}) · a hoy deberías llevar <b>${fmt(esp)}</b> → vas <b style="color:${gapColor(a-esp)}">${sgn(a-esp)}</b>.<br>`+
+   (falt?`Faltan <b>${fmt(falt)}</b> altas en ${resta} días: necesitas <b>${resta?(falt/resta).toFixed(1):fmt(falt)} por día</b> (hoy vas a ${rd.toFixed(1)}). Al ritmo actual cierras en <b>~${fmt(proj)}</b> (${P(proj/q)} de la cuota).`:`<b style="color:var(--green)">¡Cuota del mes alcanzada!</b> Al ritmo actual cierras en ~${fmt(proj)} (${P(proj/q)}).`)
+   :`Mes cerrado: <b>${fmt(a)}</b> de <b>${fmt(q)}</b> (${P(a/q)}) · gap <b style="color:${gapColor(a-q)}">${sgn(a-q)}</b>.`}
+ else txt=`Este mes aún no tiene cuota de pospago válida (o es copia del mes anterior), por eso solo se muestra el ritmo de altas.`;
+ /* reparto por cadena: aro = parte del total; % = avance contra su cuota, con color según el ritmo esperado a hoy */
+ const chips=[...ac.entries()].sort((x,y)=>y[1]-x[1]).map(([k,v])=>{const qq=qc.get(k)||0,e=qq*dia/dm,p=e?100*v/e:null;
+  return `<div class="mc-chip" title="${DATA.cad[k]}: ${fmt(v)} altas${qq?` de ${fmt(qq)} de cuota · a hoy debería llevar ${fmt(e)}`:' · sin cuota'}">${arcMini(v/a,'#3B4048')}<span class="nm">${DATA.cad[k]} <small>${fmt(v)} · ${P(v/a)} del total</small></span>${qq?`<em style="color:${bc(p)}">${P(v/qq)} cuota</em>`:''}</div>`}).join('');
+ return `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${abierto?'Mes en curso':'Último mes con altas'} · ${ml(m)}</div><div class="mc-big">${fmt(a)}<small>altas</small></div>${delta}</div>
+  <div class="mc-side">${abierto?`Día ${dia} de ${dm}<span class="sep"> ·</span><b>${resta} ${resta===1?'día':'días'}</b>restantes`:`Mes cerrado<b>${dm} días</b>`}</div></div>
+  ${bar}<div class="mc-txt">${a?txt:'Aún no hay altas este mes con los filtros elegidos.'}</div>${chips?`<div class="mc-chips">${chips}</div>`:''}</div>`}
 /* ================= RESUMEN ================= */
 function vResumen(){const b=B,h=hist(),ac=b.alc==null?null:b.alc*100,q1=h.idx.map((_,j)=>h.q1d[j]?100*h.q1p[j]/h.q1d[j]:null);
  const rows=h.idx.map((m,j)=>`<tr><td>${ml(m)}</td><td>${fmt(h.al[j])}</td><td>${fmt(h.q1d[j])}</td><td>${fmt(h.q1p[j])}</td><td>${q1[j]==null?'—':pctCell(q1[j]/100)}</td><td>${fmt(h.al[j]-h.q1d[j])}</td></tr>`).join('');
  $('view-resumen').innerHTML=head('Resumen','¿Estamos vendiendo, convirtiendo y cobrando? Las tarjetas siguen el periodo de alta que elijas; los comparativos por mes son siempre los últimos 4 meses.',b.cob)+
+ mesCard()+
  sect('Producción y conversión')+`<div class="etiqueta-row">${etq('Altas (DN únicos)',fmt(b.dn),`${fmt(b.dn-b.sinF.length)} ya con factura`)}${etq('Cuota',b.q?fmt(b.q):'—',b.q?'pospago del periodo':'sin cuota en el periodo')}${etq('Alcance',b.alc==null?'—':P(b.alc),b.q?`${fmt(b.aq)} altas de ${fmt(b.q)}`:'',ac==null?'':bc(ac))}${etq('Gap',b.q?sgn(b.gap):'—','altas menos cuota',b.q?gapColor(b.gap):'')}${etq('Conversión',P(b.pconv),`${fmt(b.alta)} altas de ${fmt(b.n)} registros`,b.pconv==null?'':bc(b.pconv*100))}</div>`+
  sect('Cobranza')+`<div class="etiqueta-row">${etq('Facturas consideradas',fmt(b.due.length),'vencidas + pagadas antes de vencer')}${etq('Pagadas',fmt(b.duep.length),b.ant?`incluye ${fmt(b.ant)} pagadas antes de vencer`:'','var(--green)')}${etq('Vencidas sin pago',fmt(b.due.length-b.duep.length),'','var(--red)')}${etq('DN sin facturas vencidas',fmt(b.es[3]),'aún no se evalúan','var(--gray)')}${etq('Números sanos',P(b.psan),`${fmt(b.es[0])} de ${fmt(b.es[0]+b.es[1]+b.es[2])} evaluados`,b.psan==null?'':bc(b.psan*100))}</div>
  <div class="grid g4 stagger">${ring('Cobranza a la fecha',b.cob==null?null:b.cob*100,P(b.cob),'cobranza',[`Pagadas <b>${fmt(b.duep.length)}</b> de <b>${fmt(b.due.length)}</b>`,`Sin pago <b>${fmt(b.due.length-b.duep.length)}</b>`])}
@@ -472,7 +531,7 @@ const GT_COLS=[
  {l:'DN con pendiente',c:'th-checks',n:o=>o.es[1]},
  {l:'DN críticos',c:'th-red',n:o=>o.es[2]},
  {l:'% DN sanos',c:'th-porta',pct:1,band:1,n:o=>fr(o.es[0],o.es[0]+o.es[1]+o.es[2])}];
-const gtbl=(rows,lab)=>`<div class="tbl-wrap"><table class="dt"><thead><tr><th>${lab}</th>${GT_COLS.map(c=>`<th class="${c.c||''}">${c.l}</th>`).join('')}</tr></thead><tbody>${rows.map(o=>`<tr><td>${o.name}</td>${GT_COLS.map(c=>`<td>${cellTxt(c,o)}</td>`).join('')}</tr>`).join('')||'<tr><td colspan="10" class="empty">Sin datos.</td></tr>'}</tbody></table></div>`;
+const gtbl=(rows,lab)=>`<div class="tbl-wrap"><table class="dt"><thead><tr><th>${lab}</th>${GT_COLS.map(c=>`<th class="${c.c||''}">${c.l}</th>`).join('')}</tr></thead><tbody>${rows.map(o=>`<tr><td>${o.name}</td>${GT_COLS.map(c=>`<td>${cellTxt(c,o)}</td>`).join('')}</tr>`).join('')||'<tr><td colspan="10" class="empty-td">'+EMPTY()+'</td></tr>'}</tbody></table></div>`;
 function vFacturas(){const NN=['Primera','Segunda','Tercera','Cuarta'],gen=FI.filter(x=>x[1]<3),cn=(c,n)=>FI.filter(x=>x[2]===n+1&&x[1]===c).length,byN=NN.map((_,n)=>[cn(0,n),cn(1,n),cn(2,n),cn(3,n)]);
  const mk=ix=>{const nm=ix===C.forma?DATA.forma:DATA.plan;return [...agg(ix).values()].filter(o=>o.dn>0).map(o=>(o.name=nm[o.k],o)).sort((a,b)=>b.dn-a.dn)};
  const fm=mk(C.forma),pl=mk(C.plan).slice(0,10);
@@ -530,7 +589,7 @@ function vBajas(){const bj=U.filter(i=>CANC(D[i][C.lin])),ba=bj.filter(i=>D[i][C
  const rc=HM.map(m=>{const a=UA.filter(i=>D[i][C.coh]===m),x=a.filter(i=>D[i][C.lin]===3).length,y=a.filter(i=>D[i][C.lin]===4||D[i][C.lin]===5).length;return `<tr><td>${ml(m)}</td><td>${fmt(a.length)}</td><td>${fmt(x)}</td><td>${fmt(y)}</td><td>${fmt(a.length-x-y)}</td><td>${pctCell(a.length?1-(x+y)/a.length:null)}</td></tr>`}).join('');
  $('sub-baj').innerHTML=head('Bajas, exportados y riesgo','Pospagos que ya son baja, predesactivados o desactivados: si quedaron con adeudo, cuánto duraron activos y en qué mes ocurrió.',pb==null?null:1-pb*2)+
  `<div class="etiqueta-row">${etq('Pospagos',fmt(U.length),'alta confirmada')}${etq('Bajas',fmt(ba.length),P(fr(ba.length,U.length)),'var(--red)')}${etq('Predesactivados / desactivados',fmt(pd.length),P(fr(pd.length,U.length))+` · ${fmt(exp.length)} exportados`,'var(--orange-n)')}${etq('Con adeudo vencido',fmt(ad.length),P(fr(ad.length,bj.length))+' de las bajas y predesactivados','var(--red)')}${etq('Sin adeudo',fmt(bj.length-ad.length),P(fr(bj.length-ad.length,bj.length)),'var(--green)')}${etq('Días activos (promedio)',dur.length?fmt(sum(dur,i=>D[i][C.dact])/dur.length):'—','desde el alta hasta la baja')}</div>
- <div class="grid g2"><div class="card"><div class="ring-title" style="margin-bottom:6px">Bajas y predesactivados por mes en que ocurrieron</div>${legend([['Con adeudo',CVEN],['Sin adeudo',CPAG]])}${bidx.length?stackChart(bidx.map(ml),[{n:'Con adeudo',c:CVEN,v:bidx.map(i=>mb[0][i])},{n:'Sin adeudo',c:CPAG,v:bidx.map(i=>mb[1][i])}],null):'<p class="note">Sin registros en la selección.</p>'}</div>
+ <div class="grid g2"><div class="card"><div class="ring-title" style="margin-bottom:6px">Bajas y predesactivados por mes en que ocurrieron</div>${legend([['Con adeudo',CVEN],['Sin adeudo',CPAG]])}${bidx.length?stackChart(bidx.map(ml),[{n:'Con adeudo',c:CVEN,v:bidx.map(i=>mb[0][i])},{n:'Sin adeudo',c:CPAG,v:bidx.map(i=>mb[1][i])}],null):EMPTY()}</div>
  <div class="card"><div class="ring-title" style="margin-bottom:10px">¿Cuánto duraron activos?</div>${hbars(bn,dur.length,['#DC2626','#F2790A','#D97706','#8B939E','#3B4048'])}</div></div>`+
  sect('Por periodo de alta')+`<div class="tbl-wrap"><table class="dt"><thead><tr><th>Periodo de alta</th><th class="th-total">Pospagos</th><th class="th-red">Bajas</th><th class="th-checks">Predesactivados</th><th class="th-porta">Siguen vigentes</th><th>% Vigentes</th></tr></thead><tbody>${rc}</tbody></table></div>`+
  sect('Bajas y predesactivados por zona, tienda y estructura')+tblBox('baj');dimTable('baj',BAJ_COLS,{dim:'sup',sk:1,sd:-1})}
