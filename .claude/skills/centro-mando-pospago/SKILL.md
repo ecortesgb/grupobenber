@@ -1,6 +1,6 @@
 ---
 name: centro-mando-pospago
-description: Instala, actualiza o da mantenimiento al Centro de Mando Pospago de Grupo Benber (genera la página desde ARCHIVOS GB\BASE, la publica cifrada en GitHub Pages /pospago/ y programa la tarea L-V 6:00 pm). Úsala cuando Elías diga "instala/actualiza/arregla el centro de mando pospago".
+description: Instala, actualiza o da mantenimiento al Centro de Mando Pospago de Grupo Benber (genera la página desde ARCHIVOS GB\BASE, la publica cifrada en GitHub Pages /pospago/ y deja el botón de actualización manual). Úsala cuando Elías diga "instala/actualiza/arregla el centro de mando pospago".
 ---
 
 # Centro de Mando Pospago — instalación y mantenimiento
