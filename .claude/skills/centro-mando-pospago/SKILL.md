@@ -6,6 +6,7 @@ description: Instala, actualiza o da mantenimiento al Centro de Mando Pospago de
 # Centro de Mando Pospago — instalación y mantenimiento
 
 Código en `centro-mando-pospago/` de este repo. Publica en `docs/pospago/index.html` → https://ecortesgb.github.io/grupobenber/pospago/
+**Requisito:** esta skill solo funciona dentro de un clon de `ecortesgb/grupobenber` (usa rutas del repo). Si la carpeta `centro-mando-pospago/` no existe en el directorio actual, pide permiso y clona el repo antes de seguir.
 Elías habla español y quiere respuestas cortas, con archivos completos y listos; pregunta antes de tocar algo que ya funciona.
 
 ## Instalar (Windows, PC de Elías)
