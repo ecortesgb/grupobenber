@@ -455,8 +455,11 @@ h1{font-size:18px;margin:0 0 4px}small{color:#a8afb9}
 input{width:100%;margin:18px 0 10px;padding:11px 12px;border-radius:8px;border:1px solid #4a515c;background:#1b1e23;color:#fff;font:inherit}
 button{width:100%;padding:11px;border:0;border-radius:8px;background:#ee6602;color:#fff;font:inherit;font-weight:600;cursor:pointer}
 #m{min-height:18px;margin:10px 0 0;color:#ff8a80;font-size:13px}
+.aviso{margin:16px 0 0;padding:10px 12px;border:1px solid #3a3f48;border-left:3px solid #EE6602;border-radius:8px;background:rgba(238,102,2,.06);color:#a8afb9;font-size:11px;line-height:1.45;text-align:left}
+.aviso b{color:#f2f3f5}
 </style></head><body><div class="box"><h1>Centro de Mando<span class="tag">POSPAGO</span></h1><small>Grupo Benber · acceso interno</small>
-<form id="f"><input id="k" type="password" placeholder="Contraseña" autocomplete="current-password" autofocus><button>Entrar</button></form><p id="m"></p></div>
+<form id="f"><input id="k" type="password" placeholder="Contraseña" autocomplete="current-password" autofocus><button>Entrar</button></form><p id="m"></p>
+<p class="aviso"><b>🔒 Aviso de confidencialidad.</b> Uso exclusivo de personal autorizado de Grupo Benber y Telefónica Movistar México. La información es confidencial: al ingresar aceptas usarla solo para fines laborales, bajo tu responsabilidad, y no copiarla, compartirla ni difundirla. El acceso no autorizado está prohibido.</p></div>
 <script>
 (function(){
 var P=__PAYLOAD__;
