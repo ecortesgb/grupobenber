@@ -64,6 +64,9 @@ No pasa nada si las dejas en tu tabla — el script simplemente no las lee.
 """
 
 import argparse
+import base64
+import gzip
+import hashlib
 import json
 import os
 import sys
@@ -487,7 +490,78 @@ def build_historico_dataset(path):
 # Render final
 # ---------------------------------------------------------------------------
 
-def render_html(dataset, template_path, out_path, titulo, hist_semanal=None, hist_mensual=None):
+
+# ---------------------------------------------------------------------------
+# Cifrado con contraseña (el repo y la página son públicos)
+# ---------------------------------------------------------------------------
+# La clave NUNCA va en el repo: se lee de la variable de entorno GB_AVANCE_CLAVE o de avance-src/config.json
+# ({"clave": "..."}; ese archivo está en .gitignore). La página se comprime (gzip) y se cifra con AES-GCM;
+# la llave sale de la contraseña con PBKDF2-SHA256. El navegador la descifra al escribir la contraseña.
+PBKDF2_ITER = 300000
+
+def leer_clave():
+    clave = os.environ.get("GB_AVANCE_CLAVE", "").strip()
+    if clave:
+        return clave
+    cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    if os.path.exists(cfg):
+        try:
+            with open(cfg, "r", encoding="utf-8") as f:
+                return str(json.load(f).get("clave", "")).strip()
+        except Exception as e:
+            print(f"ERROR: avance-src/config.json no se pudo leer ({e}).", file=sys.stderr)
+            sys.exit(3)
+    return ""
+
+GATE_HTML = """<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>__TITULO__</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:#17191D;color:#f2f3f5;font-family:Poppins,system-ui,Segoe UI,Arial,sans-serif;display:grid;place-items:center;padding:16px}
+.box{width:min(380px,100%);background:#20232B;border:1px solid #343a43;border-radius:14px;padding:28px 24px;text-align:center}
+h1{font-size:18px;margin:0 0 4px}small{color:#a8afb9}
+.tag{display:inline-block;background:#EE6602;color:#fff;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:99px;margin-left:8px;vertical-align:middle}
+input{width:100%;margin:18px 0 10px;padding:11px 12px;border-radius:8px;border:1px solid #4a515c;background:#17191D;color:#fff;font:inherit}
+button{width:100%;padding:11px;border:0;border-radius:8px;background:#EE6602;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+#m{min-height:18px;margin:10px 0 0;color:#ff8a80;font-size:13px}
+</style></head><body><div class="box"><h1>Avance GB<span class="tag">GRUPO BENBER</span></h1><small>Acceso interno · actualizado __GENERADO__</small>
+<form id="f"><input id="k" type="password" placeholder="Contraseña" autocomplete="current-password" autofocus><button id="b">Entrar</button></form><p id="m"></p></div>
+<script>
+(function(){
+var P=__PAYLOAD__;
+function B(x){var s=atob(x),u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
+async function abrir(pw){
+ var km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+ var k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:B(P.s),iterations:P.n,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+ var z=await crypto.subtle.decrypt({name:'AES-GCM',iv:B(P.i)},k,B(P.c));
+ return await new Response(new Blob([z]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
+document.getElementById('f').onsubmit=async function(e){
+ e.preventDefault();var m=document.getElementById('m'),b=document.getElementById('b');
+ if(!window.crypto||!crypto.subtle||!window.DecompressionStream){m.textContent='Tu navegador es muy antiguo: actualízalo o abre la página en Chrome.';return}
+ m.style.color='#a8afb9';m.textContent='Abriendo…';b.disabled=true;
+ var h;try{h=await abrir(document.getElementById('k').value.trim())}catch(err){m.style.color='#ff8a80';m.textContent='Contraseña incorrecta';b.disabled=false;return}
+ P=null;document.open();document.write(h);document.close();
+};
+})();
+</script></body></html>"""
+
+def cifrar_html(html, clave, titulo, generado):
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        print('ERROR: falta el paquete "cryptography". Instálalo una vez con:  py -m pip install cryptography', file=sys.stderr)
+        sys.exit(3)
+    salt, iv = os.urandom(16), os.urandom(12)
+    k = hashlib.pbkdf2_hmac("sha256", clave.encode("utf-8"), salt, PBKDF2_ITER, 32)
+    c = AESGCM(k).encrypt(iv, gzip.compress(html.encode("utf-8"), 9), None)
+    b = lambda x: base64.b64encode(x).decode()
+    payload = json.dumps({"s": b(salt), "i": b(iv), "c": b(c), "n": PBKDF2_ITER})
+    return GATE_HTML.replace("__TITULO__", titulo).replace("__GENERADO__", generado).replace("__PAYLOAD__", payload)
+
+
+def render_html(dataset, template_path, out_path, titulo, hist_semanal=None, hist_mensual=None, clave=None):
     with open(template_path, "r", encoding="utf-8") as f:
         html = f.read()
 
@@ -543,8 +617,11 @@ def render_html(dataset, template_path, out_path, titulo, hist_semanal=None, his
         print("Aviso: falta vendor/html2canvas.min.js -- el botón de captura de tablas no funcionará.", file=sys.stderr)
     html = html.replace("/*__HTML2CANVAS__*/", h2c)
 
+    if clave:
+        html = cifrar_html(html, clave, titulo, dataset["meta"]["generado"])
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
+    print("  Cifrado con contraseña." if clave else "  AVISO: generado SIN cifrar (--sin-cifrar).")
 
     size_kb = len(html.encode("utf-8")) / 1024
     print(f"\nListo: {out_path}  ({size_kb:,.0f} KB)")
@@ -571,7 +648,15 @@ def main():
                           "anteriores a la ventana de detalle diario -- ver generador_historico.py.")
     ap.add_argument("--historico-mensual", default=None,
                      help="CSV con el histórico mensual (1 fila = 1 tienda x mes), mismo origen que --historico-semanal.")
+    ap.add_argument("--sin-cifrar", action="store_true",
+                     help="Solo para revisar en la PC: genera el HTML sin contraseña. NUNCA publiques ese archivo.")
     args = ap.parse_args()
+
+    clave = None if args.sin_cifrar else leer_clave()
+    if not args.sin_cifrar and not clave:
+        print("ERROR: falta la contraseña de Avance GB. Ponla en avance-src/config.json como {\"clave\": \"...\"} "
+              "(ese archivo no se sube) o en la variable de entorno GB_AVANCE_CLAVE. No se generó nada.", file=sys.stderr)
+        sys.exit(3)
 
     print(f"Leyendo {args.archivo} ...")
     headers, rows = load_rows(args.archivo, args.sheet)
@@ -593,7 +678,7 @@ def main():
     hist_semanal = build_historico_dataset(args.historico_semanal)
     hist_mensual = build_historico_dataset(args.historico_mensual)
 
-    render_html(dataset, args.template, args.out, args.titulo, hist_semanal, hist_mensual)
+    render_html(dataset, args.template, args.out, args.titulo, hist_semanal, hist_mensual, clave)
 
 
 if __name__ == "__main__":
