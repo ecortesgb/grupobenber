@@ -439,7 +439,7 @@ function mesCard(){const m=HM[HM.length-1];if(m==null)return '';
  if(q){const w=Math.min(100,100*a/q),pl=100*dia/dm,side=pl<12?' l':pl>88?' r':'';
   bar=abierto?`<div class="mc-bar" title="La línea negra marca dónde deberías ir hoy para cerrar en cuota"><i style="width:${w}%;background:${col}"></i><b class="mc-pace${side}" style="left:${pl}%" data-l="Hoy: ${fmt(esp)}"></b></div>`:`<div class="mc-bar"><i style="width:${w}%;background:${col}"></i></div>`;
   const falt=Math.max(0,q-a),proj=rd*dm;
-  txt=abierto?`<b>${P(a/q)}</b> de la cuota (${fmt(a)} de ${fmt(q)}) · a hoy deberías llevar <b>${fmt(esp)}</b> → vas <b style="color:${gapColor(a-esp)}">${sgn(a-esp)}</b>.<br>`+
+  txt=abierto?`<b>${P(a/q)}</b> de la cuota (${fmt(a)} de ${fmt(q)}) · a hoy deberías llevar <b>${fmt(esp)}</b> → vas <b style="color:${gapColor((Math.round(a-esp)||0))}">${sgn((Math.round(a-esp)||0))}</b>.<br>`+
    (falt?`Faltan <b>${fmt(falt)}</b> altas en ${resta} días: necesitas <b>${resta?(falt/resta).toFixed(1):fmt(falt)} por día</b> (hoy vas a ${rd.toFixed(1)}). Al ritmo actual cierras en <b>~${fmt(proj)}</b> (${P(proj/q)} de la cuota).`:`<b style="color:var(--green)">¡Cuota del mes alcanzada!</b> Al ritmo actual cierras en ~${fmt(proj)} (${P(proj/q)}).`)
    :`Mes cerrado: <b>${fmt(a)}</b> de <b>${fmt(q)}</b> (${P(a/q)}) · gap <b style="color:${gapColor(a-q)}">${sgn(a-q)}</b>.`}
  else txt=`Este mes aún no tiene cuota de pospago válida (o es copia del mes anterior), por eso solo se muestra el ritmo de altas.`;
