@@ -4324,7 +4324,7 @@ function comparativoDatos(){
   const parcial = FECHAS[L] >= hoyLocalISO();          // el último día con datos es hoy: todavía llegan datos
   const wi = DATE_TO_SEMANA[e], R = WEEK_RANGES[wi]; if(wi==null || !R) return null;
   let modo, cur, refs = [];                              // refs[k-1] = mismo tramo k semanas antes
-  if(currentRange.startIdx >= e){
+  if(currentRange.startIdx >= currentRange.endIdx){   // un solo día elegido (Hoy o un día); un lunes dentro de 'Semana' sigue siendo semana en curso
     modo = 'dia'; cur = [e,e];
     for(let k=1;k<=4;k++){ const d=e-7*k; if(d>=0 && DATE_TO_SEMANA[d]!=null) refs.push({a:d,b:d,lbl:diaTxt(d)}); }
   } else {
