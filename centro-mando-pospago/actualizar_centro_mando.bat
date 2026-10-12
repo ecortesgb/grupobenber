@@ -1,5 +1,5 @@
 @echo off
-REM Genera el Centro de Mando Pospago y lo publica en GitHub Pages (L-V 6:00 pm via Programador de tareas).
+REM Genera el Centro de Mando Pospago y lo publica en GitHub Pages (lo llama actualizar_ahora.bat; ya no hay tarea programada).
 chcp 65001 >nul
 cd /d "%~dp0"
 if not exist salida mkdir salida

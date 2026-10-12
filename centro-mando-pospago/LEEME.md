@@ -1,7 +1,8 @@
-# Centro de Mando Pospago · actualización automática
+# Centro de Mando Pospago · actualización manual
 
 Lee `ARCHIVOS GB\BASE`, recalcula todo y publica la página en **https://ecortesgb.github.io/grupobenber/pospago/**
-(GitHub Pages, carpeta `docs/pospago/`), de lunes a viernes a las 6:00 pm.
+(GitHub Pages, carpeta `docs/pospago/`). **Se actualiza a mano**, solo cuando llega información nueva de altas pospago:
+doble clic en `actualizar_ahora.bat` (icono del escritorio "Actualizar Centro de Mando").
 
 **El repo es público**, por eso la página se publica **cifrada con contraseña** (AES-GCM). Sin la clave solo se ve una pantalla de acceso.
 
@@ -14,7 +15,7 @@ En Claude Code, dentro de este repo, escribe: **`instala el centro de mando posp
 2. Copia `config.ejemplo.json` → `config.json` y pon tu clave (el archivo está en `.gitignore`).
 3. `py -3 build_centro_mando.py` → revisa `salida\index_abierto.html` (sin clave, solo local).
 4. `py -3 build_centro_mando.py --deploy` → publica.
-5. Clic derecho en `instalar_tarea_18h.ps1` → Ejecutar con PowerShell (tarea L-V 6:00 pm).
+5. Para actualizar después: doble clic en `actualizar_ahora.bat`. No hay tarea programada; si una PC todavía tiene la de las 6:00 pm, quítala con clic derecho en `quitar_tarea_18h.ps1` → Ejecutar con PowerShell.
 
 ## Qué lee
 `ALTAS\Pospago\Mensual\*.xlsx` (POSPAGO) · `REGISTROS\Semanal\2026\26-Sxx.csv` · `REGISTROS TELEFONICA\Pospago\26-Sxx.xlsx` ·

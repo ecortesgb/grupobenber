@@ -1,6 +1,6 @@
 ---
 name: centro-mando-pospago
-description: Instala, actualiza o da mantenimiento al Centro de Mando Pospago de Grupo Benber (genera la página desde ARCHIVOS GB\BASE, la publica cifrada en GitHub Pages /pospago/ y programa la tarea L-V 6:00 pm). Úsala cuando Elías diga "instala/actualiza/arregla el centro de mando pospago".
+description: Instala, actualiza o da mantenimiento al Centro de Mando Pospago de Grupo Benber (genera la página desde ARCHIVOS GB\BASE y la publica cifrada en GitHub Pages /pospago/; la actualización es manual). Úsala cuando Elías diga "instala/actualiza/arregla el centro de mando pospago".
 ---
 
 # Centro de Mando Pospago — instalación y mantenimiento
@@ -14,7 +14,7 @@ Elías habla español y quiere respuestas cortas, con archivos completos y listo
 3. **Pide a Elías la clave de acceso** (no la inventes ni la muestres de vuelta). Crea `centro-mando-pospago/config.json` desde `config.ejemplo.json`. Ese archivo está en `.gitignore`: **nunca lo subas**.
 4. Genera sin publicar: `py -3 build_centro_mando.py` (≈75 s). Revisa en el log: cuotas usadas, corte de pagos, altas (~2,500+), facturas, sin errores.
 5. Publica: `py -3 build_centro_mando.py --deploy` (copia a `docs/pospago/`, commit y push). Confirma que GitHub Pages sirve `main` carpeta `/docs`; el enlace tarda 1–2 min.
-6. Actualización MANUAL (decisión de Elías: la info no llega diario). Icono del escritorio "Actualizar Centro de Mando" → `centro-mando-pospago\actualizar_ahora.bat` (pull, genera, publica y muestra el resultado). NO crees la tarea de las 6 pm salvo que Elías la pida (`instalar_tarea_18h.ps1` existe para eso).
+6. Actualización MANUAL (decisión de Elías: la info no llega diario). Icono del escritorio "Actualizar Centro de Mando" → `centro-mando-pospago\actualizar_ahora.bat` (pull, genera, publica y muestra el resultado). NO hay tarea programada (Elías actualiza solo cuando llega información de altas). Si existe la tarea vieja "Centro de Mando Pospago" de las 6 pm, quítala con `quitar_tarea_18h.ps1`.
 7. Abre el enlace, entra con la clave y confirma que carga y muestra "actualizado <fecha hora>" en el encabezado.
 
 ## Reglas que NO se cambian sin que Elías lo pida
