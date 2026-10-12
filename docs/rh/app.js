@@ -13,6 +13,20 @@ const diffD = (a, b) => Math.round((new Date(a + 'T12:00:00') - new Date(b + 'T1
 const fdate = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(2, 4) : '—';
 const fmt = n => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('es-MX');
 const toast = m => { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.k); toast.k = setTimeout(() => t.hidden = true, 2800); };
+/* El catálogo de tiendas junta varias fuentes y el mismo nombre llega escrito distinto ('Coppel' / 'COPPEL', 'León' / 'LEON').
+   Se unifica al cargar: se queda la escritura más común; las cadenas conocidas se escriben siempre igual porque hay lógica que las compara por nombre. */
+const kNom = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+const CAD_STD = Object.fromEntries(['Coppel', 'Elektra', 'Suburbia', 'Cimaco'].map(c => [kNom(c), c]));
+const CAMPOS_TIENDA = ['cadena', 'estado', 'region', 'gerente', 'supervisor', 'rrhh', 'reclutador', 'zona_rrhh', 'clase', 'tipo_ekt', 'subdireccion_gb', 'sub_terr', 'lider'];
+function unificarNombres(rows, campos) {
+  campos.forEach(k => {
+    const cnt = new Map(); rows.forEach(r => { const v = r[k]; if (typeof v === 'string' && v.trim()) cnt.set(v.trim(), (cnt.get(v.trim()) || 0) + 1); });
+    const best = new Map(); [...cnt.entries()].sort((a, b) => b[1] - a[1]).forEach(([v]) => { const kk = kNom(v); if (!best.has(kk)) best.set(kk, v); });
+    if (k === 'cadena') Object.entries(CAD_STD).forEach(([kk, v]) => { if (best.has(kk)) best.set(kk, v); });
+    rows.forEach(r => { const v = r[k]; if (typeof v === 'string' && v.trim()) r[k] = best.get(kNom(v)); });
+  });
+  return rows;
+}
 const NIVEL = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Gerente', rh: 'RH', reclutador: 'Reclutador' };
 
 /* ====================================================================== capa de datos ====================================================================== */
@@ -83,17 +97,17 @@ const Real = {
 /* ---------- datos de ejemplo (todo ficticio; escribe solo en memoria) ---------- */
 const Demo = (() => {
   const nombres = ['Ana Karen Solís', 'Luis Ángel Ortega', 'María Fernanda Cruz', 'José Manuel Reyes', 'Daniela Ruiz Peña', 'Carlos Iván Mora', 'Paola Estrada', 'Jorge Alberto Lara', 'Valeria Núñez', 'Diego Armando Gil', 'Karla Itzel Vega', 'Miguel Ángel Soto', 'Fátima Luna', 'Ricardo Salas', 'Brenda Morales', 'Héctor Duarte', 'Itzel Aguirre', 'Omar Castañeda', 'Lucía Montes', 'Andrés Cabrera', 'Nancy Palacios', 'Emilio Rangel', 'Sofía Barrera', 'Raúl Meza'];
-  const est = [['Puebla', 'SUR', 'Julio César Aldana'], ['Veracruz', 'SUR', 'Jessica Santos'], ['Guanajuato', 'OCCIDENTE', 'Andrea Maya'], ['Nuevo León', 'NORTE', 'Flor Morado'], ['Ciudad de México', 'CENTRO', 'Dulce Apaiz']];
+  const est = [['Puebla', 'SUR', 'Coordinador RH Sur 1'], ['Veracruz', 'SUR', 'Coordinador RH Sur 2'], ['Guanajuato', 'OCCIDENTE', 'Coordinador RH Occidente'], ['Nuevo León', 'NORTE', 'Coordinador RH Norte'], ['Ciudad de México', 'CENTRO', 'Coordinador RH Centro']];
   const cad = ['Coppel', 'Elektra', 'Suburbia', 'Cimaco'];
   const tiendas = {}; let id = 1000;
-  const tien = []; for (let i = 0; i < 40; i++) { const e = est[i % 5]; const t = { idpdv: id + i, nombre: (cad[i % 4]).toUpperCase() + ' ' + ['CENTRO', 'PLAZA SOL', 'NORTE', 'REFORMA', 'ALAMEDA', 'LAS TORRES', 'CANADA', 'AZTECAS'][i % 8] + ' ' + (i + 1), cadena: cad[i % 4], estado: e[0], region: e[1], gerente: 'Gerente Demo', supervisor: 'Supervisor ' + (i % 7 + 1), rrhh: e[2], posiciones: 1 + ((id + i) % 2), zona_rrhh: ['ANDREA AGUILAR BUENO', 'GUADALUPE GOMEZ GARCIA', 'MARIA EUGENIA JUAREZ MORA'][i % 3] }; tiendas[t.idpdv] = t; tien.push(t); }
+  const tien = []; for (let i = 0; i < 40; i++) { const e = est[i % 5]; const t = { idpdv: id + i, nombre: (cad[i % 4]).toUpperCase() + ' ' + ['CENTRO', 'PLAZA SOL', 'NORTE', 'REFORMA', 'ALAMEDA', 'LAS TORRES', 'CANADA', 'AZTECAS'][i % 8] + ' ' + (i + 1), cadena: cad[i % 4], estado: e[0], region: e[1], gerente: 'Gerente Demo', supervisor: 'Supervisor ' + (i % 7 + 1), rrhh: e[2], posiciones: 1 + ((id + i) % 2), zona_rrhh: ['ZONA RH DEMO 1', 'ZONA RH DEMO 2', 'ZONA RH DEMO 3'][i % 3] }; tiendas[t.idpdv] = t; tien.push(t); }
   const mkAus = (u, k) => { const m = ['Permiso especial', 'Vacaciones', 'Incapacidad (IMSS)', 'Tema médico (particular)']; return Array.from({ length: k }, (_, j) => ({ motivo: m[(u + j) % 4], fecha_inicio: addD(HOY, -(8 + j * 21 + u % 9)), dias: 1 + (u + j) % 5, fecha_regreso: addD(HOY, -(8 + j * 21 + u % 9) + 1 + (u + j) % 5) })); };
   let alertas = nombres.map((n, i) => { const dias = [2, 2, 3, 2, 4, 6, 2, 3, 9, 2, 5, 2, 3, 2, 12, 2, 4, 3, 2, 7, 2, 3, 2, 5][i]; const t = tien[(i * 7) % 40]; return { id: i + 1, usuario: 'DEMO' + String(100 + i), nombre: n, ultimo: addD(HOY, -dias), dias, idpdv: t.idpdv, empresa: ['Benber SS', 'Revelor', 'Doma Legal', 'Atmosphera'][i % 4], ingreso: addD(HOY, -(30 + i * 37)), aus: mkAus(i, i % 4 === 0 ? 3 : i % 3) }; });
   let vigentes = [['Vacaciones', 6, 3], ['Incapacidad (IMSS)', 10, 5], ['Permiso especial', 3, 1], ['Tema médico (particular)', 4, 2], ['Vacaciones', 12, 8], ['Incapacidad (IMSS)', 20, 9], ['Permiso especial', 2, 1]].map((v, i) => ({ id: 500 + i, usuario: 'DEMO' + (300 + i), nombre: ['Pedro Lozano', 'Gabriela Ibarra', 'Mónica Téllez', 'Saúl Cervantes', 'Teresa Pineda', 'Víctor Maya', 'Elena Ochoa'][i], motivo: v[0], inicio: addD(HOY, -v[2]), dias: v[1], regreso: addD(HOY, v[1] - v[2]), idpdv: tien[(i * 5) % 40].idpdv }));
   const wait = ms => new Promise(r => setTimeout(r, ms));
   return {
     async init() { return true; }, async login() { }, async logout() { location.href = location.pathname; },
-    async me() { return { id: 'demo', nombre: 'Usuario de ejemplo', rol: 'rh', rrhh: 'Julio César Aldana', zona: null, permisos: Object.fromEntries(['alertas', 'ausencias', 'bajas', 'colaboradores', 'posibles_ingresos', 'expedientes', 'reportes', 'exportar_csv', 'exportar_foto', 'alta_revision', 'datos_sensibles'].map(m => [m, { ver: true, crear: true, editar: true, borrar: false, alcance: 'estado' }])) }; },
+    async me() { return { id: 'demo', nombre: 'Usuario de ejemplo', rol: 'rh', rrhh: 'Coordinador RH Sur 1', zona: null, permisos: Object.fromEntries(['alertas', 'ausencias', 'bajas', 'colaboradores', 'posibles_ingresos', 'expedientes', 'reportes', 'exportar_csv', 'exportar_foto', 'alta_revision', 'datos_sensibles'].map(m => [m, { ver: true, crear: true, editar: true, borrar: false, alcance: 'estado' }])) }; },
     async catalogos() { return { tiendas, motAus: ['Permiso especial', 'Vacaciones', 'Incapacidad (IMSS)', 'Tema médico (particular)', 'No localizado'], motBaja: [['Motivos personales', 'Voluntaria'], ['Renuncia voluntaria', 'Voluntaria'], ['Abandono de trabajo', 'Voluntaria'], ['Mejor oferta laboral (telefonía)', 'Voluntaria'], ['Mejor oferta laboral (otro rubro)', 'Voluntaria'], ['Cambio a marca o cadena', 'Voluntaria'], ['Malas prácticas', 'Involuntaria'], ['Baja productividad', 'Involuntaria'], ['Rescisión de contrato', 'Involuntaria'], ['Faltas consecutivas e injustificadas', 'Involuntaria']].map(([motivo, tipo]) => ({ motivo, tipo })) }; },
     async alertas() { await wait(150); return alertas.map(a => ({ ...a, aus: a.aus.map(x => ({ usuario_fieldwy: a.usuario, ...x })) })); },
     async vigentes() { await wait(100); return vigentes; },
@@ -222,6 +236,7 @@ function tdraw(id) {
   if (T.groups) { let k = 0; h += '<tr class="g1">' + T.groups.map(g => { const cells = T.cols.slice(k, k + g.span); const fixed = k < T.fix; const lf = fixed ? left[k] : 0; const w = fixed ? cells.reduce((a, c, j) => a + (k + j < T.fix ? (c.w || 110) : 0), 0) : 0; const r = `<th colspan="${g.span}" class="gh ${g.cls || ''}${fixed ? ' fx' : ''}" ${fixed ? `style="left:${lf}px;min-width:${w}px"` : ''}>${g.t}</th>`; k += g.span; return r; }).join('') + '</tr>'; }
   h += `<tr class="${T.groups ? 'g2' : ''}">` + T.cols.map(th).join('') + '</tr></thead><tbody>';
   h += shown.map(r => '<tr>' + T.cols.map((c, i) => { const v = c.v(r), disp = c.r ? c.r(r) : (v == null ? '—' : (typeof v === 'number' ? (c.h === 'IDPDV' ? v : fmt(v)) : esc(v))); const cl = (typeof c.c === 'function' ? c.c(r) : c.c) || ''; return `<td class="${c.t ? 't ' : ''}${i < T.fix ? 'fx ' : ''}${cl}" ${i < T.fix ? `style="left:${left[i]}px;min-width:${c.w || 110}px;max-width:${c.w || 110}px"` : ''}>${i < T.fix ? `<div class="cut" style="max-width:${(c.w || 110) - 24}px" title="${esc(String(v == null ? '' : v))}">${disp}</div>` : disp}</td>`; }).join('') + '</tr>').join('');
+  if (!shown.length) h += `<tr><td colspan="${T.cols.length}" class="t td-vacio">${T.q ? `🔍 Ninguna fila coincide con «${esc(T.q)}». Borra o cambia lo que escribiste en Buscar.` : '🔍 No hay datos con estos filtros. Prueba con <b>✕ Quitar filtros</b> arriba o elige otro periodo.'}</td></tr>`;
   el.innerHTML = h + '</tbody>';
   const n = $(id + '-n'); if (n) n.textContent = rows.length > T.lim ? `Mostrando ${T.lim} de ${fmt(rows.length)}` : `${fmt(rows.length)} filas`;
 }
@@ -546,6 +561,33 @@ function sobredim(x, wi) {
   const tope = sd[3], chk = sd[1], proy = sd[6], exc = Math.max(0, proy - tope);
   return { tope, chk, proy, exc, nivel: chk > tope ? 2 : exc > 0.05 ? 1 : 0 };   // 2 = ya se pasó del tope, 1 = a este ritmo se pasa
 }
+/* ----- semana en curso (lun-dom): checks contra la cuota de la semana (sigue los filtros de estructura, ignora el periodo elegido) -----
+   Se mide con días completos: si el último día con datos es hoy, hoy no cuenta todavía (los checks siguen llegando).
+   "Deberías llevar" = cuota de la semana × días completos ÷ 7. Ritmo = checks por día contra la semana anterior completa. */
+const diasEntre = (d, h) => { const o = []; for (let x = d; x <= h; x = addD(x, 1)) o.push(x); return o; };
+const semTxt = w => String(w.w || '').replace(/^\d+-/, '');
+const arcMini = (f, col) => { const r = 11, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, f || 0)); return `<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><circle cx="14" cy="14" r="${r}" fill="#fff" stroke="#E1E4E8" stroke-width="3.5"/><circle cx="14" cy="14" r="${r}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c * v} ${c}" transform="rotate(-90 14 14)"/></svg>`; };
+function semanaCurso(xs) {
+  const L = limites(), W = ventana(), ult = L.max >= HOY ? addD(HOY, -1) : L.max;
+  let i = W.findIndex(w => w.ini <= ult && addD(w.ini, 6) >= ult); if (i < 0) i = W.length - 1;
+  const w = W[i], fin = addD(w.ini, 6), abierta = fin > ult, dias = ult >= w.ini ? diasEntre(w.ini < L.min ? L.min : w.ini, abierta ? ult : fin) : [], nd = dias.length, resta = 7 - nd;
+  const head = (sub, cuerpo) => `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${abierta ? 'Semana en curso' : 'Última semana cerrada'} · ${esc(semTxt(w))} (${fdate(w.ini)} – ${fdate(fin)})</div>${sub}</div><div class="mc-side">${abierta ? `Día ${nd} de 7<span class="sep"> ·</span><b>${resta} ${resta === 1 ? 'día' : 'días'}</b>restantes` : 'Semana cerrada<b>7 días</b>'}</div></div>${cuerpo}</div>`;
+  if (!nd) return head('<div class="mc-big">—</div>', '<div class="mc-txt">Todavía no hay un día completo con datos en esta semana. Vuelve a revisar mañana.</div>');
+  const cur = medidas(xs, dias), cuotaSem = cur.cuota * 7 / nd, esp = cur.cuota, chk = cur.chk, pr = esp ? chk / esp * 100 : null, col = colorPct(pr);
+  const wa = i > 0 ? W[i - 1] : null, dA = wa && wa.ini >= L.min ? diasEntre(wa.ini, addD(wa.ini, 6)) : [], ant = dA.length ? medidas(xs, dA) : null;
+  const rd = chk / nd, rd0 = ant && ant.chk ? ant.chk / dA.length : null, dv = rd0 ? rd / rd0 - 1 : null, dcls = dv == null || Math.abs(dv) < .005 ? 'eq' : dv > 0 ? 'up' : 'dn';
+  const delta = dv == null ? '' : `<div class="mc-delta ${dcls}">${dcls === 'up' ? '▲' : dcls === 'dn' ? '▼' : '■'} ${dv > 0 ? '+' : ''}${(100 * dv).toFixed(1)}% checks por día vs ${esc(semTxt(wa))}<span>(${rd.toFixed(1)} vs ${rd0.toFixed(1)}${ant.pctC != null ? ` · ${esc(semTxt(wa))} cerró en ${f1(ant.pctC)}% de cuota` : ''})</span></div>`;
+  const falt = Math.max(0, cuotaSem - chk), proj = rd * 7, pl = 100 * nd / 7, side = pl < 12 ? ' l' : pl > 88 ? ' r' : '';
+  const bar = cuotaSem ? `<div class="mc-bar" title="La línea negra marca cuántos checks deberías llevar hoy para cerrar la semana en cuota"><i style="width:${Math.min(100, 100 * chk / cuotaSem)}%;background:${col}"></i>${abierta ? `<b class="mc-pace${side}" style="left:${pl}%" data-l="Hoy: ${fmt(esp)}"></b>` : ''}</div>` : '';
+  const txt = !cuotaSem ? 'No hay posiciones autorizadas con estos filtros, por eso no hay cuota de checks.'
+    : abierta ? `<b>${f1(100 * chk / cuotaSem)}%</b> de la cuota de la semana (${fmt(chk)} de ${fmt(cuotaSem)} checks) · a hoy deberías llevar <b>${fmt(esp)}</b> → vas <b style="color:${(Math.round(chk - esp) || 0) >= 0 ? C.gr : C.rd}">${(Math.round(chk - esp) || 0) > 0 ? '+' : ''}${fmt((Math.round(chk - esp) || 0))}</b>.<br>`
+      + (falt > 0 ? `Faltan <b>${fmt(falt)}</b> checks en ${resta} ${resta === 1 ? 'día' : 'días'}: necesitas <b>${fmt1(falt / resta)} por día</b> (hoy vas a ${fmt1(rd)}). Al ritmo actual cierras en <b>~${fmt(proj)}</b> (${f1(100 * proj / cuotaSem)}% de la cuota).` : `<b style="color:${C.gr}">¡Cuota de checks de la semana cubierta!</b> Al ritmo actual cierras en ~${fmt(proj)}.`)
+    : `Semana cerrada: <b>${fmt(chk)}</b> de <b>${fmt(cuotaSem)}</b> checks (${f1(100 * chk / cuotaSem)}% de la cuota) · ${falt > 0 ? `faltaron <b style="color:${C.rd}">${fmt(falt)}</b>` : `<b style="color:${C.gr}">cuota cubierta</b>`}.`;
+  /* fichas por cadena: aro = parte de los checks; % = avance contra su cuota de la semana, con color según lo esperado a hoy */
+  const cads = [...new Set(xs.map(x => x.t.cadena).filter(Boolean))].map(c => ({ c, q: medidas(xs.filter(y => y.t.cadena === c), dias) })).filter(o => o.q.n).sort((a, b) => b.q.chk - a.q.chk);
+  const chips = cads.map(({ c, q }) => { const qs = q.cuota * 7 / nd, p = q.cuota ? q.chk / q.cuota * 100 : null; return `<div class="mc-chip" title="${esc(c)}: ${fmt(q.chk)} checks de ${fmt(qs)} de cuota de la semana · a hoy debería llevar ${fmt(q.cuota)} · ${q.n} tiendas">${arcMini(chk ? q.chk / chk : 0, C.dk)}<span class="nm">${esc(c)} <small>${fmt(q.chk)} checks · ${f1(chk ? 100 * q.chk / chk : 0)}% del total</small></span>${qs ? `<em style="color:${colorPct(p)}">${f1(100 * q.chk / qs)}% cuota</em>` : ''}</div>`; }).join('');
+  return head(`<div class="mc-big">${fmt(chk)}<small>checks válidos</small></div>${delta}`, `${bar}<div class="mc-txt">${txt}<br><span class="muted">Cuota: 6 checks por posición por semana. Datos al ${fdate(dias[nd - 1])} (días completos). Este recuadro sigue los filtros de estructura y no cambia con el periodo elegido.</span></div>${chips ? `<div class="mc-chips">${chips}</div>` : ''}`);
+}
 /* ====================================================================== 1 · RESUMEN ====================================================================== */
 async function vResumen() {
   await conReporte('Resumen', 'pulgares', async () => {
@@ -558,6 +600,7 @@ async function vResumen() {
       ${kp('% Asistencia Promotor', cur.pctM == null ? '—' : f1(cur.pctM) + '%', `${fmt1(cur.pM)} promotores/día vs ${fmt1(cur.dM)} dimensionados<br>${dl(cur.pctM, prev && prev.pctM)}`, colorPct(cur.pctM), null, '🧍')}
       ${kp('% Checks vs cuota', cur.pctC == null ? '—' : f1(cur.pctC) + '%', `${fmt(cur.chk)} checks vs cuota ${fmt(cur.cuota)} (6 por posición por semana)<br>${dl(cur.pctC, prev && prev.pctC)}`, colorPct(cur.pctC), null, '✅')}
       ${kp('Rotación del periodo', rot.rot == null ? '—' : f1(rot.rot) + '%', `${rot.baj} bajas ÷ ${fmt(rot.hc)} HC promedio<br>${rot.ing} ingresos · neto ${rot.ing - rot.baj >= 0 ? '+' : ''}${rot.ing - rot.baj}`, C.am, null, '🔄')}</div>`;
+    h += semanaCurso(xs);
     h += `<div class="grid g3">${embudo('🏬 Cobertura PDV', [{ n: "Total PDV's", v: cur.n, c: C.bl }, { n: 'Dimensionamiento', v: cur.dP, c: '#3D6FB6' }, { n: 'Cubiertos (prom. diario)', v: cur.pP, c: C.gr }, { n: 'Descubiertos', v: Math.max(0, -cur.difP), c: C.rd }])}
       ${embudo('🧍 Asistencia Promotor', [{ n: 'Posiciones autorizadas', v: cur.posc, c: C.bl }, { n: 'Dimensionamiento', v: cur.dM, c: '#3D6FB6' }, { n: 'Asistieron (prom. diario)', v: cur.pM, c: C.gr }, { n: 'Sin asistir', v: Math.max(0, -cur.difM), c: C.rd }])}
       ${embudo('✅ Checks vs cuota', [{ n: 'Cuota de checks (periodo)', v: cur.cuota, c: C.bl }, { n: 'Checks válidos', v: cur.chk, c: C.gr }, { n: 'Faltantes', v: Math.max(0, cur.cuota - cur.chk), c: C.rd }, { n: 'Adicionales', v: cur.exc, c: C.am }])}</div>`;
@@ -3104,7 +3147,7 @@ async function entrar() {
     S.me = await API.me();
     if (S.me.debeCambiar) { await cambiarClaveObligatoria(($('lg-p') || {}).value || ''); S.me = await API.me(); }   // clave temporal: se elige una propia antes de ver datos
     await mfaGate();   // admin/analista/nómina: código del celular
-    S.cat = await API.catalogos();
+    S.cat = await API.catalogos(); unificarNombres(Object.values(S.cat.tiendas), CAMPOS_TIENDA);
     soloMisTiendas();   // RH y reclutadores: filtros y listas solo con sus tiendas
     $('login').hidden = true; $('app').hidden = false;
     $('u-nombre').textContent = S.me.nombre; $('u-rol').textContent = NIVEL[S.me.rol] || S.me.rol;
@@ -3142,7 +3185,7 @@ function exportClases() { document.body.classList.toggle('sin-csv', !puedeExport
 })();
 
 function soloMisTiendas() {
-  const r = S.me.permisos.reportes || {}, alc = r.alcance_ver || r.alcance, m = S.me, mismo = (a, b) => a && b && String(a).toUpperCase() === String(b).toUpperCase();
+  const r = S.me.permisos.reportes || {}, alc = r.alcance_ver || r.alcance, m = S.me, mismo = (a, b) => a && b && kNom(a) === kNom(b);
   const ok = { estado: t => mismo(t.rrhh, m.rrhh), zona: t => mismo(t.zona_rrhh, m.zona), reclutador: t => mismo(t.reclutador, m.reclutador_nombre) }[alc];
   if (!ok || !S.cat || !S.cat.tiendas) return;
   S.cat.tiendas = Object.fromEntries(Object.entries(S.cat.tiendas).filter(([, t]) => ok(t)));
