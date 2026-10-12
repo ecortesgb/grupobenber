@@ -96,6 +96,33 @@ function sobredim(x, wi) {
   const tope = sd[3], chk = sd[1], proy = sd[6], exc = Math.max(0, proy - tope);
   return { tope, chk, proy, exc, nivel: chk > tope ? 2 : exc > 0.05 ? 1 : 0 };   // 2 = ya se pasó del tope, 1 = a este ritmo se pasa
 }
+/* ----- mes en curso: checks contra la cuota del mes (sigue los filtros de estructura, ignora el periodo elegido) -----
+   Se mide con días completos: si el último día con datos es hoy, hoy no cuenta todavía (los checks siguen llegando).
+   "Deberías llevar" = cuota del mes × días completos ÷ días del mes. Ritmo = checks por día contra el mes anterior completo. */
+const diasEntre = (d, h) => { const o = []; for (let x = d; x <= h; x = addD(x, 1)) o.push(x); return o; };
+const finMes = m => { const x = new Date(m + '-01T12:00:00'); x.setMonth(x.getMonth() + 1); x.setDate(0); return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()); };
+const mesAnt = m => { const x = new Date(m + '-01T12:00:00'); x.setMonth(x.getMonth() - 1); return x.getFullYear() + '-' + pad(x.getMonth() + 1); };
+const MES_L = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'], mesTxt = m => MES_L[+m.slice(5, 7) - 1] + ' ' + m.slice(2, 4);
+const arcMini = (f, col) => { const r = 11, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, f || 0)); return `<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><circle cx="14" cy="14" r="${r}" fill="#fff" stroke="#E1E4E8" stroke-width="3.5"/><circle cx="14" cy="14" r="${r}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c * v} ${c}" transform="rotate(-90 14 14)"/></svg>`; };
+function mesCurso(xs) {
+  const L = limites(), m = L.max.slice(0, 7), ini = m + '-01', fm = finMes(m), dm = +fm.slice(8, 10);
+  const ult = L.max >= HOY ? addD(HOY, -1) : L.max, hasta = ult > fm ? fm : ult, dias = hasta >= ini ? diasEntre(ini < L.min ? L.min : ini, hasta) : [];
+  const head = (sub, cuerpo) => `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">Mes en curso · ${mesTxt(m)}</div>${sub}</div><div class="mc-side">${dias.length ? `Día ${dias.length} de ${dm}<span class="sep"> ·</span><b>${dm - dias.length} ${dm - dias.length === 1 ? 'día' : 'días'}</b>restantes` : ''}</div></div>${cuerpo}</div>`;
+  if (!dias.length) return head('<div class="mc-big">—</div>', '<div class="mc-txt">Todavía no hay un día completo con datos en este mes. Vuelve a revisar mañana.</div>');
+  const cur = medidas(xs, dias), cuotaMes = cur.cuota * dm / dias.length, esp = cur.cuota, chk = cur.chk, pr = esp ? chk / esp * 100 : null, col = colorPct(pr);
+  const mA = mesAnt(m), dA = diasEntre(mA + '-01' < L.min ? L.min : mA + '-01', finMes(mA)), prevOk = mA + '-01' >= L.min, ant = prevOk ? medidas(xs, dA) : null;
+  const rd = chk / dias.length, rd0 = ant && ant.chk ? ant.chk / dA.length : null, dv = rd0 ? rd / rd0 - 1 : null, dcls = dv == null || Math.abs(dv) < .005 ? 'eq' : dv > 0 ? 'up' : 'dn';
+  const delta = dv == null ? '' : `<div class="mc-delta ${dcls}">${dcls === 'up' ? '▲' : dcls === 'dn' ? '▼' : '■'} ${dv > 0 ? '+' : ''}${(100 * dv).toFixed(1)}% checks por día vs ${mesTxt(mA)}<span>(${rd.toFixed(1)} vs ${rd0.toFixed(1)})</span></div>`;
+  const resta = dm - dias.length, falt = Math.max(0, cuotaMes - chk), proj = rd * dm, pl = 100 * dias.length / dm, side = pl < 12 ? ' l' : pl > 88 ? ' r' : '';
+  const bar = cuotaMes ? `<div class="mc-bar" title="La línea negra marca cuántos checks deberías llevar hoy para cerrar el mes en cuota"><i style="width:${Math.min(100, 100 * chk / cuotaMes)}%;background:${col}"></i><b class="mc-pace${side}" style="left:${pl}%" data-l="Hoy: ${fmt(esp)}"></b></div>` : '';
+  const txt = !cuotaMes ? 'No hay posiciones autorizadas con estos filtros, por eso no hay cuota de checks.'
+    : `<b>${f1(100 * chk / cuotaMes)}%</b> de la cuota del mes (${fmt(chk)} de ${fmt(cuotaMes)} checks) · a hoy deberías llevar <b>${fmt(esp)}</b> → vas <b style="color:${chk - esp >= 0 ? C.gr : C.rd}">${chk - esp >= 0 ? '+' : ''}${fmt(chk - esp)}</b>.<br>`
+      + (falt > 0 && resta ? `Faltan <b>${fmt(falt)}</b> checks en ${resta} días: necesitas <b>${fmt1(falt / resta)} por día</b> (hoy vas a ${fmt1(rd)}). Al ritmo actual cierras en <b>~${fmt(proj)}</b> (${f1(100 * proj / cuotaMes)}% de la cuota).` : falt > 0 ? `Mes cerrado con <b style="color:${C.rd}">${fmt(falt)}</b> checks faltantes.` : `<b style="color:${C.gr}">¡Cuota de checks del mes cubierta!</b> Al ritmo actual cierras en ~${fmt(proj)}.`);
+  /* fichas por cadena: aro = parte de los checks; % = avance contra su cuota, con color según lo esperado a hoy */
+  const cads = [...new Set(xs.map(x => x.t.cadena).filter(Boolean))].map(c => { const q = medidas(xs.filter(y => y.t.cadena === c), dias); return { c, q }; }).filter(o => o.q.n).sort((a, b) => b.q.chk - a.q.chk);
+  const chips = cads.map(({ c, q }) => { const qm = q.cuota * dm / dias.length, p = q.cuota ? q.chk / q.cuota * 100 : null; return `<div class="mc-chip" title="${esc(c)}: ${fmt(q.chk)} checks de ${fmt(qm)} de cuota del mes · a hoy debería llevar ${fmt(q.cuota)} · ${q.n} tiendas">${arcMini(chk ? q.chk / chk : 0, C.dk)}<span class="nm">${esc(c)} <small>${fmt(q.chk)} checks · ${f1(chk ? 100 * q.chk / chk : 0)}% del total</small></span>${qm ? `<em style="color:${colorPct(p)}">${f1(100 * q.chk / qm)}% cuota</em>` : ''}</div>`; }).join('');
+  return head(`<div class="mc-big">${fmt(chk)}<small>checks válidos</small></div>${delta}`, `${bar}<div class="mc-txt">${txt}<br><span class="muted">Datos al ${fdate(hasta)} (días completos). Este recuadro sigue los filtros de estructura y no cambia con el periodo elegido.</span></div>${chips ? `<div class="mc-chips">${chips}</div>` : ''}`);
+}
 /* ====================================================================== 1 · RESUMEN ====================================================================== */
 async function vResumen() {
   await conReporte('Resumen', 'pulgares', async () => {
@@ -108,6 +135,7 @@ async function vResumen() {
       ${kp('% Asistencia Promotor', cur.pctM == null ? '—' : f1(cur.pctM) + '%', `${fmt1(cur.pM)} promotores/día vs ${fmt1(cur.dM)} dimensionados<br>${dl(cur.pctM, prev && prev.pctM)}`, colorPct(cur.pctM), null, '🧍')}
       ${kp('% Checks vs cuota', cur.pctC == null ? '—' : f1(cur.pctC) + '%', `${fmt(cur.chk)} checks vs cuota ${fmt(cur.cuota)} (6 por posición por semana)<br>${dl(cur.pctC, prev && prev.pctC)}`, colorPct(cur.pctC), null, '✅')}
       ${kp('Rotación del periodo', rot.rot == null ? '—' : f1(rot.rot) + '%', `${rot.baj} bajas ÷ ${fmt(rot.hc)} HC promedio<br>${rot.ing} ingresos · neto ${rot.ing - rot.baj >= 0 ? '+' : ''}${rot.ing - rot.baj}`, C.am, null, '🔄')}</div>`;
+    h += mesCurso(xs);
     h += `<div class="grid g3">${embudo('🏬 Cobertura PDV', [{ n: "Total PDV's", v: cur.n, c: C.bl }, { n: 'Dimensionamiento', v: cur.dP, c: '#3D6FB6' }, { n: 'Cubiertos (prom. diario)', v: cur.pP, c: C.gr }, { n: 'Descubiertos', v: Math.max(0, -cur.difP), c: C.rd }])}
       ${embudo('🧍 Asistencia Promotor', [{ n: 'Posiciones autorizadas', v: cur.posc, c: C.bl }, { n: 'Dimensionamiento', v: cur.dM, c: '#3D6FB6' }, { n: 'Asistieron (prom. diario)', v: cur.pM, c: C.gr }, { n: 'Sin asistir', v: Math.max(0, -cur.difM), c: C.rd }])}
       ${embudo('✅ Checks vs cuota', [{ n: 'Cuota de checks (periodo)', v: cur.cuota, c: C.bl }, { n: 'Checks válidos', v: cur.chk, c: C.gr }, { n: 'Faltantes', v: Math.max(0, cur.cuota - cur.chk), c: C.rd }, { n: 'Adicionales', v: cur.exc, c: C.am }])}</div>`;

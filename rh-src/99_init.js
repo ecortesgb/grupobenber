@@ -4,7 +4,7 @@ async function entrar() {
     S.me = await API.me();
     if (S.me.debeCambiar) { await cambiarClaveObligatoria(($('lg-p') || {}).value || ''); S.me = await API.me(); }   // clave temporal: se elige una propia antes de ver datos
     await mfaGate();   // admin/analista/nómina: código del celular
-    S.cat = await API.catalogos();
+    S.cat = await API.catalogos(); unificarNombres(Object.values(S.cat.tiendas), CAMPOS_TIENDA);
     soloMisTiendas();   // RH y reclutadores: filtros y listas solo con sus tiendas
     $('login').hidden = true; $('app').hidden = false;
     $('u-nombre').textContent = S.me.nombre; $('u-rol').textContent = NIVEL[S.me.rol] || S.me.rol;
@@ -42,7 +42,7 @@ function exportClases() { document.body.classList.toggle('sin-csv', !puedeExport
 })();
 
 function soloMisTiendas() {
-  const r = S.me.permisos.reportes || {}, alc = r.alcance_ver || r.alcance, m = S.me, mismo = (a, b) => a && b && String(a).toUpperCase() === String(b).toUpperCase();
+  const r = S.me.permisos.reportes || {}, alc = r.alcance_ver || r.alcance, m = S.me, mismo = (a, b) => a && b && kNom(a) === kNom(b);
   const ok = { estado: t => mismo(t.rrhh, m.rrhh), zona: t => mismo(t.zona_rrhh, m.zona), reclutador: t => mismo(t.reclutador, m.reclutador_nombre) }[alc];
   if (!ok || !S.cat || !S.cat.tiendas) return;
   S.cat.tiendas = Object.fromEntries(Object.entries(S.cat.tiendas).filter(([, t]) => ok(t)));

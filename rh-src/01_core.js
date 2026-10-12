@@ -12,6 +12,20 @@ const diffD = (a, b) => Math.round((new Date(a + 'T12:00:00') - new Date(b + 'T1
 const fdate = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(2, 4) : '—';
 const fmt = n => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('es-MX');
 const toast = m => { const t = $('toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.k); toast.k = setTimeout(() => t.hidden = true, 2800); };
+/* El catálogo de tiendas junta varias fuentes y el mismo nombre llega escrito distinto ('Coppel' / 'COPPEL', 'León' / 'LEON').
+   Se unifica al cargar: se queda la escritura más común; las cadenas conocidas se escriben siempre igual porque hay lógica que las compara por nombre. */
+const kNom = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+const CAD_STD = Object.fromEntries(['Coppel', 'Elektra', 'Suburbia', 'Cimaco'].map(c => [kNom(c), c]));
+const CAMPOS_TIENDA = ['cadena', 'estado', 'region', 'gerente', 'supervisor', 'rrhh', 'reclutador', 'zona_rrhh', 'clase', 'tipo_ekt', 'subdireccion_gb', 'sub_terr', 'lider'];
+function unificarNombres(rows, campos) {
+  campos.forEach(k => {
+    const cnt = new Map(); rows.forEach(r => { const v = r[k]; if (typeof v === 'string' && v.trim()) cnt.set(v.trim(), (cnt.get(v.trim()) || 0) + 1); });
+    const best = new Map(); [...cnt.entries()].sort((a, b) => b[1] - a[1]).forEach(([v]) => { const kk = kNom(v); if (!best.has(kk)) best.set(kk, v); });
+    if (k === 'cadena') Object.entries(CAD_STD).forEach(([kk, v]) => { if (best.has(kk)) best.set(kk, v); });
+    rows.forEach(r => { const v = r[k]; if (typeof v === 'string' && v.trim()) r[k] = best.get(kNom(v)); });
+  });
+  return rows;
+}
 const NIVEL = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Gerente', rh: 'RH', reclutador: 'Reclutador' };
 
 /* ====================================================================== capa de datos ====================================================================== */
