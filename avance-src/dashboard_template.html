@@ -925,6 +925,14 @@
   .mc-chip{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border-radius:12px;background:#F7F5F3;border:1px solid var(--line);font-size:12px;font-weight:700;min-width:0}
   .mc-chip svg{flex:0 0 auto}.mc-chip .nm{display:flex;flex-direction:column;line-height:1.2;min-width:0}.mc-chip .nm small{font-size:10.5px;font-weight:600;color:var(--text-muted)}
   .mc-chip em{font-style:normal;font-size:11px;font-weight:800;margin-left:auto;padding-left:6px}
+  .mc-rank{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:14px 0 4px;padding:10px 12px;border-radius:12px;background:#F7F5F3;border:1px solid var(--line)}
+  .mc-rank-txt{font-size:13px;font-weight:600;color:var(--text-muted);max-width:420px}.mc-rank-txt b{color:var(--text)}.mc-rank-txt span{font-size:11px;color:var(--text-soft)}
+  .mc-spark{display:flex;gap:6px;align-items:flex-end;height:64px}
+  .mc-sp{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;width:44px;font-size:9.5px;font-weight:700;color:var(--text-soft)}
+  .mc-sp i{display:block;width:22px;border-radius:4px 4px 0 0;background:#CFC9C3}.mc-sp.yo i{background:var(--orange)}.mc-sp.yo{color:var(--text)}
+  .mc-sp b{font-size:10px;color:var(--text-muted);font-variant-numeric:tabular-nums}.mc-sp.yo b{color:var(--orange-dark)}
+  .mc-foot{margin-top:10px;font-size:11px;font-weight:600;color:var(--text-soft)}
+  .mc-delta span{font-weight:600;color:var(--text-muted)}
   @media (max-width:640px){.mc-big{font-size:30px}.mc-top{gap:6px}.mc-side{text-align:left}.mc-side b{display:inline;font-size:12px;margin:0 3px}.mc-side .sep{display:inline}.mc-chip{flex:1 1 100%}.mc-chips .mc-h{flex:1 1 100%}}
 </style>
 
@@ -4293,52 +4301,107 @@ function renderResumenEjecutivo(){
   animarBarras([['ejec-bar-hero', overall], ...kpis.map(k => [k.id, k.pct])]);
 }
 
-/* ---------- Semana en curso (Resumen): altas de la semana contra su cuota ----------
-   Sigue los filtros de estructura (región, supervisor, tienda...) e ignora el periodo elegido.
-   Usa días completos: si el último día con checks es hoy, hoy no cuenta todavía (siguen llegando datos).
-   "Deberías llevar" = la cuota de los días ya transcurridos (la cuota es diaria). Proyección = mismo % de
-   avance contra la cuota diaria aplicado a toda la semana. Ritmo = altas por día contra la semana anterior completa. Si la semana ya cerró (p. ej. lunes temprano) muestra el cierre. */
+/* ---------- Comparativo semanal (Resumen): mismos días contra la semana anterior y las últimas 4 ----------
+   Sigue los filtros de estructura y el periodo elegido:
+   · Un solo día (p. ej. Hoy): ese día contra el mismo día de la semana anterior (lunes vs lunes).
+   · Semana en curso: del lunes al último día con datos, contra esos mismos días de la semana anterior
+     (lunes vs lunes; el martes, lun+mar vs lun+mar; …).
+   · Semana completa: la semana entera contra la semana anterior entera.
+   Si el periodo abarca varias semanas se toma la semana del último día elegido.
+   Hoy cuenta aunque siga en curso (los datos de hoy son parciales: se avisa con la hora de actualización).
+   Altas = Temm + Porta; Pospago se ve aparte. */
 function arcMiniSvg(f, col){ const r=11, c=2*Math.PI*r, v=Math.max(0,Math.min(1,f||0)); return `<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><circle cx="14" cy="14" r="${r}" fill="#fff" stroke="#E8E4E0" stroke-width="3.5"/><circle cx="14" cy="14" r="${r}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c*v} ${c}" transform="rotate(-90 14 14)"/></svg>`; }
 function hoyLocalISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function semanaCursoDatos(){
-  let L = ultimoDiaConDatos(); if(L<0) return null;
-  if(FECHAS[L] >= hoyLocalISO()) L--;                 // hoy todavía no es un día completo
-  if(L<0) return null;
-  const wi = DATE_TO_SEMANA[L], R = WEEK_RANGES[wi]; if(wi==null || !R) return null;
+const DIA_CORTO = ['dom','lun','mar','mié','jue','vie','sáb'];
+const diaTxt = i => { const f=FECHAS[i]; return DIA_CORTO[new Date(f+'T12:00:00').getDay()]+' '+fmtFechaLarga(f).slice(0,5); };
+const semLbl = wi => String(SEMANAS[wi]||'').replace(/^\d+-/,'');
+const tpAltas = s => (s.altas_temm||0)+(s.altas_porta||0), tpCuota = s => (s.cuota_temm||0)+(s.cuota_porta||0);
+function comparativoDatos(){
+  const L = ultimoDiaConDatos(); if(L<0) return null;
+  const e = Math.min(currentRange.endIdx, L); if(e<0) return null;
   const st = matchingStores(), stores = st===null ? Array.from({length:N_STORES},(_,i)=>i) : [...st];
-  const sumar = (a,b,filtro)=>{ const s=emptySums(); for(const x of stores){ if(filtro && !filtro(x)) continue; sumRows(storeRowsInWeekUnfiltered(x,{start:a,end:b}), s); } return s; };
-  const prevR = WEEK_RANGES[wi-1] || null;
-  return {wi, R, L, abierta: L < R.end, nd: L-R.start+1, ndT: R.end-R.start+1, stores, sumar, prevR,
-    hoy: sumar(R.start, L), sem: sumar(R.start, R.end), ant: prevR ? sumar(prevR.start, prevR.end) : null};
+  const sumar = (a,b,f)=>{ const s=emptySums(); if(a==null||a<0||b<a) return s; for(const x of stores){ if(f&&!f(x)) continue; sumRows(storeRowsInWeekUnfiltered(x,{start:a,end:b}), s); } return s; };
+  const parcial = FECHAS[L] >= hoyLocalISO();          // el último día con datos es hoy: todavía llegan datos
+  const wi = DATE_TO_SEMANA[e], R = WEEK_RANGES[wi]; if(wi==null || !R) return null;
+  let modo, cur, refs = [];                              // refs[k-1] = mismo tramo k semanas antes
+  if(currentRange.startIdx >= e){
+    modo = 'dia'; cur = [e,e];
+    for(let k=1;k<=4;k++){ const d=e-7*k; if(d>=0 && DATE_TO_SEMANA[d]!=null) refs.push({a:d,b:d,lbl:diaTxt(d)}); }
+  } else {
+    const fin = Math.min(R.end, L), n = fin-R.start;
+    modo = (fin===R.end && !(fin===L && parcial)) ? 'completa' : 'curso'; cur = [R.start, fin];
+    for(let k=1;k<=4;k++){ const W = WEEK_RANGES[wi-k]; if(W) refs.push({a:W.start, b:Math.min(W.end, W.start+n), lbl:semLbl(wi-k)}); }
+  }
+  const incluyeHoy = parcial && cur[1]===L;
+  /* las ventas de hoy llegan incompletas hasta el día siguiente: las altas se comparan hasta AYER (o el último día con
+     altas), con el mismo número de días en las semanas de referencia; los checks sí incluyen hoy */
+  const Lv = ultimoDiaConAltas(), finV = Math.min(incluyeHoy ? cur[1]-1 : cur[1], Lv), cortaV = finV < cur[1], nV = finV - cur[0];
+  const refsV = refs.map(r=>({...r, b: Math.min(r.b, r.a + nV)}));
+  const okV = finV >= cur[0];
+  return {modo, wi, R, L, cur, refs, incluyeHoy, stores, sumar, finV, cortaV, okV, refsV,
+    s: okV ? sumar(cur[0], finV) : emptySums(), p: okV && refsV.length ? sumar(refsV[0].a, refsV[0].b) : null,
+    sc: sumar(cur[0], cur[1]), pc: refs.length ? sumar(refs[0].a, refs[0].b) : null,
+    sem: sumar(R.start, R.end), hist: okV ? refsV.map(r=>({lbl:r.lbl, v:tpAltas(sumar(r.a,r.b))})) : [],
+    hoyAltas: incluyeHoy ? tpAltas(sumar(L, L)) : null};
+}
+let _ultAltasIdx = null;
+function ultimoDiaConAltas(){
+  if(_ultAltasIdx==null){ let m=-1; for(let i=0;i<N_ROWS;i++) if(((RW.altas_temm[i]||0)+(RW.altas_porta[i]||0))>0 && RW.fecha[i]>m) m=RW.fecha[i]; _ultAltasIdx=m; }
+  return _ultAltasIdx;
 }
 const fmtRitmo = n => n==null ? '—' : n>=100 ? fmtInt(n) : n.toLocaleString('es-MX',{minimumFractionDigits:1,maximumFractionDigits:1});
+function deltaPill(a, b, txt){
+  if(!(b>0)) return '';
+  const dv = a/b-1, c = Math.abs(dv)<.005 ? 'eq' : dv>0 ? 'up' : 'dn';
+  return `<div class="mc-delta ${c}">${c==='up'?'▲':c==='dn'?'▼':'■'} ${dv>0?'+':''}${(100*dv).toFixed(1)}% ${txt}</div>`;
+}
+const deltaTxt = (a,b) => { if(!(b>0)) return '<em style="color:var(--text-soft)">—</em>'; const dv=a/b-1; return `<em style="color:${Math.abs(dv)<.005?'var(--text-muted)':dv>0?COLOR_GREEN:COLOR_RED}">${dv>0?'▲ +':dv<0?'▼ ':''}${(100*dv).toFixed(1)}%</em>`; };
 function renderSemanaCurso(){
   const el = document.getElementById('res-semana'); if(!el) return;
-  const D = semanaCursoDatos();
+  const D = comparativoDatos();
   if(!D){ el.innerHTML=''; return; }
-  const {R, nd, ndT, abierta} = D, resta = ndT-nd, lbl = String(SEMANAS[D.wi]||'').replace(/^\d+-/,'');
-  const altas = D.hoy.altas_t, esp = D.hoy.cuota_t, cuotaSem = D.sem.cuota_t, pr = esp>0 ? altas/esp*100 : null, col = statusColor(pr);
-  const rd = altas/nd, antN = D.prevR ? D.prevR.end-D.prevR.start+1 : 0, rd0 = D.ant && D.ant.altas_t ? D.ant.altas_t/antN : null, dv = rd0 ? rd/rd0-1 : null;
-  const dcls = dv==null || Math.abs(dv)<.005 ? 'eq' : dv>0 ? 'up' : 'dn', lblA = D.prevR ? String(SEMANAS[D.wi-1]||'').replace(/^\d+-/,'') : '';
-  const alcAnt = D.ant && D.ant.cuota_t>0 ? D.ant.altas_t/D.ant.cuota_t*100 : null;
-  const delta = dv==null ? '' : `<div class="mc-delta ${dcls}">${dcls==='up'?'▲':dcls==='dn'?'▼':'■'} ${dv>0?'+':''}${(100*dv).toFixed(1)}% altas por día vs ${lblA}<span>(${fmtRitmo(rd)} vs ${fmtRitmo(rd0)}${alcAnt!=null?` · ${lblA} cerró en ${fmtPct(alcAnt)} de alcance`:''})</span></div>`;
-  const gap = Math.round(altas-esp)||0, falt = Math.max(0, cuotaSem-altas), proj = esp>0 ? altas/esp*cuotaSem : rd*ndT, pl = 100*nd/ndT, side = pl<12?' l':pl>88?' r':'';
-  const bar = cuotaSem>0 ? `<div class="mc-bar" title="La línea negra marca cuántas altas deberías llevar hoy para cerrar la semana en cuota"><i style="width:${Math.min(100,100*altas/cuotaSem)}%;background:${col}"></i>${abierta?`<b class="mc-pace${side}" style="left:${pl}%" data-l="Hoy: ${fmtInt(esp)}"></b>`:''}</div>` : '';
-  const txt = !(cuotaSem>0) ? 'No hay cuota cargada para esta semana con estos filtros.'
-    : abierta ? `<b>${fmtPct(100*altas/cuotaSem)}</b> de la cuota de la semana (${fmtInt(altas)} de ${fmtInt(cuotaSem)} altas) · a hoy deberías llevar <b>${fmtInt(esp)}</b> → vas <b style="color:${gap>=0?COLOR_GREEN:COLOR_RED}">${gap>0?'+':''}${fmtInt(gap)}</b>.<br>`
-        + (falt>0 ? `Faltan <b>${fmtInt(falt)}</b> altas en ${resta} ${resta===1?'día':'días'}: necesitas <b>${fmtRitmo(falt/resta)} por día</b> (hoy vas a ${fmtRitmo(rd)}). Al ritmo actual cierras en <b>~${fmtInt(proj)}</b> (${fmtPct(100*proj/cuotaSem)} de la cuota).` : `<b style="color:${COLOR_GREEN}">¡Cuota de la semana alcanzada!</b> Al ritmo actual cierras en ~${fmtInt(proj)}.`)
-    : `Semana cerrada: <b>${fmtInt(altas)}</b> de <b>${fmtInt(cuotaSem)}</b> altas (${fmtPct(100*altas/cuotaSem)} de alcance) · gap <b style="color:${altas-cuotaSem>=0?COLOR_GREEN:COLOR_RED}">${(Math.round(altas-cuotaSem)||0)>0?'+':''}${fmtInt(altas-cuotaSem)}</b>.`;
-  /* por producto: alcance contra la cuota de la semana, color según lo esperado a hoy */
-  const prods = PRODUCTOS.filter(p=>p.key!=='t').map(p=>{ const a=D.hoy['altas_'+p.key]||0, e=D.hoy['cuota_'+p.key]||0, q=D.sem['cuota_'+p.key]||0;
-    return q>0 ? `<div class="mc-chip" title="${p.label}: ${fmtInt(a)} altas de ${fmtCuotaProd(q,p.key)} de cuota de la semana · a hoy debería llevar ${fmtCuotaProd(e,p.key)}">${arcMiniSvg(q?a/q:0, p.color)}<span class="nm">${p.label} <small>${fmtInt(a)} de ${fmtCuotaProd(q,p.key)}</small></span><em style="color:${statusColor(e>0?a/e*100:null)}">${fmtPct(100*a/q)}</em></div>` : ''; }).join('');
-  /* por cadena: aro = parte de las altas; % = avance contra su cuota de la semana, color según lo esperado a hoy */
-  const cads = DC.cadena.map((nombre,ci)=>{ const f = x=>ST.cadena[x]===ci; const h=D.sumar(R.start, D.L, f), s=D.sumar(R.start, R.end, f); return {nombre, a:h.altas_t, e:h.cuota_t, q:s.cuota_t}; })
-    .filter(c=>c.a>0 || c.q>0).sort((x,y)=>y.a-x.a);
-  const chipsCad = cads.map(c=>`<div class="mc-chip" title="${c.nombre}: ${fmtInt(c.a)} altas de ${fmtInt(c.q)} de cuota de la semana · a hoy debería llevar ${fmtInt(c.e)}">${arcMiniSvg(altas?c.a/altas:0, '#3B4048')}<span class="nm">${c.nombre} <small>${fmtInt(c.a)} altas · ${fmtPct(altas?100*c.a/altas:0)} del total</small></span>${c.q>0?`<em style="color:${statusColor(c.e>0?c.a/c.e*100:null)}">${fmtPct(100*c.a/c.q)} cuota</em>`:''}</div>`).join('');
-  el.innerHTML = `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${abierta?'Semana en curso':'Última semana cerrada'} · ${lbl} (${fmtFechaLarga(FECHAS[R.start])} – ${fmtFechaLarga(FECHAS[R.end])})</div><div class="mc-big">${fmtInt(altas)}<small>altas totales</small></div>${delta}</div>
-    <div class="mc-side">${abierta?`Día ${nd} de ${ndT}<span class="sep"> ·</span><b>${resta} ${resta===1?'día':'días'}</b>restantes`:`Semana cerrada<span class="sep"> ·</span><b>${ndT} días</b>`}</div></div>
-    ${bar}<div class="mc-txt">${txt}<br><span style="color:var(--text-soft);font-size:11.5px;">Datos al ${fmtFechaLarga(FECHAS[D.L])} (días completos). Sigue los filtros de estructura y no cambia con el periodo elegido.</span></div>
-    ${prods?`<div class="mc-chips"><span class="mc-h">Producto</span>${prods}</div>`:''}${chipsCad && currentTienda==null?`<div class="mc-chips"><span class="mc-h">Cadena</span>${chipsCad}</div>`:''}</div>`;
+  const {modo, R, cur, refs, s, p, sc, pc} = D, lbl = semLbl(D.wi), ref = D.refsV[0] || refs[0], refC = refs[0];
+  const a = tpAltas(s), ap = p ? tpAltas(p) : null, q = tpCuota(s), qp = p ? tpCuota(p) : 0;
+  const alc = q>0 ? a/q*100 : null, alcP = qp>0 ? ap/qp*100 : null;
+  const tramo = modo==='dia' ? diaTxt(cur[0]) : cur[0]===cur[1] ? diaTxt(cur[0]) : `${diaTxt(cur[0])} – ${diaTxt(cur[1])}`;
+  const tramoV = D.okV ? (D.finV===cur[0] ? diaTxt(cur[0]) : `${diaTxt(cur[0])} – ${diaTxt(D.finV)}`) : '';
+  const contra = !ref ? '' : modo==='dia' ? `vs ${ref.lbl}` : modo==='completa' ? `vs ${ref.lbl} completa` : `vs mismos días de ${ref.lbl}`;
+  const titulo = modo==='dia' ? `Día · ${tramo}` : modo==='completa' ? `Semana ${lbl} completa · ${fmtFechaLarga(FECHAS[R.start])} – ${fmtFechaLarga(FECHAS[R.end])}` : `Semana en curso · ${lbl} · ${tramo} (${cur[1]-cur[0]+1} de ${R.end-R.start+1} días)`;
+  /* dato rápido: lugar contra las últimas semanas (mismo tramo) */
+  const hist = D.hist, nH = hist.length;
+  let rank = '';
+  if(nH){
+    const mx = Math.max(...hist.map(h=>h.v)), mn = Math.min(...hist.map(h=>h.v)), pos = 1+hist.filter(h=>h.v>a).length;
+    const que = modo==='dia' ? 'el mismo día de las' : modo==='completa' ? 'las' : 'los mismos días de las';
+    rank = (a>mx ? `🏆 <b>Mejor que ${que} últimas ${nH} semanas</b>` : a<mn ? `⚠️ <b>La más baja contra ${que} últimas ${nH} semanas</b>` : `<b>${pos}.º lugar</b> de ${nH+1} contra ${que} últimas ${nH} semanas`) + ` <span>(altas Temm + Porta${D.cortaV?`, ${tramoV}`:''})</span>`;
+    const tope = Math.max(a, mx, 1), barras = [...hist].reverse().concat([{lbl: modo==='dia' ? diaTxt(cur[0]) : lbl, v:a, yo:1}]);
+    rank = `<div class="mc-rank"><div class="mc-rank-txt">${rank}</div><div class="mc-spark">${barras.map(h=>`<div class="mc-sp${h.yo?' yo':''}" title="${h.lbl}: ${fmtInt(h.v)} altas"><i style="height:${Math.max(4, 100*h.v/tope)}%"></i><small>${h.lbl}</small><b>${fmtInt(h.v)}</b></div>`).join('')}</div></div>`;
+  }
+  /* avance contra la cuota de la semana (semana en curso o completa) */
+  const qSem = tpCuota(D.sem), pl = 100*(D.finV-R.start+1)/(R.end-R.start+1), side = pl<12?' l':pl>88?' r':'';
+  const bar = modo!=='dia' && qSem>0 ? `<div class="mc-bar" title="Altas Temm + Porta contra la cuota de la semana${modo==='curso'?'; la línea negra es la cuota de los días transcurridos':''}"><i style="width:${Math.min(100,100*a/qSem)}%;background:${statusColor(alc)}"></i>${modo==='curso'?`<b class="mc-pace${side}" style="left:${pl}%" data-l="Cuota a la fecha: ${fmtInt(q)}"></b>`:''}</div>` : '';
+  const resta = R.end-cur[1], restaV = R.end-D.finV, falt = Math.max(0, qSem-a);
+  const txt = [
+    q>0 ? `Alcance ${modo==='dia'?'del día':'del tramo'}: <b style="color:${statusColor(alc)}">${fmtPct(alc)}</b> (${fmtInt(a)} de ${fmtInt(q)})${alcP!=null?` · ${ref.lbl}: ${fmtPct(alcP)} (${fmtInt(ap)} de ${fmtInt(qp)})`:''}.` : '',
+    modo==='curso' && qSem>0 ? (falt>0 && restaV>0 ? `Para la cuota de la semana (${fmtInt(qSem)}) faltan <b>${fmtInt(falt)}</b> altas en ${restaV} ${restaV===1?'día':'días'}: <b>${fmtRitmo(falt/restaV)} por día</b>.` : falt<=0 ? `<b style="color:${COLOR_GREEN}">¡Cuota de la semana alcanzada!</b>` : '') : '',
+    modo==='completa' && qSem>0 ? `Cierre de la semana: <b>${fmtPct(100*a/qSem)}</b> de la cuota (gap <b style="color:${a-qSem>=0?COLOR_GREEN:COLOR_RED}">${(Math.round(a-qSem)||0)>0?'+':''}${fmtInt(a-qSem)}</b>).` : ''
+  ].filter(Boolean).join('<br>');
+  /* contra la semana anterior: productos y checks (mismo tramo) */
+  const chip = (nombre, col, v, vp, sub, frac) => `<div class="mc-chip" title="${nombre}: ${sub}">${arcMiniSvg(frac, col)}<span class="nm">${nombre} <small>${sub}</small></span>${deltaTxt(v, vp)}</div>`;
+  const prods = (D.okV ? [['Temm','#00509C','temm'],['Porta','#1E7A1E','porta'],['Pospago','#6B7280','pospago']] : []).map(([n,c,k])=>{ const v=s['altas_'+k]||0, vp=p?p['altas_'+k]||0:0, qq=s['cuota_'+k]||0;
+    return chip(n, c, v, vp, `${fmtInt(v)}${p?` vs ${fmtInt(vp)}`:''}${qq>0?` · ${fmtPct(100*v/qq)} de cuota`:''}`, qq>0?v/qq:0); }).join('')
+    + chip('Checks', '#EE6602', sc.checks||0, pc?pc.checks||0:0, `${fmtInt(sc.checks)}${pc?` vs ${fmtInt(pc.checks)}`:''}${sc.cuota_checks>0?` · ${fmtPct(100*sc.checks/sc.cuota_checks)} de cuota`:''}${D.incluyeHoy?' · hoy parcial':''}`, sc.cuota_checks>0 ? sc.checks/sc.cuota_checks : 0);
+  const cads = currentTienda!=null || !D.okV ? '' : DC.cadena.map((nombre,ci)=>{ const f=x=>ST.cadena[x]===ci, sx=D.sumar(cur[0],D.finV,f), px=ref?D.sumar(ref.a,ref.b,f):null; return {nombre, v:tpAltas(sx), vp:px?tpAltas(px):0, q:tpCuota(sx)}; })
+    .filter(c=>c.v>0||c.vp>0).sort((x,y)=>y.v-x.v).map(c=>chip(c.nombre, '#3B4048', c.v, c.vp, `${fmtInt(c.v)}${ref?` vs ${fmtInt(c.vp)}`:''}${c.q>0?` · ${fmtPct(100*c.v/c.q)} de cuota`:''}`, a?c.v/a:0)).join('');
+  const nota = `Altas = Temm + Porta (Pospago aparte).${D.cortaV && D.okV ? ` Ventas al ${diaTxt(D.finV)}${D.hoyAltas!=null?` (hoy van ${fmtInt(D.hoyAltas)} altas, parcial)`:''}, comparadas contra los mismos días de la semana anterior.` : ''}${D.incluyeHoy ? ` Checks con hoy parcial (actualizado ${GENERADO}) contra el día completo de la semana anterior.` : ''} Sigue los filtros y el periodo elegido.`;
+  const big = D.okV ? `<div class="mc-big">${fmtInt(a)}<small>altas Temm + Porta${D.cortaV?` <span style="font-size:11px">(al ${diaTxt(D.finV)})</span>`:''}</small></div>${ref ? deltaPill(a, ap, `${contra} <span>(${fmtInt(ap)} altas)</span>`) : ''}`
+    : `<div class="mc-big">${fmtInt(sc.checks)}<small>checks${D.incluyeHoy?' (hoy parcial)':''}</small></div>${refC ? deltaPill(sc.checks, pc?pc.checks:0, `vs ${refC.lbl} <span>(${fmtInt(pc?pc.checks:0)} checks)</span>`) : ''}<div class="mc-txt" style="margin-top:6px">${D.hoyAltas!=null ? `Hoy van <b>${fmtInt(D.hoyAltas)}</b> altas Temm + Porta (parcial). La comparación de ventas de hoy se ve completa mañana.` : 'Las ventas de este tramo todavía no se cargan.'}</div>`;
+  el.innerHTML = `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${titulo}</div>${big}</div>
+    <div class="mc-side">${modo==='curso' ? `Faltan<b>${resta} ${resta===1?'día':'días'}</b>de la semana` : modo==='dia' ? `Comparado con<b>${ref?ref.lbl:'—'}</b>` : `Semana cerrada<span class="sep"> ·</span><b>${R.end-R.start+1} días</b>`}</div></div>
+    ${D.okV?rank:''}${D.okV?bar:''}${D.okV&&txt?`<div class="mc-txt">${txt}</div>`:''}
+    <div class="mc-chips"><span class="mc-h">${ref?`${contra}`:'Producto'}</span>${prods}</div>
+    ${cads?`<div class="mc-chips"><span class="mc-h">Cadena</span>${cads}</div>`:''}
+    <div class="mc-foot">${nota}</div></div>`;
 }
 
 function renderResumen(){
