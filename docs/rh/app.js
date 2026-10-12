@@ -561,32 +561,75 @@ function sobredim(x, wi) {
   const tope = sd[3], chk = sd[1], proy = sd[6], exc = Math.max(0, proy - tope);
   return { tope, chk, proy, exc, nivel: chk > tope ? 2 : exc > 0.05 ? 1 : 0 };   // 2 = ya se pasó del tope, 1 = a este ritmo se pasa
 }
-/* ----- semana en curso (lun-dom): checks contra la cuota de la semana (sigue los filtros de estructura, ignora el periodo elegido) -----
-   Se mide con días completos: si el último día con datos es hoy, hoy no cuenta todavía (los checks siguen llegando).
-   "Deberías llevar" = cuota de la semana × días completos ÷ 7. Ritmo = checks por día contra la semana anterior completa. */
+/* ----- comparativo semanal (Resumen): mismos días contra la semana anterior y las últimas 4 -----
+   Sigue los filtros de estructura y el periodo elegido:
+   · Un solo día (p. ej. Hoy): ese día contra el mismo día de la semana anterior (lunes vs lunes).
+   · Semana en curso: del lunes al último día con datos, contra esos mismos días de la semana anterior.
+   · Semana completa: la semana entera contra la anterior entera.
+   Si el periodo abarca varias semanas se toma la semana del último día elegido. Hoy cuenta aunque siga en curso:
+   sus checks (incluidos los abiertos) son parciales y se comparan contra el día completo de la semana anterior. */
 const diasEntre = (d, h) => { const o = []; for (let x = d; x <= h; x = addD(x, 1)) o.push(x); return o; };
 const semTxt = w => String(w.w || '').replace(/^\d+-/, '');
+const DIA_C = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'], diaC = d => DIA_C[new Date(d + 'T12:00:00').getDay()] + ' ' + d.slice(8, 10) + '/' + d.slice(5, 7);
 const arcMini = (f, col) => { const r = 11, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, f || 0)); return `<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><circle cx="14" cy="14" r="${r}" fill="#fff" stroke="#E1E4E8" stroke-width="3.5"/><circle cx="14" cy="14" r="${r}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c * v} ${c}" transform="rotate(-90 14 14)"/></svg>`; };
+const descubiertas = (xs, d) => xs.filter(x => (x.t.posiciones || 0) > 0 && cdv(x, d) === 0).length;
+function comparativoRH(xs) {
+  const L = limites(), W = ventana(), r = perRango(), fin = r.hasta > L.max ? L.max : r.hasta, parcial = L.max >= HOY, ok = d => d >= L.min && d <= L.max;
+  let modo, cur, refs = [], w = null, wi = -1;
+  if (r.dias.length === 1 && PER.modo !== 'semana') {   // Hoy o un día elegido (un lunes en modo semana sigue siendo 'semana en curso')
+    modo = 'dia'; cur = [fin];
+    for (let k = 1; k <= 4; k++) { const d = addD(fin, -7 * k); if (ok(d)) refs.push({ dias: [d], lbl: diaC(d) }); }
+  } else {
+    wi = W.findIndex(x => x.ini <= fin && addD(x.ini, 6) >= fin); if (wi < 0) return null; w = W[wi];
+    const n = diffD(fin, w.ini); cur = diasEntre(w.ini, fin).filter(ok);
+    modo = fin >= addD(w.ini, 6) && !(fin === L.max && parcial) ? 'completa' : 'curso';
+    for (let k = 1; k <= 4; k++) { const v = W[wi - k]; if (v) { const ds = diasEntre(v.ini, addD(v.ini, n)).filter(ok); if (ds.length) refs.push({ dias: ds, lbl: semTxt(v) }); } }
+  }
+  if (!cur.length) return null;
+  return { modo, cur, refs, w, incluyeHoy: parcial && cur[cur.length - 1] === L.max, L };
+}
 function semanaCurso(xs) {
-  const L = limites(), W = ventana(), ult = L.max >= HOY ? addD(HOY, -1) : L.max;
-  let i = W.findIndex(w => w.ini <= ult && addD(w.ini, 6) >= ult); if (i < 0) i = W.length - 1;
-  const w = W[i], fin = addD(w.ini, 6), abierta = fin > ult, dias = ult >= w.ini ? diasEntre(w.ini < L.min ? L.min : w.ini, abierta ? ult : fin) : [], nd = dias.length, resta = 7 - nd;
-  const head = (sub, cuerpo) => `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${abierta ? 'Semana en curso' : 'Última semana cerrada'} · ${esc(semTxt(w))} (${fdate(w.ini)} – ${fdate(fin)})</div>${sub}</div><div class="mc-side">${abierta ? `Día ${nd} de 7<span class="sep"> ·</span><b>${resta} ${resta === 1 ? 'día' : 'días'}</b>restantes` : 'Semana cerrada<b>7 días</b>'}</div></div>${cuerpo}</div>`;
-  if (!nd) return head('<div class="mc-big">—</div>', '<div class="mc-txt">Todavía no hay un día completo con datos en esta semana. Vuelve a revisar mañana.</div>');
-  const cur = medidas(xs, dias), cuotaSem = cur.cuota * 7 / nd, esp = cur.cuota, chk = cur.chk, pr = esp ? chk / esp * 100 : null, col = colorPct(pr);
-  const wa = i > 0 ? W[i - 1] : null, dA = wa && wa.ini >= L.min ? diasEntre(wa.ini, addD(wa.ini, 6)) : [], ant = dA.length ? medidas(xs, dA) : null;
-  const rd = chk / nd, rd0 = ant && ant.chk ? ant.chk / dA.length : null, dv = rd0 ? rd / rd0 - 1 : null, dcls = dv == null || Math.abs(dv) < .005 ? 'eq' : dv > 0 ? 'up' : 'dn';
-  const delta = dv == null ? '' : `<div class="mc-delta ${dcls}">${dcls === 'up' ? '▲' : dcls === 'dn' ? '▼' : '■'} ${dv > 0 ? '+' : ''}${(100 * dv).toFixed(1)}% checks por día vs ${esc(semTxt(wa))}<span>(${rd.toFixed(1)} vs ${rd0.toFixed(1)}${ant.pctC != null ? ` · ${esc(semTxt(wa))} cerró en ${f1(ant.pctC)}% de cuota` : ''})</span></div>`;
-  const falt = Math.max(0, cuotaSem - chk), proj = rd * 7, pl = 100 * nd / 7, side = pl < 12 ? ' l' : pl > 88 ? ' r' : '';
-  const bar = cuotaSem ? `<div class="mc-bar" title="La línea negra marca cuántos checks deberías llevar hoy para cerrar la semana en cuota"><i style="width:${Math.min(100, 100 * chk / cuotaSem)}%;background:${col}"></i>${abierta ? `<b class="mc-pace${side}" style="left:${pl}%" data-l="Hoy: ${fmt(esp)}"></b>` : ''}</div>` : '';
-  const txt = !cuotaSem ? 'No hay posiciones autorizadas con estos filtros, por eso no hay cuota de checks.'
-    : abierta ? `<b>${f1(100 * chk / cuotaSem)}%</b> de la cuota de la semana (${fmt(chk)} de ${fmt(cuotaSem)} checks) · a hoy deberías llevar <b>${fmt(esp)}</b> → vas <b style="color:${(Math.round(chk - esp) || 0) >= 0 ? C.gr : C.rd}">${(Math.round(chk - esp) || 0) > 0 ? '+' : ''}${fmt((Math.round(chk - esp) || 0))}</b>.<br>`
-      + (falt > 0 ? `Faltan <b>${fmt(falt)}</b> checks en ${resta} ${resta === 1 ? 'día' : 'días'}: necesitas <b>${fmt1(falt / resta)} por día</b> (hoy vas a ${fmt1(rd)}). Al ritmo actual cierras en <b>~${fmt(proj)}</b> (${f1(100 * proj / cuotaSem)}% de la cuota).` : `<b style="color:${C.gr}">¡Cuota de checks de la semana cubierta!</b> Al ritmo actual cierras en ~${fmt(proj)}.`)
-    : `Semana cerrada: <b>${fmt(chk)}</b> de <b>${fmt(cuotaSem)}</b> checks (${f1(100 * chk / cuotaSem)}% de la cuota) · ${falt > 0 ? `faltaron <b style="color:${C.rd}">${fmt(falt)}</b>` : `<b style="color:${C.gr}">cuota cubierta</b>`}.`;
-  /* fichas por cadena: aro = parte de los checks; % = avance contra su cuota de la semana, con color según lo esperado a hoy */
-  const cads = [...new Set(xs.map(x => x.t.cadena).filter(Boolean))].map(c => ({ c, q: medidas(xs.filter(y => y.t.cadena === c), dias) })).filter(o => o.q.n).sort((a, b) => b.q.chk - a.q.chk);
-  const chips = cads.map(({ c, q }) => { const qs = q.cuota * 7 / nd, p = q.cuota ? q.chk / q.cuota * 100 : null; return `<div class="mc-chip" title="${esc(c)}: ${fmt(q.chk)} checks de ${fmt(qs)} de cuota de la semana · a hoy debería llevar ${fmt(q.cuota)} · ${q.n} tiendas">${arcMini(chk ? q.chk / chk : 0, C.dk)}<span class="nm">${esc(c)} <small>${fmt(q.chk)} checks · ${f1(chk ? 100 * q.chk / chk : 0)}% del total</small></span>${qs ? `<em style="color:${colorPct(p)}">${f1(100 * q.chk / qs)}% cuota</em>` : ''}</div>`; }).join('');
-  return head(`<div class="mc-big">${fmt(chk)}<small>checks válidos</small></div>${delta}`, `${bar}<div class="mc-txt">${txt}<br><span class="muted">Cuota: 6 checks por posición por semana. Datos al ${fdate(dias[nd - 1])} (días completos). Este recuadro sigue los filtros de estructura y no cambia con el periodo elegido.</span></div>${chips ? `<div class="mc-chips">${chips}</div>` : ''}`);
+  const D = comparativoRH(xs); if (!D) return '';
+  const { modo, cur, refs, w } = D, ref = refs[0], m = medidas(xs, cur), mp = ref ? medidas(xs, ref.dias) : null;
+  const ult = cur[cur.length - 1], ultR = ref ? ref.dias[ref.dias.length - 1] : null, desc = descubiertas(xs, ult), descP = ultR ? descubiertas(xs, ultR) : null;
+  const tramo = cur.length === 1 ? diaC(cur[0]) : `${diaC(cur[0])} – ${diaC(ult)}`;
+  const contra = !ref ? '' : modo === 'dia' ? `vs ${ref.lbl}` : modo === 'completa' ? `vs ${ref.lbl} completa` : `vs mismos días de ${ref.lbl}`;
+  const titulo = modo === 'dia' ? `Día · ${tramo}` : modo === 'completa' ? `Semana ${esc(semTxt(w))} completa · ${fdate(w.ini)} – ${fdate(addD(w.ini, 6))}` : `Semana en curso · ${esc(semTxt(w))} · ${tramo} (${cur.length} de 7 días)`;
+  const pill = (a, b, txt) => { if (!(b > 0)) return ''; const dv = a / b - 1, c = Math.abs(dv) < .005 ? 'eq' : dv > 0 ? 'up' : 'dn'; return `<div class="mc-delta ${c}">${c === 'up' ? '▲' : c === 'dn' ? '▼' : '■'} ${dv > 0 ? '+' : ''}${(100 * dv).toFixed(1)}% ${txt}</div>`; };
+  const dPct = (a, b) => a == null || b == null ? '<em style="color:var(--text-soft)">—</em>' : `<em style="color:${Math.abs(a - b) < .05 ? 'var(--text-muted)' : a > b ? C.gr : C.rd}">${a > b ? '▲ +' : a < b ? '▼ ' : ''}${f1(a - b)} pts</em>`;
+  const dNum = (a, b, menosMejor) => b == null ? '<em style="color:var(--text-soft)">—</em>' : `<em style="color:${a === b ? 'var(--text-muted)' : (a < b) === !!menosMejor ? C.gr : C.rd}">${a > b ? '▲ +' : a < b ? '▼ ' : '■ '}${fmt(a - b)}</em>`;
+  const chip = (n, col, sub, frac, d) => `<div class="mc-chip" title="${n}: ${sub}">${arcMini(frac, col)}<span class="nm">${n} <small>${sub}</small></span>${d}</div>`;
+  /* dato rápido: checks contra el mismo tramo de las últimas semanas */
+  let rank = '';
+  if (refs.length) {
+    const hist = refs.map(x => ({ lbl: x.lbl, v: medidas(xs, x.dias).chk })), mx = Math.max(...hist.map(h => h.v)), mn = Math.min(...hist.map(h => h.v)), pos = 1 + hist.filter(h => h.v > m.chk).length, nH = hist.length;
+    const que = modo === 'dia' ? 'el mismo día de las' : modo === 'completa' ? 'las' : 'los mismos días de las';
+    const tx = m.chk > mx ? `🏆 <b>Mejor que ${que} últimas ${nH} semanas</b>` : m.chk < mn ? `⚠️ <b>La más baja contra ${que} últimas ${nH} semanas</b>` : `<b>${pos}.º lugar</b> de ${nH + 1} contra ${que} últimas ${nH} semanas`;
+    const tope = Math.max(m.chk, mx, 1), barras = [...hist].reverse().concat([{ lbl: modo === 'dia' ? diaC(ult) : semTxt(w), v: m.chk, yo: 1 }]);
+    rank = `<div class="mc-rank"><div class="mc-rank-txt">${tx} <span>(checks válidos${D.incluyeHoy ? ', hoy parcial' : ''})</span></div><div class="mc-spark">${barras.map(h => `<div class="mc-sp${h.yo ? ' yo' : ''}" title="${h.lbl}: ${fmt(h.v)} checks"><i style="height:${Math.max(4, 100 * h.v / tope)}%"></i><small>${h.lbl}</small><b>${fmt(h.v)}</b></div>`).join('')}</div></div>`;
+  }
+  /* avance contra la cuota de la semana (en curso: con la línea de lo que toca a hoy) */
+  let bar = '', txt = '';
+  if (modo !== 'dia' && m.cuota) {
+    const cuotaSem = m.cuota * 7 / cur.length, pl = 100 * cur.length / 7, side = pl < 12 ? ' l' : pl > 88 ? ' r' : '', falt = Math.max(0, cuotaSem - m.chk), resta = 7 - cur.length;
+    bar = `<div class="mc-bar" title="Checks contra la cuota de la semana (6 por posición)"><i style="width:${Math.min(100, 100 * m.chk / cuotaSem)}%;background:${colorPct(m.pctC)}"></i>${modo === 'curso' ? `<b class="mc-pace${side}" style="left:${pl}%" data-l="Cuota a hoy: ${fmt(m.cuota)}"></b>` : ''}</div>`;
+    txt = modo === 'curso' ? `Checks del tramo: <b style="color:${colorPct(m.pctC)}">${f1(m.pctC)}%</b> de su cuota (${fmt(m.chk)} de ${fmt(m.cuota)}).${falt > 0 && resta ? ` Para la cuota de la semana (${fmt(cuotaSem)}) faltan <b>${fmt(falt)}</b> checks en ${resta} ${resta === 1 ? 'día' : 'días'}: <b>${fmt1(falt / resta)} por día</b>.` : ''}`
+      : `Cierre de la semana: <b style="color:${colorPct(m.pctC)}">${f1(m.pctC)}%</b> de la cuota de checks (${fmt(m.chk)} de ${fmt(m.cuota)}).`;
+  }
+  const chips = chip('Cobertura PDV', C.bl, `${f1(m.pctP)}%${mp ? ` vs ${f1(mp.pctP)}%` : ''}`, (m.pctP || 0) / 100, dPct(m.pctP, mp && mp.pctP))
+    + chip('Asistencia', C.gr, `${f1(m.pctM)}%${mp ? ` vs ${f1(mp.pctM)}%` : ''}`, (m.pctM || 0) / 100, dPct(m.pctM, mp && mp.pctM))
+    + chip(`Descubiertas ${diaC(ult)}`, C.rd, `${fmt(desc)} tiendas${descP != null ? ` vs ${fmt(descP)} el ${diaC(ultR)}` : ''}`, m.n ? desc / m.n : 0, dNum(desc, descP, true))
+    + chip('Checks vs cuota', C.or, `${f1(m.pctC)}%${mp ? ` vs ${f1(mp.pctC)}%` : ''}`, (m.pctC || 0) / 100, dPct(m.pctC, mp && mp.pctC));
+  const cads = [...new Set(xs.map(x => x.t.cadena).filter(Boolean))].map(c => { const ys = xs.filter(y => y.t.cadena === c), q = medidas(ys, cur), qp = ref ? medidas(ys, ref.dias) : null; return { c, q, qp }; })
+    .filter(o => o.q.n).sort((a, b) => b.q.chk - a.q.chk)
+    .map(({ c, q, qp }) => chip(esc(c), C.dk, `${fmt(q.chk)} checks${qp ? ` vs ${fmt(qp.chk)}` : ''} · cobertura ${f1(q.pctP)}%`, m.chk ? q.chk / m.chk : 0, qp && qp.chk ? `<em style="color:${q.chk >= qp.chk ? C.gr : C.rd}">${q.chk >= qp.chk ? '▲ +' : '▼ '}${(100 * (q.chk / qp.chk - 1)).toFixed(1)}%</em>` : '')).join('');
+  const nota = `${D.incluyeHoy ? `Hoy es parcial (checks abiertos y válidos hasta la última actualización${R.meta.generado ? ' · ' + esc(R.meta.generado) : ''}) y se compara contra el día completo de la semana anterior. ` : ''}Cuota: 6 checks por posición por semana. Sigue los filtros de estructura y el periodo elegido.`;
+  return `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${titulo}</div><div class="mc-big">${fmt(m.chk)}<small>checks válidos${D.incluyeHoy ? ' (hoy parcial)' : ''}</small></div>${ref ? pill(m.chk, mp.chk, `${contra} <span>(${fmt(mp.chk)} checks)</span>`) : ''}</div>
+    <div class="mc-side">${modo === 'curso' ? `Faltan<b>${7 - cur.length} ${7 - cur.length === 1 ? 'día' : 'días'}</b>de la semana` : modo === 'dia' ? `Comparado con<b>${ref ? ref.lbl : '—'}</b>` : `Semana cerrada<span class="sep"> ·</span><b>7 días</b>`}</div></div>
+    ${rank}${bar}${txt ? `<div class="mc-txt">${txt}</div>` : ''}
+    <div class="mc-chips"><span class="mc-h">${ref ? contra : 'Indicadores'}</span>${chips}</div>
+    ${cads ? `<div class="mc-chips"><span class="mc-h">Cadena</span>${cads}</div>` : ''}
+    <div class="mc-foot">${nota}</div></div>`;
 }
 /* ====================================================================== 1 · RESUMEN ====================================================================== */
 async function vResumen() {
