@@ -932,6 +932,11 @@
   .mc-sp i{display:block;width:22px;border-radius:4px 4px 0 0;background:#CFC9C3}.mc-sp.yo i{background:var(--orange)}.mc-sp.yo{color:var(--text)}
   .mc-sp b{font-size:10px;color:var(--text-muted);font-variant-numeric:tabular-nums}.mc-sp.yo b{color:var(--orange-dark)}
   .mc-foot{margin-top:10px;font-size:11px;font-weight:600;color:var(--text-soft)}
+  .mc-hoy{margin:14px 0 4px;padding:10px 14px 12px;border-radius:12px;border:1.5px dashed var(--orange);background:#FFF8F2}
+  .mc-hoy-t{font-size:12px;font-weight:800;color:var(--orange-dark)}.mc-hoy-t span{font-weight:600;color:var(--text-soft);font-size:11px;margin-left:4px}
+  .mc-hoy-g{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:6px}.mc-hoy-g div{display:flex;flex-direction:column}
+  .mc-hoy-g small{font-size:10px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em}.mc-hoy-g b{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+  .mc-bar.mc-bar-s{height:8px;margin:8px 0 0}
   .mc-delta span{font-weight:600;color:var(--text-muted)}
   @media (max-width:640px){.mc-big{font-size:30px}.mc-top{gap:6px}.mc-side{text-align:left}.mc-side b{display:inline;font-size:12px;margin:0 3px}.mc-side .sep{display:inline}.mc-chip{flex:1 1 100%}.mc-chips .mc-h{flex:1 1 100%}}
 </style>
@@ -4333,21 +4338,17 @@ function comparativoDatos(){
     for(let k=1;k<=4;k++){ const W = WEEK_RANGES[wi-k]; if(W) refs.push({a:W.start, b:Math.min(W.end, W.start+n), lbl:semLbl(wi-k)}); }
   }
   const incluyeHoy = parcial && cur[1]===L;
-  /* las ventas de hoy llegan incompletas hasta el día siguiente: las altas se comparan hasta AYER (o el último día con
-     altas), con el mismo número de días en las semanas de referencia; los checks sí incluyen hoy */
-  const Lv = ultimoDiaConAltas(), finV = Math.min(incluyeHoy ? cur[1]-1 : cur[1], Lv), cortaV = finV < cur[1], nV = finV - cur[0];
+  /* hoy cuenta también en ventas aunque esté incompleto (se ve el gap del día contra su meta y contra el mismo día
+     de la semana anterior); finV/okV quedan por si en el futuro se quiere cortar el tramo de ventas */
+  const finV = cur[1], cortaV = false, nV = finV - cur[0];
   const refsV = refs.map(r=>({...r, b: Math.min(r.b, r.a + nV)}));
   const okV = finV >= cur[0];
   return {modo, wi, R, L, cur, refs, incluyeHoy, stores, sumar, finV, cortaV, okV, refsV,
     s: okV ? sumar(cur[0], finV) : emptySums(), p: okV && refsV.length ? sumar(refsV[0].a, refsV[0].b) : null,
     sc: sumar(cur[0], cur[1]), pc: refs.length ? sumar(refs[0].a, refs[0].b) : null,
     sem: sumar(R.start, R.end), hist: okV ? refsV.map(r=>({lbl:r.lbl, v:tpAltas(sumar(r.a,r.b))})) : [],
-    hoyAltas: incluyeHoy ? tpAltas(sumar(L, L)) : null};
-}
-let _ultAltasIdx = null;
-function ultimoDiaConAltas(){
-  if(_ultAltasIdx==null){ let m=-1; for(let i=0;i<N_ROWS;i++) if(((RW.altas_temm[i]||0)+(RW.altas_porta[i]||0))>0 && RW.fecha[i]>m) m=RW.fecha[i]; _ultAltasIdx=m; }
-  return _ultAltasIdx;
+    hoyAltas: incluyeHoy ? tpAltas(sumar(L, L)) : null,
+    hoyS: incluyeHoy ? sumar(L, L) : null, hoyP: incluyeHoy && L-7>=0 ? sumar(L-7, L-7) : null};
 }
 const fmtRitmo = n => n==null ? '—' : n>=100 ? fmtInt(n) : n.toLocaleString('es-MX',{minimumFractionDigits:1,maximumFractionDigits:1});
 function deltaPill(a, b, txt){
@@ -4373,7 +4374,7 @@ function renderSemanaCurso(){
   if(nH){
     const mx = Math.max(...hist.map(h=>h.v)), mn = Math.min(...hist.map(h=>h.v)), pos = 1+hist.filter(h=>h.v>a).length;
     const que = modo==='dia' ? 'el mismo día de las' : modo==='completa' ? 'las' : 'los mismos días de las';
-    rank = (a>mx ? `🏆 <b>Mejor que ${que} últimas ${nH} semanas</b>` : a<mn ? `⚠️ <b>La más baja contra ${que} últimas ${nH} semanas</b>` : `<b>${pos}.º lugar</b> de ${nH+1} contra ${que} últimas ${nH} semanas`) + ` <span>(altas Temm + Porta${D.cortaV?`, ${tramoV}`:''})</span>`;
+    rank = (a>mx ? `🏆 <b>Mejor que ${que} últimas ${nH} semanas</b>` : a<mn ? `⚠️ <b>La más baja contra ${que} últimas ${nH} semanas</b>` : `<b>${pos}.º lugar</b> de ${nH+1} contra ${que} últimas ${nH} semanas`) + ` <span>(altas Temm + Porta${D.cortaV?`, ${tramoV}`:''}${D.incluyeHoy?'; hoy todavía en curso':''})</span>`;
     const tope = Math.max(a, mx, 1), barras = [...hist].reverse().concat([{lbl: modo==='dia' ? diaTxt(cur[0]) : lbl, v:a, yo:1}]);
     rank = `<div class="mc-rank"><div class="mc-rank-txt">${rank}</div><div class="mc-spark">${barras.map(h=>`<div class="mc-sp${h.yo?' yo':''}" title="${h.lbl}: ${fmtInt(h.v)} altas"><i style="height:${Math.max(4, 100*h.v/tope)}%"></i><small>${h.lbl}</small><b>${fmtInt(h.v)}</b></div>`).join('')}</div></div>`;
   }
@@ -4393,12 +4394,19 @@ function renderSemanaCurso(){
     + chip('Checks', '#EE6602', sc.checks||0, pc?pc.checks||0:0, `${fmtInt(sc.checks)}${pc?` vs ${fmtInt(pc.checks)}`:''}${sc.cuota_checks>0?` · ${fmtPct(100*sc.checks/sc.cuota_checks)} de cuota`:''}${D.incluyeHoy?' · hoy parcial':''}`, sc.cuota_checks>0 ? sc.checks/sc.cuota_checks : 0);
   const cads = currentTienda!=null || !D.okV ? '' : DC.cadena.map((nombre,ci)=>{ const f=x=>ST.cadena[x]===ci, sx=D.sumar(cur[0],D.finV,f), px=ref?D.sumar(ref.a,ref.b,f):null; return {nombre, v:tpAltas(sx), vp:px?tpAltas(px):0, q:tpCuota(sx)}; })
     .filter(c=>c.v>0||c.vp>0).sort((x,y)=>y.v-x.v).map(c=>chip(c.nombre, '#3B4048', c.v, c.vp, `${fmtInt(c.v)}${ref?` vs ${fmtInt(c.vp)}`:''}${c.q>0?` · ${fmtPct(100*c.v/c.q)} de cuota`:''}`, a?c.v/a:0)).join('');
-  const nota = `Altas = Temm + Porta (Pospago aparte).${D.cortaV && D.okV ? ` Ventas al ${diaTxt(D.finV)}${D.hoyAltas!=null?` (hoy van ${fmtInt(D.hoyAltas)} altas, parcial)`:''}, comparadas contra los mismos días de la semana anterior.` : ''}${D.incluyeHoy ? ` Checks con hoy parcial (actualizado ${GENERADO}) contra el día completo de la semana anterior.` : ''} Sigue los filtros y el periodo elegido.`;
+  let hoyHtml = '';
+  if(D.incluyeHoy && D.hoyS){
+    const ha = tpAltas(D.hoyS), hq = tpCuota(D.hoyS), hp = D.hoyP ? tpAltas(D.hoyP) : null, fh = Math.max(0, hq-ha), gp = hp!=null ? ha-hp : null;
+    hoyHtml = `<div class="mc-hoy"><div class="mc-hoy-t">⏱️ Hoy ${diaTxt(D.L)} <span>en curso · actualizado ${GENERADO.slice(-5)}</span></div>
+      <div class="mc-hoy-g"><div><small>Llevas</small><b>${fmtInt(ha)}</b></div><div><small>Meta del día</small><b>${fmtInt(hq)}</b></div><div><small>Faltan</small><b style="color:${fh>0?COLOR_RED:COLOR_GREEN}">${fh>0?fmtInt(fh):'✓ 0'}</b></div>${hp!=null?`<div><small>${diaTxt(D.L-7)} cerró</small><b>${fmtInt(hp)}</b></div><div><small>Gap vs ${diaTxt(D.L-7).slice(0,3)} pasado</small><b style="color:${gp>=0?COLOR_GREEN:COLOR_RED}">${gp>0?'+':''}${fmtInt(gp)}</b></div>`:''}</div>
+      ${hq>0?`<div class="mc-bar mc-bar-s"><i style="width:${Math.min(100,100*ha/hq)}%;background:${statusColor(100*ha/hq)}"></i></div>`:''}</div>`;
+  }
+  const nota = `Altas = Temm + Porta (Pospago aparte).${D.incluyeHoy ? ` Hoy está en curso (actualizado ${GENERADO}): sus ventas y checks son parciales y se comparan contra el día completo de la semana anterior.` : ''} Sigue los filtros y el periodo elegido.`;
   const big = D.okV ? `<div class="mc-big">${fmtInt(a)}<small>altas Temm + Porta${D.cortaV?` <span style="font-size:11px">(al ${diaTxt(D.finV)})</span>`:''}</small></div>${ref ? deltaPill(a, ap, `${contra} <span>(${fmtInt(ap)} altas)</span>`) : ''}`
     : `<div class="mc-big">${fmtInt(sc.checks)}<small>checks${D.incluyeHoy?' (hoy parcial)':''}</small></div>${refC ? deltaPill(sc.checks, pc?pc.checks:0, `vs ${refC.lbl} <span>(${fmtInt(pc?pc.checks:0)} checks)</span>`) : ''}<div class="mc-txt" style="margin-top:6px">${D.hoyAltas!=null ? `Hoy van <b>${fmtInt(D.hoyAltas)}</b> altas Temm + Porta (parcial). La comparación de ventas de hoy se ve completa mañana.` : 'Las ventas de este tramo todavía no se cargan.'}</div>`;
   el.innerHTML = `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${titulo}</div>${big}</div>
     <div class="mc-side">${modo==='curso' ? `Faltan<b>${resta} ${resta===1?'día':'días'}</b>de la semana` : modo==='dia' ? `Comparado con<b>${ref?ref.lbl:'—'}</b>` : `Semana cerrada<span class="sep"> ·</span><b>${R.end-R.start+1} días</b>`}</div></div>
-    ${D.okV?rank:''}${D.okV?bar:''}${D.okV&&txt?`<div class="mc-txt">${txt}</div>`:''}
+    ${hoyHtml}${D.okV?rank:''}${D.okV?bar:''}${D.okV&&txt?`<div class="mc-txt">${txt}</div>`:''}
     <div class="mc-chips"><span class="mc-h">${ref?`${contra}`:'Producto'}</span>${prods}</div>
     ${cads?`<div class="mc-chips"><span class="mc-h">Cadena</span>${cads}</div>`:''}
     <div class="mc-foot">${nota}</div></div>`;
