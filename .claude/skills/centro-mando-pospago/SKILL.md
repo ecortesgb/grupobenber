@@ -24,7 +24,7 @@ Elías habla español y quiere respuestas cortas, con archivos completos y listo
 - Perdida = línea baja/exportada/predesactivada; si no, recuperable.
 - DN enmascarado; no mostrar esquema de agencia ni proformas.
 - Cuota: `CUOTAS\Benber\MM_2026.xlsx` hoja CAPILARIDAD col POSPAGO. Se usan TODOS los archivos de la carpeta, sin omitir ninguno (decisión de Elías); el mes sale del nombre del archivo, aunque la columna MES diga otro.
-- La contraseña NO se recuerda en el navegador: se pide cada vez que se abre o recarga la página.
+- Sesión recordada en el navegador (se guarda la llave, nunca la contraseña): no se pide al recargar; se vuelve a pedir tras 8 h sin actividad, a las 12 h de haberla escrito o cuando cambia la contraseña. La sal del cifrado es fija por herramienta para que la sesión sobreviva a cada publicación.
 
 ## Seguridad (repo público)
 - Publicar SIEMPRE `salida/index.html` (cifrado). `salida/index_abierto.html` trae datos en claro: solo local, está en `.gitignore`.

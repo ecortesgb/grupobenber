@@ -26,7 +26,7 @@ function unificarNombres(rows, campos) {
   });
   return rows;
 }
-const NIVEL = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Gerente', rh: 'RH', reclutador: 'Reclutador' };
+const NIVEL = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Gerente', rh: 'RH', reclutador: 'Reclutador', analista: 'Analista', nomina: 'Nómina', altas: 'Auxiliar de nómina' };
 
 /* ====================================================================== capa de datos ====================================================================== */
 let sb = null;
