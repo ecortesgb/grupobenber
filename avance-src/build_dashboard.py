@@ -525,28 +525,50 @@ input{width:100%;margin:18px 0 10px;padding:11px 12px;border-radius:8px;border:1
 button{width:100%;padding:11px;border:0;border-radius:8px;background:#EE6602;color:#fff;font:inherit;font-weight:600;cursor:pointer}
 button:disabled{opacity:.6;cursor:wait}
 #m{min-height:18px;margin:10px 0 0;color:#ff8a80;font-size:13px}
+.pw{position:relative;margin:18px 0 10px}.pw input{margin:0;padding-right:46px}
+.ojo{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:auto;padding:6px 9px;background:none;border:0;font-size:17px;line-height:1;cursor:pointer;opacity:.75}
+.ojo:hover{opacity:1}
 .aviso{margin:16px 0 0;padding:10px 12px;border:1px solid #3a3f48;border-left:3px solid #EE6602;border-radius:8px;background:rgba(238,102,2,.06);color:#a8afb9;font-size:11px;line-height:1.45;text-align:left}
 .aviso b{color:#f2f3f5}
 </style></head><body><div class="box"><h1>Avance GB<span class="tag">GRUPO BENBER</span></h1><small>Acceso interno · actualizado __GENERADO__</small>
-<form id="f"><input id="k" type="password" placeholder="Contraseña" autocomplete="current-password" autofocus><button id="b">Entrar</button></form><p id="m"></p>
+<form id="f"><div class="pw"><input id="k" type="password" placeholder="Contraseña" autocomplete="current-password" autofocus><button type="button" class="ojo" id="o" title="Mostrar contraseña" aria-label="Mostrar u ocultar la contraseña">👁</button></div><button id="b">Entrar</button></form><p id="m"></p>
 <p class="aviso"><b>🔒 Aviso de confidencialidad.</b> Uso exclusivo de personal autorizado de Grupo Benber y Telefónica Movistar México. La información es confidencial: al ingresar aceptas usarla solo para fines laborales, bajo tu responsabilidad, y no copiarla, compartirla ni difundirla. El acceso no autorizado está prohibido.</p></div>
 <script>
 (function(){
-var P=__PAYLOAD__;
+var P=__PAYLOAD__,NS='gb_ses_avance',INACT=8*36e5,TOPE=12*36e5;
+// Sesión: al abrir con la contraseña se guarda la llave (no la contraseña) en este navegador. Dura 8 h sin actividad y máximo 12 h;
+// si cambia la contraseña, la llave guardada ya no abre la página y se vuelve a pedir.
 function B(x){var s=atob(x),u=new Uint8Array(s.length);for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
-async function abrir(pw){
+function A(u){var s='';for(var i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)}
+async function des(k){var z=await crypto.subtle.decrypt({name:'AES-GCM',iv:B(P.i)},k,B(P.c));return await new Response(new Blob([z]).stream().pipeThrough(new DecompressionStream('gzip'))).text();}
+async function conClave(pw){
  var km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
- var k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:B(P.s),iterations:P.n,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
- var z=await crypto.subtle.decrypt({name:'AES-GCM',iv:B(P.i)},k,B(P.c));
- return await new Response(new Blob([z]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+ var k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:B(P.s),iterations:P.n,hash:'SHA-256'},km,{name:'AES-GCM',length:256},true,['decrypt']);
+ var h=await des(k);return {h:h,k:A(new Uint8Array(await crypto.subtle.exportKey('raw',k)))};
 }
+function leer(){try{var x=JSON.parse(localStorage.getItem(NS)||'null'),n=Date.now();if(x&&x.s===P.s&&n-x.u<INACT&&n-x.t0<TOPE)return x;localStorage.removeItem(NS)}catch(e){}return null}
+var VIG='<scr'+'ipt>(function(){var NS="'+NS+'",I='+INACT+',T='+TOPE+',ult=0;'
+ +'function vig(){try{var x=JSON.parse(localStorage.getItem(NS)||"null"),n=Date.now();if(!x||n-x.u>=I||n-x.t0>=T){localStorage.removeItem(NS);location.reload()}}catch(e){}}'
+ +'function act(){var n=Date.now();if(n-ult<60000)return;ult=n;try{var x=JSON.parse(localStorage.getItem(NS)||"null");if(x&&n-x.u<I&&n-x.t0<T){x.u=n;localStorage.setItem(NS,JSON.stringify(x))}}catch(e){}}'
+ +'["mousemove","keydown","click","scroll","touchstart"].forEach(function(e){addEventListener(e,act,{passive:true,capture:true})});'
+ +'setInterval(vig,60000);document.addEventListener("visibilitychange",function(){if(!document.hidden)vig()});})();</scr'+'ipt>';
+// se espera a que el navegador termine de cargar esta página: si no, document.open() se ignora y el contenido se pega debajo
+function mostrar(h){if(document.readyState!=='complete'){addEventListener('load',function(){setTimeout(function(){mostrar(h)},0)});return}P=null;document.open();document.write(h+VIG);document.close()}
+var m=document.getElementById('m'),b=document.getElementById('b'),k=document.getElementById('k'),o=document.getElementById('o');
+o.onclick=function(){var v=k.type==='password';k.type=v?'text':'password';o.textContent=v?'🙈':'👁';o.title=v?'Ocultar contraseña':'Mostrar contraseña';k.focus()};
+var viejos=!window.crypto||!crypto.subtle||!window.DecompressionStream;
 document.getElementById('f').onsubmit=async function(e){
- e.preventDefault();var m=document.getElementById('m'),b=document.getElementById('b');
- if(!window.crypto||!crypto.subtle||!window.DecompressionStream){m.textContent='Tu navegador es muy antiguo: actualízalo o abre la página en Chrome.';return}
+ e.preventDefault();
+ if(viejos){m.textContent='Tu navegador es muy antiguo: actualízalo o abre la página en Chrome.';return}
  m.style.color='#a8afb9';m.textContent='Abriendo…';b.disabled=true;
- var h;try{h=await abrir(document.getElementById('k').value.trim())}catch(err){m.style.color='#ff8a80';m.textContent='Contraseña incorrecta';b.disabled=false;return}
- P=null;document.open();document.write(h);document.close();
+ var r;try{r=await conClave(k.value.trim())}catch(err){m.style.color='#ff8a80';m.textContent='Contraseña incorrecta';b.disabled=false;return}
+ try{var n=Date.now();localStorage.setItem(NS,JSON.stringify({k:r.k,s:P.s,t0:n,u:n}))}catch(e){}
+ mostrar(r.h);
 };
+var x=viejos?null:leer();
+if(x){m.style.color='#a8afb9';m.textContent='Abriendo tu sesión…';b.disabled=true;
+ crypto.subtle.importKey('raw',B(x.k),{name:'AES-GCM'},false,['decrypt']).then(des).then(mostrar,function(){
+  try{localStorage.removeItem(NS)}catch(e){}m.style.color='#ff8a80';m.textContent='La contraseña cambió o tu sesión terminó: escríbela de nuevo.';b.disabled=false;k.focus()});}
 })();
 </script></body></html>"""
 
@@ -556,7 +578,8 @@ def cifrar_html(html, clave, titulo, generado):
     except ImportError:
         print('ERROR: falta el paquete "cryptography". Instálalo una vez con:  py -m pip install cryptography', file=sys.stderr)
         sys.exit(3)
-    salt, iv = os.urandom(16), os.urandom(12)
+    # sal fija por herramienta: la sesión guardada en el navegador sigue sirviendo entre publicaciones mientras la contraseña no cambie
+    salt, iv = hashlib.sha256(b"GB-avance-gate-v1").digest()[:16], os.urandom(12)
     k = hashlib.pbkdf2_hmac("sha256", clave.encode("utf-8"), salt, PBKDF2_ITER, 32)
     c = AESGCM(k).encrypt(iv, gzip.compress(html.encode("utf-8"), 9), None)
     b = lambda x: base64.b64encode(x).decode()

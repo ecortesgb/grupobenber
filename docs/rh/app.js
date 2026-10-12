@@ -27,7 +27,7 @@ function unificarNombres(rows, campos) {
   });
   return rows;
 }
-const NIVEL = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Gerente', rh: 'RH', reclutador: 'Reclutador' };
+const NIVEL = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Gerente', rh: 'RH', reclutador: 'Reclutador', analista: 'Analista', nomina: 'Nómina', altas: 'Auxiliar de nómina' };
 
 /* ====================================================================== capa de datos ====================================================================== */
 let sb = null;
@@ -3058,9 +3058,10 @@ async function usrActivar(id, act, nombre) {
 
 /* >>> 07m_seguridad.js */
 /* ====================================================================== SEGURIDAD: MFA (código del celular), CIERRE POR INACTIVIDAD Y BITÁCORA DE LECTURAS SENSIBLES ======================================================================
-   MFA obligatorio para admin, analista y nómina (TOTP: Google/Microsoft Authenticator). La base exige además que la sesión sea aal2 para esos roles (ver puede()).
+   MFA obligatorio para admin, analista, nómina y auxiliar de nómina (altas) (TOTP: Google/Microsoft Authenticator). La base exige además que la sesión sea aal2 para esos roles (ver puede()).
+   El código se pide al iniciar sesión; la sesión queda guardada en el navegador, así que no se vuelve a pedir al refrescar.
    La bitácora de lecturas la escribe registrar_lectura() y se ve en Auditoría (acción LECTURA). Es del lado de la app: no sustituye al control de acceso de la base. */
-const MFA_ROLES = ['admin', 'analista', 'nomina'];
+const MFA_ROLES = ['admin', 'analista', 'nomina', 'altas'];
 function mfaModal(titulo, cuerpo, ok, cancelar) {
   return new Promise(res => {
     $('modal').innerHTML = `<div class="mbox" style="width:min(440px,96vw)" role="dialog" aria-modal="true"><h3>${titulo}</h3>${cuerpo}<div class="fld"><label>Código de 6 dígitos</label><input id="mf-c" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="font:700 20px monospace;letter-spacing:6px"></div><div class="warn" id="mf-w" hidden></div><div class="mfoot"><button class="btn" id="mf-x">Salir</button><button class="btn primary" id="mf-ok">Verificar</button></div></div>`;
@@ -3083,10 +3084,12 @@ async function mfaGate() {
   if (!ok) throw new Error('Para entrar con este rol necesitas la verificación en dos pasos.');
 }
 
-/* ---- cierre por inactividad: 15 min en roles con datos sensibles, 30 min en los demás ---- */
+/* ---- cierre por inactividad (minutos): admin y analista no se cierran; nómina 15 min (sueldos y bancos); auxiliar de nómina 8 h para dar de alta usuarios Fieldwy sin
+   perder el acceso; los demás 30 min ---- */
+const IDLE_MIN = { admin: 0, analista: 0, nomina: 15, altas: 480 };
 const IDLE = { t: null, aviso: null, ult: 0 };
 function idleIniciar() {
-  if (DEMO) return; const lim = (MFA_ROLES.includes(S.me.rol) ? 15 : 30) * 60000;
+  const min = S.me.rol in IDLE_MIN ? IDLE_MIN[S.me.rol] : 30; if (DEMO || !min) return; const lim = min * 60000;
   const reinicia = () => { const n = Date.now(); if (n - IDLE.ult < 5000) return; IDLE.ult = n; clearTimeout(IDLE.t); clearTimeout(IDLE.aviso); IDLE.aviso = setTimeout(() => toast('Tu sesión se cerrará en 1 minuto por inactividad'), lim - 60000);
     IDLE.t = setTimeout(async () => { try { await API.logout(); } catch (e) { } cerrarM(); mostrarLogin('Sesión cerrada por inactividad. Vuelve a entrar.'); }, lim); };
   if (!IDLE.on) { IDLE.on = true; ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(ev => window.addEventListener(ev, reinicia, { passive: true })); }
