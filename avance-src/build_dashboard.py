@@ -67,6 +67,7 @@ import argparse
 import json
 import os
 import sys
+import unicodedata
 from datetime import datetime, date, time
 
 try:
@@ -178,6 +179,11 @@ ROW_METRICS = [k for k in COLUMN_MAP if k not in ("fecha", "idpdv", "nombre_pdv"
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
+
+def kname(v):
+    """Llave para comparar nombres sin mayúsculas, acentos ni espacios dobles ('Coppel' = 'COPPEL')."""
+    return unicodedata.normalize('NFKD', ' '.join(str(v).split())).encode('ascii', 'ignore').decode().upper()
+
 
 def to_num(v):
     if v is None or v == "":
@@ -298,13 +304,17 @@ def build_dataset(rows):
     dict_pools = {dim: [] for dim in DIMENSIONS}
     dict_index = {dim: {} for dim in DIMENSIONS}
 
+    # El mismo nombre puede llegar escrito distinto ('Coppel' / 'COPPEL', 'León' / 'LEON'): se compara sin
+    # mayúsculas, acentos ni espacios dobles y se queda la primera escritura; las cadenas conocidas siempre igual.
+    CAD_STD = {kname(c): c for c in ('Coppel', 'Elektra', 'Suburbia', 'Cimaco')}
     def dict_idx(dim, value):
         value = value if value not in (None, "") else "(Sin dato)"
         value = str(value).strip()
-        if value not in dict_index[dim]:
-            dict_index[dim][value] = len(dict_pools[dim])
-            dict_pools[dim].append(value)
-        return dict_index[dim][value]
+        k = kname(value)
+        if k not in dict_index[dim]:
+            dict_index[dim][k] = len(dict_pools[dim])
+            dict_pools[dim].append(CAD_STD.get(k, value) if dim == 'cadena' else value)
+        return dict_index[dim][k]
 
     store_index = {}          # idpdv -> posición en STORES
     store_idpdv = []

@@ -904,6 +904,28 @@
     table.dt.st.gbt th.fxc2{position:sticky; top:0;}
   }
   .etiqueta.etiqueta-centro{justify-content:center;} .etiqueta.etiqueta-centro .et-body{flex:0 1 auto; text-align:center;}
+
+  /* ---------- Semana en curso (Resumen): avance vs cuota de la semana ---------- */
+  .mes-card{margin:0 0 16px;padding:18px 20px;border-top:3px solid var(--orange)}
+  .mc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+  .mc-lbl{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)}
+  .mc-big{font-size:38px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;margin-top:2px}.mc-big small{font-size:14px;font-weight:700;color:var(--text-muted);margin-left:6px}
+  .mc-delta{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:800;flex-wrap:wrap}
+  .mc-delta.up{background:#e6f4e6;color:var(--green)}.mc-delta.dn{background:#fbe6e6;color:var(--red)}.mc-delta.eq{background:#F7F5F3;color:var(--text-muted)}
+  .mc-delta span{font-weight:600;color:var(--text-muted)}
+  .mc-side{text-align:right;font-size:12px;font-weight:700;color:var(--text-muted)}.mc-side b{display:block;font-size:22px;color:var(--text);font-weight:800;font-variant-numeric:tabular-nums}.mc-side .sep{display:none}
+  .mc-bar{position:relative;height:14px;border-radius:8px;background:#E8E4E0;margin:30px 0 10px}
+  .mc-bar>i{display:block;height:100%;border-radius:8px;transition:width .5s cubic-bezier(.22,.61,.36,1)}
+  .mc-pace{position:absolute;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;background:var(--dark);border-radius:2px}
+  .mc-pace::after{content:attr(data-l);position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:800;color:var(--dark);white-space:nowrap}
+  .mc-pace.l::after{left:0;transform:none}.mc-pace.r::after{left:auto;right:0;transform:none}
+  .mc-txt{font-size:12.5px;font-weight:600;color:var(--text-muted);line-height:1.65}.mc-txt b{color:var(--text)}
+  .mc-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+  .mc-chips .mc-h{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-soft);min-width:64px}
+  .mc-chip{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border-radius:12px;background:#F7F5F3;border:1px solid var(--line);font-size:12px;font-weight:700;min-width:0}
+  .mc-chip svg{flex:0 0 auto}.mc-chip .nm{display:flex;flex-direction:column;line-height:1.2;min-width:0}.mc-chip .nm small{font-size:10.5px;font-weight:600;color:var(--text-muted)}
+  .mc-chip em{font-style:normal;font-size:11px;font-weight:800;margin-left:auto;padding-left:6px}
+  @media (max-width:640px){.mc-big{font-size:30px}.mc-top{gap:6px}.mc-side{text-align:left}.mc-side b{display:inline;font-size:12px;margin:0 3px}.mc-side .sep{display:inline}.mc-chip{flex:1 1 100%}.mc-chips .mc-h{flex:1 1 100%}}
 </style>
 
 </head>
@@ -3215,7 +3237,7 @@ function tableComponent(opts){
     filas.forEach(r=>filaHtml(r, 0, chain, 0, '', forzar, weeks, out));
     const cols = opts.columns.map(c=>`<th class="${thClassFor(c,opts)}" data-k="${c.key}">${c.short||c.label}</th>`).join('');
     const head = `<tr><th class="fx pt-id" data-k="__id__">IDPDV</th><th class="fx pt-name" data-k="label">${nivel==='tienda'?'Tienda':'Nombre'}</th>${cols}${hasEstatus?'<th data-k="__estatus__">Estatus</th>':''}</tr>`;
-    const body = out.join('') || `<tr class="pt-t"><td colspan="${opts.columns.length+3}" style="text-align:center;color:var(--text-muted);padding:20px;">Sin datos para este filtro</td></tr>`;
+    const body = out.join('') || `<tr class="pt-t"><td colspan="${opts.columns.length+3}" style="text-align:center;color:var(--text-muted);padding:20px;">🔍 No hay datos con estos filtros. Prueba con <b>✕ Quitar filtros</b> o elige otro periodo.</td></tr>`;
     return `<div class="tw" style="max-height:${cap?'none':'72vh'}"><table class="dt st pt${cap?' cap':''}"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 
@@ -3447,6 +3469,8 @@ function skeletonResumen(){
       <div><h2>Resumen general</h2><div class="sub">Vista general de los indicadores según el filtro seleccionado</div></div>
     </div>
     <div id="res-store-summary"></div>
+
+    <div id="res-semana"></div>
 
     <div class="op-only" id="res-ejecutivo"></div>
 
@@ -4269,8 +4293,57 @@ function renderResumenEjecutivo(){
   animarBarras([['ejec-bar-hero', overall], ...kpis.map(k => [k.id, k.pct])]);
 }
 
+/* ---------- Semana en curso (Resumen): altas de la semana contra su cuota ----------
+   Sigue los filtros de estructura (región, supervisor, tienda...) e ignora el periodo elegido.
+   Usa días completos: si el último día con checks es hoy, hoy no cuenta todavía (siguen llegando datos).
+   "Deberías llevar" = la cuota de los días ya transcurridos (la cuota es diaria). Proyección = mismo % de
+   avance contra la cuota diaria aplicado a toda la semana. Ritmo = altas por día contra la semana anterior completa. Si la semana ya cerró (p. ej. lunes temprano) muestra el cierre. */
+function arcMiniSvg(f, col){ const r=11, c=2*Math.PI*r, v=Math.max(0,Math.min(1,f||0)); return `<svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><circle cx="14" cy="14" r="${r}" fill="#fff" stroke="#E8E4E0" stroke-width="3.5"/><circle cx="14" cy="14" r="${r}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c*v} ${c}" transform="rotate(-90 14 14)"/></svg>`; }
+function hoyLocalISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function semanaCursoDatos(){
+  let L = ultimoDiaConDatos(); if(L<0) return null;
+  if(FECHAS[L] >= hoyLocalISO()) L--;                 // hoy todavía no es un día completo
+  if(L<0) return null;
+  const wi = DATE_TO_SEMANA[L], R = WEEK_RANGES[wi]; if(wi==null || !R) return null;
+  const st = matchingStores(), stores = st===null ? Array.from({length:N_STORES},(_,i)=>i) : [...st];
+  const sumar = (a,b,filtro)=>{ const s=emptySums(); for(const x of stores){ if(filtro && !filtro(x)) continue; sumRows(storeRowsInWeekUnfiltered(x,{start:a,end:b}), s); } return s; };
+  const prevR = WEEK_RANGES[wi-1] || null;
+  return {wi, R, L, abierta: L < R.end, nd: L-R.start+1, ndT: R.end-R.start+1, stores, sumar, prevR,
+    hoy: sumar(R.start, L), sem: sumar(R.start, R.end), ant: prevR ? sumar(prevR.start, prevR.end) : null};
+}
+const fmtRitmo = n => n==null ? '—' : n>=100 ? fmtInt(n) : n.toLocaleString('es-MX',{minimumFractionDigits:1,maximumFractionDigits:1});
+function renderSemanaCurso(){
+  const el = document.getElementById('res-semana'); if(!el) return;
+  const D = semanaCursoDatos();
+  if(!D){ el.innerHTML=''; return; }
+  const {R, nd, ndT, abierta} = D, resta = ndT-nd, lbl = String(SEMANAS[D.wi]||'').replace(/^\d+-/,'');
+  const altas = D.hoy.altas_t, esp = D.hoy.cuota_t, cuotaSem = D.sem.cuota_t, pr = esp>0 ? altas/esp*100 : null, col = statusColor(pr);
+  const rd = altas/nd, antN = D.prevR ? D.prevR.end-D.prevR.start+1 : 0, rd0 = D.ant && D.ant.altas_t ? D.ant.altas_t/antN : null, dv = rd0 ? rd/rd0-1 : null;
+  const dcls = dv==null || Math.abs(dv)<.005 ? 'eq' : dv>0 ? 'up' : 'dn', lblA = D.prevR ? String(SEMANAS[D.wi-1]||'').replace(/^\d+-/,'') : '';
+  const alcAnt = D.ant && D.ant.cuota_t>0 ? D.ant.altas_t/D.ant.cuota_t*100 : null;
+  const delta = dv==null ? '' : `<div class="mc-delta ${dcls}">${dcls==='up'?'▲':dcls==='dn'?'▼':'■'} ${dv>0?'+':''}${(100*dv).toFixed(1)}% altas por día vs ${lblA}<span>(${fmtRitmo(rd)} vs ${fmtRitmo(rd0)}${alcAnt!=null?` · ${lblA} cerró en ${fmtPct(alcAnt)} de alcance`:''})</span></div>`;
+  const gap = Math.round(altas-esp)||0, falt = Math.max(0, cuotaSem-altas), proj = esp>0 ? altas/esp*cuotaSem : rd*ndT, pl = 100*nd/ndT, side = pl<12?' l':pl>88?' r':'';
+  const bar = cuotaSem>0 ? `<div class="mc-bar" title="La línea negra marca cuántas altas deberías llevar hoy para cerrar la semana en cuota"><i style="width:${Math.min(100,100*altas/cuotaSem)}%;background:${col}"></i>${abierta?`<b class="mc-pace${side}" style="left:${pl}%" data-l="Hoy: ${fmtInt(esp)}"></b>`:''}</div>` : '';
+  const txt = !(cuotaSem>0) ? 'No hay cuota cargada para esta semana con estos filtros.'
+    : abierta ? `<b>${fmtPct(100*altas/cuotaSem)}</b> de la cuota de la semana (${fmtInt(altas)} de ${fmtInt(cuotaSem)} altas) · a hoy deberías llevar <b>${fmtInt(esp)}</b> → vas <b style="color:${gap>=0?COLOR_GREEN:COLOR_RED}">${gap>0?'+':''}${fmtInt(gap)}</b>.<br>`
+        + (falt>0 ? `Faltan <b>${fmtInt(falt)}</b> altas en ${resta} ${resta===1?'día':'días'}: necesitas <b>${fmtRitmo(falt/resta)} por día</b> (hoy vas a ${fmtRitmo(rd)}). Al ritmo actual cierras en <b>~${fmtInt(proj)}</b> (${fmtPct(100*proj/cuotaSem)} de la cuota).` : `<b style="color:${COLOR_GREEN}">¡Cuota de la semana alcanzada!</b> Al ritmo actual cierras en ~${fmtInt(proj)}.`)
+    : `Semana cerrada: <b>${fmtInt(altas)}</b> de <b>${fmtInt(cuotaSem)}</b> altas (${fmtPct(100*altas/cuotaSem)} de alcance) · gap <b style="color:${altas-cuotaSem>=0?COLOR_GREEN:COLOR_RED}">${(Math.round(altas-cuotaSem)||0)>0?'+':''}${fmtInt(altas-cuotaSem)}</b>.`;
+  /* por producto: alcance contra la cuota de la semana, color según lo esperado a hoy */
+  const prods = PRODUCTOS.filter(p=>p.key!=='t').map(p=>{ const a=D.hoy['altas_'+p.key]||0, e=D.hoy['cuota_'+p.key]||0, q=D.sem['cuota_'+p.key]||0;
+    return q>0 ? `<div class="mc-chip" title="${p.label}: ${fmtInt(a)} altas de ${fmtCuotaProd(q,p.key)} de cuota de la semana · a hoy debería llevar ${fmtCuotaProd(e,p.key)}">${arcMiniSvg(q?a/q:0, p.color)}<span class="nm">${p.label} <small>${fmtInt(a)} de ${fmtCuotaProd(q,p.key)}</small></span><em style="color:${statusColor(e>0?a/e*100:null)}">${fmtPct(100*a/q)}</em></div>` : ''; }).join('');
+  /* por cadena: aro = parte de las altas; % = avance contra su cuota de la semana, color según lo esperado a hoy */
+  const cads = DC.cadena.map((nombre,ci)=>{ const f = x=>ST.cadena[x]===ci; const h=D.sumar(R.start, D.L, f), s=D.sumar(R.start, R.end, f); return {nombre, a:h.altas_t, e:h.cuota_t, q:s.cuota_t}; })
+    .filter(c=>c.a>0 || c.q>0).sort((x,y)=>y.a-x.a);
+  const chipsCad = cads.map(c=>`<div class="mc-chip" title="${c.nombre}: ${fmtInt(c.a)} altas de ${fmtInt(c.q)} de cuota de la semana · a hoy debería llevar ${fmtInt(c.e)}">${arcMiniSvg(altas?c.a/altas:0, '#3B4048')}<span class="nm">${c.nombre} <small>${fmtInt(c.a)} altas · ${fmtPct(altas?100*c.a/altas:0)} del total</small></span>${c.q>0?`<em style="color:${statusColor(c.e>0?c.a/c.e*100:null)}">${fmtPct(100*c.a/c.q)} cuota</em>`:''}</div>`).join('');
+  el.innerHTML = `<div class="card mes-card"><div class="mc-top"><div><div class="mc-lbl">${abierta?'Semana en curso':'Última semana cerrada'} · ${lbl} (${fmtFechaLarga(FECHAS[R.start])} – ${fmtFechaLarga(FECHAS[R.end])})</div><div class="mc-big">${fmtInt(altas)}<small>altas totales</small></div>${delta}</div>
+    <div class="mc-side">${abierta?`Día ${nd} de ${ndT}<span class="sep"> ·</span><b>${resta} ${resta===1?'día':'días'}</b>restantes`:`Semana cerrada<span class="sep"> ·</span><b>${ndT} días</b>`}</div></div>
+    ${bar}<div class="mc-txt">${txt}<br><span style="color:var(--text-soft);font-size:11.5px;">Datos al ${fmtFechaLarga(FECHAS[D.L])} (días completos). Sigue los filtros de estructura y no cambia con el periodo elegido.</span></div>
+    ${prods?`<div class="mc-chips"><span class="mc-h">Producto</span>${prods}</div>`:''}${chipsCad && currentTienda==null?`<div class="mc-chips"><span class="mc-h">Cadena</span>${chipsCad}</div>`:''}</div>`;
+}
+
 function renderResumen(){
   renderStoreSummaryBar();
+  renderSemanaCurso();
   renderResumenEjecutivo();
   renderResumenEtiquetasChecks();
   renderRingsInto('res-alc');
@@ -4718,7 +4791,7 @@ function renderPiso(){
   if(weeks.length===0){
     PISO_MODEL = null;
     document.getElementById('piso-ctrl').innerHTML = '';
-    document.getElementById('piso-tabla').innerHTML = '<div class="card" style="text-align:center;color:var(--text-muted);">Sin datos de checks/altas para este filtro.</div>';
+    document.getElementById('piso-tabla').innerHTML = '<div class="card" style="text-align:center;color:var(--text-muted);">🔍 No hay datos con estos filtros. Prueba con <b>✕ Quitar filtros</b> o elige otro periodo.</div>';
     PISO_SUMMARY = {pctTxt:'—', sub:'Sin datos', pct:null};
     return;
   }
@@ -4884,7 +4957,7 @@ function pisoTablaHtml(nodos, forzar, conFoto){
     }
   };
   nodos.forEach(walk);
-  if(!body) body = `<tr class="pt-t"><td colspan="${PISO_COLS.length+3}" style="text-align:center;color:var(--text-muted);padding:22px;">Sin tiendas para este filtro</td></tr>`;
+  if(!body) body = `<tr class="pt-t"><td colspan="${PISO_COLS.length+3}" style="text-align:center;color:var(--text-muted);padding:22px;">🔍 No hay datos con estos filtros. Prueba con <b>✕ Quitar filtros</b> o elige otro periodo.</td></tr>`;
   return `<div class="tw"><table class="dt st pt"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
