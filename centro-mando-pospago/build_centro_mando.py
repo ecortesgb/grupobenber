@@ -18,7 +18,7 @@ Fuentes (todas dentro de BASE):
   ESTRUCTURAS\\Base Nueva Estructura.xlsx    hoja "Estructura Actual" (estructura vigente de tiendas)
 Configuración opcional en config.json (junto a este script).
 """
-import os, sys, re, io, json, glob, time, base64, hashlib, argparse, zipfile, datetime, warnings, traceback
+import os, sys, re, io, json, glob, time, base64, hashlib, argparse, zipfile, datetime, warnings, traceback, unicodedata
 import numpy as np, pandas as pd
 warnings.filterwarnings('ignore')
 
@@ -43,6 +43,8 @@ def log(*a):
 nd  = lambda s: s.astype(str).str.replace(r'\.0$', '', regex=True).str.replace(r'\D', '', regex=True).str[-10:]
 nid = lambda s: s.astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.lstrip('0')
 dt  = lambda s: pd.to_datetime(s, errors='coerce')
+# llave para comparar nombres sin importar mayúsculas, acentos ni espacios dobles ('Coppel' = 'COPPEL', 'León' = 'LEON')
+kname = lambda v: unicodedata.normalize('NFKD', ' '.join(str(v).split())).encode('ascii', 'ignore').decode().upper()
 STR = ['SUBDIRECCION GB', 'GERENTE / LIDER', 'SUPERVISOR', 'SUB_REG', 'SUB_TERR', 'LIDER']
 EST = ['ID PDV', 'NOMBRE PDV', 'CADENA', 'REGION', 'ESTADO'] + STR
 
@@ -336,6 +338,11 @@ def mkdata(dn,inv,M,capf,cuota,fw,er,ca,CORTE,CORTE_TXT,GEN_TXT):
     dn=dn.reset_index(drop=True)
     TXT=['REGION','ESTADO','SUBDIRECCION GB','GERENTE / LIDER','LIDER','SUB_TERR','SUB_REG','SUPERVISOR','CADENA','NOMBRE PDV','plan','forma_pago']
     for c in TXT: dn[c]=dn[c].fillna('Sin dato').astype(str).str.strip().replace({'nan':'Sin dato','':'Sin dato'})
+    # unifica variantes del mismo nombre que llegan de fuentes distintas (estructura, registros, cuota): se queda la escritura más frecuente
+    for c in TXT:
+        mp={}
+        for v in dn[c].value_counts().index: mp.setdefault(kname(v),v)
+        dn[c]=dn[c].map(lambda v: mp[kname(v)])
     dn['cohorte']=dn.mes_alta.fillna(dn.mes_registro)
     dn['mes_baja']=dn.fecha_baja.fillna(dn.fecha_exportado).dt.to_period('M').astype(str)
     months=sorted(set(dn.cohorte.dropna())|set(dn.mes_registro.dropna())|set(dn.mes_baja.dropna())|set(inv.mes_emision.dropna())|set(inv.mes_venc.dropna())); months=[m for m in months if m!='NaT' and m>=MES_INICIO]
@@ -402,10 +409,14 @@ def mkdata(dn,inv,M,capf,cuota,fw,er,ca,CORTE,CORTE_TXT,GEN_TXT):
     qd['m']=pd.to_datetime(qd.MES.astype(str),format='%Y%m').dt.strftime('%Y-%m')
     qd=qd[qd.m.isin(mi)]
     dims={'REGION':reg,'ESTADO':est,'SUBDIRECCION GB':sub,'GERENTE / LIDER':ger,'LIDER':lid,'SUB_TERR':ter,'SUB_REG':srg,'SUPERVISOR':sup,'CADENA':cad,'NOMBRE PDV':pdv}
-    def gi(lst,v):
+    KIX={}
+    def gi(lst,v):   # índice del nombre en la lista, comparando sin mayúsculas/acentos (las tiendas con cuota usan otras fuentes)
         v='Sin dato' if (not isinstance(v,str) or v.strip() in ('','nan')) else v.strip()
-        if v not in lst: lst.append(v)
-        return lst.index(v)
+        m=KIX.get(id(lst))
+        if m is None: m=KIX[id(lst)]={kname(x):i for i,x in enumerate(lst)}
+        k=kname(v)
+        if k not in m: lst.append(v); m[k]=len(lst)-1
+        return m[k]
     NCOL=len(D[0]); S_=[];Q_=[]
     for idv,g in qd.groupby('IDPV'):
         row=[0]*NCOL; e=st.loc[idv] if idv in st.index else None
