@@ -61,7 +61,7 @@ El audio nunca sale de la laptop; a Claude solo se le manda el texto.
 
 ## Cómo está hecho (simple)
 - `saurio.py` abre una ventana transparente sin bordes y la conecta con la página `ui/`.
-- `ui/mascota.js` muestra al GB Saurio en 2D con poses de cuerpo completo recortadas de tus hojas de referencia (`ui/sprites/`). Respira, habla, brinca y cambia de pose: piensa (mano en la barbilla), escucha (mano en la oreja), se sorprende con pendientes vencidos, se preocupa si algo falla, saluda al darle clic y se pone de lado cuando lo arrastras.
+- `ui/mascota.js` anima al GB Saurio por cuadros con los 32 cuadros del Saurio del dashboard de RRHH (`ui/sprites/cuadros/`). Habla moviendo la boca, piensa y toma minuta en su laptop, festeja, se sorprende, se preocupa, saluda y camina cuando lo arrastras. En ratos libres guiña, sigue tu mouse con la mirada y da un paseíto (siempre regresa a su lugar). Cinco clics rápidos le hacen cosquillas. Para cambiar un cuadro, reemplaza el `.webp` con el mismo nombre.
 - `herramientas/recortar_sprites.py` regenera las poses si cambias las hojas: `py -3 herramientas\recortar_sprites.py hoja.jpg principal` (frente) y `... hoja_poses.jpg poses` (las otras seis). Requiere `pip install pillow numpy`.
 - `asistente.py` platica con Claude y le da "herramientas": pendientes, notas, ver carpetas, leer archivos y proponer planes.
 - `archivos.py` solo deja leer dentro de las carpetas permitidas; mover archivos solo ocurre con tu clic.

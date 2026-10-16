@@ -45,13 +45,15 @@ html, body {
 
 #mascota[data-anim="respira"] #sprite { animation: respira 3.2s ease-in-out infinite; }
 #mascota[data-anim="habla"]   #sprite { animation: habla .32s ease-in-out infinite; }
-#mascota[data-anim="brinca"]  #sprite { animation: brinca .55s ease-out infinite; }
+#mascota[data-anim="brinca"]  #sprite { animation: brinca .6s ease-out 3; }
 #mascota[data-anim="medita"]  #sprite { animation: medita 2.4s ease-in-out infinite; }
 #mascota[data-anim="mece"]    #sprite { animation: mece .5s ease-in-out infinite; }
 @keyframes respira { 0%,100% { transform: scale(1, 1) rotate(0); } 50% { transform: scale(1.01, 1.025) rotate(.6deg); } }
 @keyframes habla   { 0%,100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-3px) scale(1.01, .99); } }
 @keyframes brinca  { 0%,100% { transform: translateY(0) scale(1, 1); } 15% { transform: scale(1.04, .95); } 50% { transform: translateY(-22px) scale(.98, 1.03); } }
 @keyframes medita  { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+#mascota[data-anim="tiembla"] #sprite { animation: tiembla .5s ease-in-out 2; }
+@keyframes tiembla { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-5px) rotate(-2deg); } 40% { transform: translateX(5px) rotate(2deg); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
 @keyframes mece    { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
 
 #indicador {

@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, Qt, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QIcon, QPixmap, QPainter
+from PySide6.QtGui import QAction, QColor, QCursor, QIcon, QPixmap, QPainter
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -33,6 +33,7 @@ class Puente(QObject):
     plan = Signal(str)            # JSON del plan de organización propuesto
     pendientes = Signal(str)      # JSON de la lista de pendientes
     aviso = Signal(str)           # mensaje corto (recordatorios, errores)
+    cursor = Signal(int, int)     # dónde está el mouse respecto a la cara de Saurio (para que lo siga con la mirada)
 
     def __init__(self, ventana, cfg):
         super().__init__()
@@ -83,6 +84,19 @@ class Puente(QObject):
     @Slot()
     def ocultar(self):
         self.ventana.hide()
+
+    def vigilar_cursor(self):
+        """Cada 150 ms: si el mouse se movió, le dice a la página hacia dónde mirar."""
+        if not self.ventana.isVisible():
+            return
+        pos = QCursor.pos()
+        if pos == getattr(self, "_ultimo_cursor", None):
+            return
+        self._ultimo_cursor = pos
+        g = self.ventana.frameGeometry()
+        # la cara está abajo a la derecha de la ventana (la mascota vive en la esquina)
+        cara = QPoint(g.right() - CHICA[0] // 2, g.bottom() - int(CHICA[1] * 0.6))
+        self.cursor.emit(pos.x() - cara.x(), pos.y() - cara.y())
 
     # ---------- pendientes ----------
     def _emitir_pendientes(self):
@@ -242,6 +256,11 @@ def main():
     bandeja.activated.connect(lambda r: vista.setVisible(not vista.isVisible())
                               if r == QSystemTrayIcon.Trigger else None)
     bandeja.show()
+
+    # Saurio sigue el mouse con la mirada
+    ojos = QTimer()
+    ojos.timeout.connect(puente.vigilar_cursor)
+    ojos.start(150)
 
     # Recordatorio de pendientes vencidos: al arrancar y cada N minutos
     reloj = QTimer()

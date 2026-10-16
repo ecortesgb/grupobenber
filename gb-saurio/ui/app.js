@@ -120,6 +120,8 @@ function conectar(p) {
   puente = p;
   p.respuesta.connect((t) => { agregar(t, "el"); if (!grande) decir(t); });
   p.estado.connect((s) => window.saurio && window.saurio.estado(s));
+  p.cursor.connect((dx, dy) => window.saurio && window.saurio.mirar(dx, dy));
+  window.saurio && window.saurio.alMover((dx, dy) => p.mover(dx, dy));
   p.plan.connect(mostrarPlan);
   p.pendientes.connect(pintarPendientes);
   p.aviso.connect((t) => {
