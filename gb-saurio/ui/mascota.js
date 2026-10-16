@@ -17,7 +17,7 @@ const SEC = {
   alerta:   [["mira_arriba", "mira_arriba", "frente", "mira_arriba"], 300, 2],
   saluda:   [["saluda", "quieto", "saluda", "quieto", "saluda"], 260, 1],
   preocupa: [["mira_abajo", "mira_abajo", "mira_abajo", "frente"], 380, 2],
-  arrastra: [["camina1", "camina2", "camina3", "camina4", "camina5", "camina6", "camina7", "camina8", "camina9"], 90, 0],
+  colgado:  [["frente"], 1000, 0],
   guino:    [["guina", "guina", "frente"], 220, 1],
   mira_d:   [["mira_d", "mira_d", "mira_d", "frente"], 330, 1],
   mira_i:   [["mira_i", "mira_i", "mira_i", "frente"], 330, 1],
@@ -34,7 +34,7 @@ const ESTADOS = {
   alerta:      ["alerta", "brinca", "!", 0],
   saludo:      ["saluda", "", "", 0],
   preocupado:  ["preocupa", "tiembla", "", 0],
-  arrastrando: ["arrastra", "", "", 0],
+  arrastrando: ["colgado", "colgado", "", 0],  // al arrastrarlo se queda de frente y se mece colgado
 };
 
 // precarga: el cambio de cuadro debe ser instantáneo
@@ -119,8 +119,15 @@ async function pasear() {
   const t = ++s.turno;
   const sigue = () => t === s.turno && s.estado === "idle" && document.body.classList.contains("chica");
   let recorrido = 0, i = 0;
+  // Cada paso dura 3 tics: cambia de pierna, el cuerpo sube a media zancada y se inclina hacia el pie que pisa.
+  efecto("");
   const paso = async (dir) => {
-    cuadro((dir < 0 ? ["camina_i1", "camina_i2"] : ["camina_d1", "camina_d2"])[Math.floor(i++ / 4) % 2]);
+    const zancada = Math.floor(i / 3), fase = (i % 3) / 3;
+    i++;
+    cuadro((dir < 0 ? ["camina_i1", "camina_i2"] : ["camina_d1", "camina_d2"])[zancada % 2]);
+    const sube = Math.sin(fase * Math.PI) * 5;
+    const inclina = (zancada % 2 ? 1 : -1) * 2.5 * Math.sin(fase * Math.PI);
+    sprite.style.transform = `translateY(${-sube}px) rotate(${inclina}deg) scale(${1 + sube / 160}, ${1 - sube / 200})`;
     s.mover(dir * 4, 0);
     recorrido += dir * 4;
     await espera(60);
@@ -129,7 +136,8 @@ async function pasear() {
   if (sigue()) { cuadro("frente"); await espera(1500); }
   while (recorrido < 0 && sigue()) await paso(1);
   if (recorrido && s.estado !== "arrastrando") s.mover(-recorrido, 0); // si lo interrumpieron, regresa de golpe a su lugar
-  if (t === s.turno) cuadro("frente");
+  sprite.style.transform = "";
+  if (t === s.turno) { cuadro("frente"); efecto("respira"); }
   s.ocupado = false;
 }
 

@@ -24,7 +24,7 @@ html, body {
 }
 
 #mascota {
-  position: fixed; right: 0; bottom: 0; width: 230px; height: 250px;
+  position: fixed; right: 0; bottom: 0; width: 200px; height: 215px;
   cursor: grab;
 }
 #mascota:active { cursor: grabbing; }
@@ -34,7 +34,7 @@ html, body {
   filter: drop-shadow(0 6px 6px rgba(0,0,0,.25));
   pointer-events: none;
 }
-#sprite { height: 240px; translate: -50% 0; }
+#sprite { height: 205px; translate: -50% 0; }
 #sprite.pop { animation: pop .28s ease-out; }
 @keyframes pop { from { opacity: .3; scale: .92; } to { opacity: 1; scale: 1; } }
 
@@ -42,6 +42,7 @@ html, body {
 #mascota[data-anim="habla"]   #sprite { animation: habla .32s ease-in-out infinite; }
 #mascota[data-anim="brinca"]  #sprite { animation: brinca .6s ease-out 3; }
 #mascota[data-anim="medita"]  #sprite { animation: medita 2.4s ease-in-out infinite; }
+#mascota[data-anim="colgado"] #sprite { transform-origin: 50% 0; animation: colgado 1.1s ease-in-out infinite; }
 #mascota[data-anim="mece"]    #sprite { animation: mece .5s ease-in-out infinite; }
 @keyframes respira { 0%,100% { transform: scale(1, 1) rotate(0); } 50% { transform: scale(1.01, 1.025) rotate(.6deg); } }
 @keyframes habla   { 0%,100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-3px) scale(1.01, .99); } }
@@ -49,6 +50,7 @@ html, body {
 @keyframes medita  { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
 #mascota[data-anim="tiembla"] #sprite { animation: tiembla .5s ease-in-out 2; }
 @keyframes tiembla { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-5px) rotate(-2deg); } 40% { transform: translateX(5px) rotate(2deg); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+@keyframes colgado { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
 @keyframes mece    { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
 
 #indicador {
@@ -77,12 +79,12 @@ html, body {
   border-right: 1.5px solid var(--naranja); border-bottom: 1.5px solid var(--naranja);
   transform: rotate(45deg); border-radius: 0 0 3px 0;
 }
-body.chica #globo { right: 10px; bottom: 242px; max-width: 210px; }
+body.chica #globo { right: 8px; bottom: 208px; max-width: 190px; }
 @keyframes globo-entra { from { opacity: 0; transform: translateY(5px) scale(.96); } to { opacity: 1; transform: none; } }
 
 /* ---------- panel de chat ---------- */
 #panel {
-  position: fixed; left: 8px; right: 8px; top: 8px; bottom: 240px;
+  position: fixed; left: 8px; right: 8px; top: 8px; bottom: 208px;
   background: #fff; border: 1.5px solid var(--naranja); border-radius: 14px;
   box-shadow: 0 14px 36px rgba(23,25,29,.26);
   display: flex; flex-direction: column; overflow: hidden;
@@ -157,7 +159,7 @@ button.primario:hover { background: var(--naranja-osc); filter: none; }
 
 /* ---------- minimizado: queda una carita en un círculo ---------- */
 #minimizar {
-  position: fixed; right: 14px; bottom: 214px; z-index: 6; display: none;
+  position: fixed; right: 16px; bottom: 182px; z-index: 6; display: none;
   width: 22px; height: 22px; padding: 0; border-radius: 50%;
   border: 1.5px solid #fff; background: var(--negro); color: #fff;
   font: 700 13px/16px var(--letra); opacity: .85;

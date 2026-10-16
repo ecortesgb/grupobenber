@@ -22,8 +22,8 @@ import datos
 import reuniones
 from asistente import Asistente
 
-CHICA = (230, 290)    # solo la mascota (con espacio para el globo)
-GRANDE = (420, 700)   # mascota + panel de chat
+CHICA = (205, 260)    # solo la mascota (con espacio para el globo)
+GRANDE = (420, 670)   # mascota + panel de chat
 MINI = (70, 70)       # minimizado: solo el circulito con su cara
 
 
