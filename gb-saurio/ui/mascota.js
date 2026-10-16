@@ -38,7 +38,7 @@ const ESTADOS = {
 };
 
 // precarga: el cambio de cuadro debe ser instantáneo
-const CUADROS = [...new Set(["frente", ...Object.values(SEC).flatMap((s) => s[0])])];
+const CUADROS = [...new Set(["frente", "camina_d0", "camina_d1", "camina_d2", "camina_i0", "camina_i1", "camina_i2", ...Object.values(SEC).flatMap((s) => s[0])])];
 CUADROS.forEach((c) => { new Image().src = `sprites/cuadros/${c}.webp`; });
 
 const s = { estado: "idle", turno: 0, ocupado: false, tVolver: null, tMicro: null, tMira: null, clics: [], mover: null };
@@ -119,15 +119,18 @@ async function pasear() {
   const t = ++s.turno;
   const sigue = () => t === s.turno && s.estado === "idle" && document.body.classList.contains("chica");
   let recorrido = 0, i = 0;
-  // Cada paso dura 3 tics: cambia de pierna, el cuerpo sube a media zancada y se inclina hacia el pie que pisa.
+  // Ciclo de 4 cuadros: zancada, piernas juntas, otra zancada, piernas juntas (2 tics cada uno).
+  // Con las piernas juntas el cuerpo va arriba; en la zancada baja y se inclina hacia el pie que pisa.
   efecto("");
   const paso = async (dir) => {
-    const zancada = Math.floor(i / 3), fase = (i % 3) / 3;
+    const ciclo = dir < 0 ? ["camina_i1", "camina_i0", "camina_i2", "camina_i0"] : ["camina_d1", "camina_d0", "camina_d2", "camina_d0"];
+    const fase = Math.floor(i / 2) % 4;
     i++;
-    cuadro((dir < 0 ? ["camina_i1", "camina_i2"] : ["camina_d1", "camina_d2"])[zancada % 2]);
-    const sube = Math.sin(fase * Math.PI) * 5;
-    const inclina = (zancada % 2 ? 1 : -1) * 2.5 * Math.sin(fase * Math.PI);
-    sprite.style.transform = `translateY(${-sube}px) rotate(${inclina}deg) scale(${1 + sube / 160}, ${1 - sube / 200})`;
+    cuadro(ciclo[fase]);
+    const junto = fase % 2 === 1;
+    const sube = junto ? 4 : 0;
+    const inclina = junto ? 0 : (fase === 0 ? -1.5 : 1.5);
+    sprite.style.transform = `translateY(${-sube}px) rotate(${inclina}deg) scale(${junto ? 0.99 : 1.02}, ${junto ? 1.01 : 0.98})`;
     s.mover(dir * 4, 0);
     recorrido += dir * 4;
     await espera(60);
