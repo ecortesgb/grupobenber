@@ -18,7 +18,7 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 ## Instalar (una vez)
 1. Ten Python 3.10 a 3.13 instalado (el mismo que usas con `py -3`).
 2. Doble clic en `instalar.bat`. Se abre `config.json`: pega tu API key de Anthropic (console.anthropic.com → API Keys) y guarda.
-3. Doble clic en `iniciar.bat`.
+3. Doble clic en `iniciar.bat`. Cada vez que lo abres baja solo la versión más nueva de GitHub; también puedes usar **Buscar actualización** en el ícono junto al reloj.
 4. Opcional: `instalar_reuniones.bat` para las minutas (la primera transcripción descarga ~500 MB del modelo de voz).
 5. Opcional: `iniciar_con_windows.bat` para que arranque solo al prender la laptop.
 

@@ -5,6 +5,7 @@ viven en ui/index.html; Python hace el trabajo real (Claude, archivos, pendiente
 """
 import json
 import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -206,6 +207,29 @@ class Puente(QObject):
         return r
 
 
+def actualizar(app, aviso):
+    """Baja la versión más nueva de GitHub; si hubo cambios, reinicia a Saurio."""
+    carpeta = Path(__file__).resolve().parent
+    sin_ventana = {"creationflags": 0x08000000} if sys.platform == "win32" else {}
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=carpeta, capture_output=True, text=True, timeout=120, **sin_ventana)
+    try:
+        antes = git("rev-parse", "HEAD").stdout.strip()
+        r = git("pull", "--ff-only")
+        despues = git("rev-parse", "HEAD").stdout.strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        aviso(f"No pude actualizar: {e}")
+        return
+    if r.returncode != 0:
+        aviso("No pude actualizar (¿sin internet o con cambios locales?).")
+    elif antes == despues:
+        aviso("Ya tienes la versión más nueva.")
+    else:
+        aviso("Actualizado. Me reinicio…")
+        subprocess.Popen([sys.executable, str(carpeta / "saurio.py")], cwd=carpeta, **sin_ventana)
+        QTimer.singleShot(800, app.quit)
+
+
 def icono():
     pm = QPixmap(64, 64)
     pm.fill(Qt.transparent)
@@ -255,9 +279,12 @@ def main():
     menu = QMenu()
     a_mostrar = QAction("Mostrar / ocultar")
     a_mostrar.triggered.connect(lambda: vista.setVisible(not vista.isVisible()))
+    a_actualizar = QAction("Buscar actualización")
+    a_actualizar.triggered.connect(lambda: actualizar(app, puente.aviso.emit))
     a_salir = QAction("Salir")
     a_salir.triggered.connect(app.quit)
     menu.addAction(a_mostrar)
+    menu.addAction(a_actualizar)
     menu.addAction(a_salir)
     bandeja.setContextMenu(menu)
     bandeja.activated.connect(lambda r: vista.setVisible(not vista.isVisible())
