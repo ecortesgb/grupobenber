@@ -1,29 +1,24 @@
+/* Colores y estilo Benber (los mismos del Saurio del dashboard de RRHH) */
 :root {
+  --naranja: #EE6602;
+  --naranja-osc: #C95500;
+  --naranja-claro: #FFF4EA;
+  --naranja-texto: #9A4A00;
+  --negro: #17191D;
   --fondo: #ffffff;
-  --texto: #1d2733;
-  --suave: #6b7785;
-  --borde: #e2e7ec;
-  --verde: #2fae66;
-  --verde-osc: #1f8a4f;
-  --burbuja-yo: #e7f6ee;
-  --burbuja-el: #f2f4f7;
-  --rojo: #d9534f;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fondo: #1b2129;
-    --texto: #e8edf2;
-    --suave: #9aa6b2;
-    --borde: #2f3842;
-    --burbuja-yo: #1f3d2c;
-    --burbuja-el: #262e38;
-  }
+  --fondo-suave: #F5F3F1;
+  --texto: #17191D;
+  --suave: #6E6862;
+  --borde: #E3DED8;
+  --borde-fuerte: #D9D3CC;
+  --rojo: #D93025;
+  --letra: Poppins, "Segoe UI", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 html, body {
   margin: 0; height: 100%; overflow: hidden;
   background: transparent;
-  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+  font: 500 12.5px/1.4 var(--letra);
   color: var(--texto);
   user-select: none;
 }
@@ -67,63 +62,116 @@ html, body {
 @keyframes flota { 0%,100% { translate: 0 0; } 50% { translate: 0 -4px; } }
 @media (prefers-reduced-motion: reduce) { #sprite, #indicador { animation: none !important; } }
 
+/* ---------- globo de texto ---------- */
 #globo {
-  position: fixed; right: 150px; bottom: 175px; max-width: 200px;
-  background: var(--fondo); color: var(--texto);
-  border: 1px solid var(--borde); border-radius: 12px; padding: 6px 10px;
-  box-shadow: 0 4px 14px rgba(0,0,0,.18);
-  font-size: 12px; cursor: pointer; z-index: 5;
+  position: fixed; right: 150px; bottom: 175px; width: max-content; max-width: 200px;
+  background: #fff; color: var(--negro);
+  border: 1.5px solid var(--naranja); border-radius: 12px 12px 3px 12px; padding: 7px 10px;
+  box-shadow: 0 6px 16px rgba(23,25,29,.16);
+  font: 600 11.5px/1.35 var(--letra); cursor: pointer; z-index: 5;
+  animation: globo-entra .2s ease-out;
 }
-body.chica #globo { right: 8px; bottom: 238px; max-width: 214px; }
+#globo[hidden] { display: none; }
+#globo i {
+  position: absolute; right: 14px; bottom: -7px; width: 11px; height: 11px; background: #fff;
+  border-right: 1.5px solid var(--naranja); border-bottom: 1.5px solid var(--naranja);
+  transform: rotate(45deg); border-radius: 0 0 3px 0;
+}
+body.chica #globo { right: 10px; bottom: 242px; max-width: 210px; }
+@keyframes globo-entra { from { opacity: 0; transform: translateY(5px) scale(.96); } to { opacity: 1; transform: none; } }
 
+/* ---------- panel de chat ---------- */
 #panel {
   position: fixed; left: 8px; right: 8px; top: 8px; bottom: 240px;
-  background: var(--fondo); border: 1px solid var(--borde); border-radius: 14px;
-  box-shadow: 0 8px 30px rgba(0,0,0,.25);
+  background: #fff; border: 1.5px solid var(--naranja); border-radius: 14px;
+  box-shadow: 0 14px 36px rgba(23,25,29,.26);
   display: flex; flex-direction: column; overflow: hidden;
 }
 #panel[hidden] { display: none; }
 header {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  border-bottom: 1px solid var(--borde);
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px;
+  background: var(--negro); color: #fff;
 }
-header nav { display: flex; gap: 4px; flex: 1; }
+header .cara { height: 30px; }
+header .nombre b { display: block; font-size: 12.5px; }
+header .nombre small { display: block; font-size: 10px; opacity: .7; font-weight: 500; }
+header nav { display: flex; gap: 3px; margin-left: auto; }
+.tab {
+  background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.25);
+  border-radius: 999px; padding: 3px 9px; font-size: 11px;
+}
+.tab.activa { background: var(--naranja); border-color: var(--naranja); }
+#cerrar { background: none; border: 0; color: #fff; font-size: 17px; line-height: 1; padding: 2px 6px; }
+#cerrar:hover { background: rgba(255,255,255,.15); }
+
 button {
-  font: inherit; color: var(--texto); background: var(--burbuja-el);
-  border: 1px solid var(--borde); border-radius: 8px; padding: 4px 8px; cursor: pointer;
+  font: 600 11.5px var(--letra); color: var(--texto); background: #fff;
+  border: 1px solid var(--borde-fuerte); border-radius: 10px; padding: 4px 9px; cursor: pointer;
 }
-button:hover { filter: brightness(.96); }
-button.primario { background: var(--verde); color: #fff; border-color: var(--verde-osc); }
-.tab.activa { background: var(--verde); color: #fff; }
-#nPend { font-weight: 600; }
-#cerrar { width: 28px; padding: 2px; }
+button:hover { filter: brightness(.97); }
+button.primario { background: var(--naranja); color: #fff; border-color: var(--naranja); font-weight: 700; }
+button.primario:hover { background: var(--naranja-osc); filter: none; }
+#nPend { font-weight: 700; }
 
-.vista { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.vista { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--fondo-suave); }
 .vista[hidden] { display: none; }
-#mensajes { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; user-select: text; }
-.msg { max-width: 88%; padding: 7px 10px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; }
-.msg.yo { align-self: flex-end; background: var(--burbuja-yo); }
-.msg.el { align-self: flex-start; background: var(--burbuja-el); }
-.msg.aviso { align-self: center; background: none; color: var(--suave); font-size: 12px; padding: 2px; }
-.msg pre { background: rgba(0,0,0,.08); padding: 6px; border-radius: 6px; overflow-x: auto; white-space: pre; user-select: text; }
-.msg code { font-family: Consolas, monospace; font-size: 12px; }
+#mensajes { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px; user-select: text; }
+.msg { max-width: 88%; padding: 7px 10px; border-radius: 12px; white-space: pre-wrap; word-wrap: break-word; font-size: 12px; line-height: 1.4; }
+.msg.yo { align-self: flex-end; background: var(--naranja); color: #fff; border-bottom-right-radius: 3px; }
+.msg.el { align-self: flex-start; background: #fff; border: 1px solid var(--borde); border-bottom-left-radius: 3px; }
+.msg.aviso { align-self: center; background: none; color: var(--suave); font-size: 11px; padding: 2px; text-align: center; }
+.msg pre { background: var(--fondo-suave); border: 1px solid var(--borde); padding: 6px; border-radius: 6px; overflow-x: auto; white-space: pre; user-select: text; }
+.msg code { font-family: Consolas, monospace; font-size: 11.5px; }
+.msg.yo code { color: #fff; }
 
-#planCaja { margin: 0 10px 8px; border: 1px solid var(--verde); border-radius: 10px; padding: 8px; max-height: 170px; overflow-y: auto; }
-#planCaja ul { margin: 4px 0; padding-left: 16px; font-size: 12px; }
+#planCaja { margin: 0 10px 8px; background: #fff; border: 1.5px solid var(--naranja); border-radius: 12px; padding: 8px; max-height: 170px; overflow-y: auto; }
+#planCaja ul { margin: 4px 0; padding-left: 16px; font-size: 11.5px; }
+#planCaja small { color: var(--suave); }
 .fila { display: flex; gap: 6px; justify-content: flex-end; padding: 6px 10px; }
 
-.atajos { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 6px; }
-.atajos button { font-size: 12px; padding: 3px 7px; }
-#btnReunion.grabando { background: var(--rojo); color: #fff; }
-
-#forma { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--borde); }
-#entrada {
-  flex: 1; resize: none; font: inherit; color: var(--texto); background: var(--burbuja-el);
-  border: 1px solid var(--borde); border-radius: 8px; padding: 6px 8px; user-select: text;
+.atajos { display: flex; flex-wrap: wrap; gap: 4px; padding: 7px 8px 0; background: #fff; border-top: 1px solid var(--borde); }
+.atajos button {
+  border: 1px solid var(--naranja); background: var(--naranja-claro); color: var(--naranja-texto);
+  border-radius: 999px; padding: 3px 9px; font-size: 10.5px;
 }
+#btnReunion.grabando { background: var(--rojo); border-color: var(--rojo); color: #fff; }
+
+#forma { display: flex; gap: 6px; padding: 7px 8px 8px; background: #fff; }
+#entrada {
+  flex: 1; min-width: 0; resize: none; font: 500 12px/1.35 var(--letra); color: var(--texto); background: #fff;
+  border: 1.5px solid var(--borde-fuerte); border-radius: 10px; padding: 6px 8px; user-select: text; outline: none;
+}
+#entrada:focus { border-color: var(--naranja); }
+#forma button { padding: 0 12px; font-size: 13px; }
 
 #listaPend { list-style: none; margin: 0; padding: 8px 10px; overflow-y: auto; flex: 1; }
-#listaPend li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--borde); }
-#listaPend li .meta { color: var(--suave); font-size: 11px; }
-#listaPend li.vencido .meta { color: var(--rojo); font-weight: 600; }
-#listaPend input { margin-top: 3px; }
+#listaPend li {
+  display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; margin-bottom: 6px;
+  background: #fff; border: 1px solid var(--borde); border-left: 3px solid var(--naranja); border-radius: 10px;
+}
+#listaPend li.vencido { border-left-color: var(--rojo); }
+#listaPend li .meta { color: var(--suave); font-size: 10.5px; }
+#listaPend li.vencido .meta { color: var(--rojo); font-weight: 700; }
+#listaPend input { margin-top: 3px; accent-color: var(--naranja); }
+#vistaPend .fila { background: #fff; border-top: 1px solid var(--borde); }
+
+/* ---------- minimizado: queda una carita en un círculo ---------- */
+#minimizar {
+  position: fixed; right: 14px; bottom: 214px; z-index: 6; display: none;
+  width: 22px; height: 22px; padding: 0; border-radius: 50%;
+  border: 1.5px solid #fff; background: var(--negro); color: #fff;
+  font: 700 13px/16px var(--letra); opacity: .85;
+}
+body.chica:hover #minimizar { display: block; }
+#minimizar:hover { background: var(--naranja); opacity: 1; }
+#mini {
+  position: fixed; right: 6px; bottom: 6px; width: 56px; height: 56px; padding: 0;
+  border-radius: 50%; border: 2px solid var(--naranja);
+  background: #fff url("sprites/cuadros/frente.webp") 50% 4%/190% no-repeat;
+  box-shadow: 0 4px 12px rgba(23,25,29,.25); cursor: pointer;
+}
+#mini[hidden] { display: none; }
+#mini:hover { transform: scale(1.06); filter: none; }
+#mini.aviso { animation: llama 1.2s ease-in-out 3; }
+@keyframes llama { 0%,100% { box-shadow: 0 0 0 0 rgba(238,102,2,.55); } 50% { box-shadow: 0 0 0 9px rgba(238,102,2,0); } }
+body.minimizado #mascota, body.minimizado #globo, body.minimizado #panel { display: none !important; }

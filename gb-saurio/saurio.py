@@ -24,6 +24,7 @@ from asistente import Asistente
 
 CHICA = (230, 290)    # solo la mascota (con espacio para el globo)
 GRANDE = (420, 700)   # mascota + panel de chat
+MINI = (70, 70)       # minimizado: solo el circulito con su cara
 
 
 class Puente(QObject):
@@ -79,6 +80,12 @@ class Puente(QObject):
         w, h = GRANDE if grande else CHICA
         g = self.ventana.geometry()
         # crece hacia arriba y a la izquierda: la mascota no "brinca" de lugar
+        self.ventana.setGeometry(g.right() - w + 1, g.bottom() - h + 1, w, h)
+
+    @Slot(bool)
+    def minimizar(self, si):
+        w, h = MINI if si else CHICA
+        g = self.ventana.geometry()
         self.ventana.setGeometry(g.right() - w + 1, g.bottom() - h + 1, w, h)
 
     @Slot()

@@ -19,12 +19,20 @@ function agregar(texto, quien) {
   mensajes.appendChild(d);
   mensajes.scrollTop = mensajes.scrollHeight;
 }
-function decir(texto, ms = 7000) {
+function decir(texto, ms) {
+  // globo estilo Benber: el texto aparece letra por letra
   const corto = texto.length > 140 ? texto.slice(0, 137) + "… (clic para ver)" : texto;
-  globo.textContent = corto;
+  globo.innerHTML = "<span></span><i></i>";
+  const span = globo.firstChild;
   globo.hidden = false;
   clearTimeout(tGlobo);
-  tGlobo = setTimeout(() => (globo.hidden = true), ms);
+  let n = 0;
+  const escribir = () => {
+    span.textContent = corto.slice(0, ++n);
+    if (n < corto.length) tGlobo = setTimeout(escribir, 14);
+    else tGlobo = setTimeout(() => (globo.hidden = true), ms || Math.min(8000, 2400 + corto.length * 50));
+  };
+  escribir();
 }
 function expandir(si) {
   grande = si;
@@ -59,7 +67,23 @@ mascota.addEventListener("pointerup", () => {
   arrastre = null;
 });
 globo.addEventListener("click", () => expandir(true));
+
+// ---------- minimizar a un circulito y volver ----------
+let minimizado = false;
+function minimizar(si) {
+  minimizado = si;
+  document.body.classList.toggle("minimizado", si);
+  $("mini").hidden = !si;
+  $("mini").classList.remove("aviso");
+  if (si) { panel.hidden = true; grande = false; globo.hidden = true; document.body.classList.remove("chica"); }
+  else { document.body.classList.add("chica"); }
+  puente && puente.minimizar(si);
+  if (!si) { window.saurio.estado("saludo"); setTimeout(() => decir("¡Aquí sigo!"), 300); }
+}
+$("minimizar").addEventListener("click", (e) => { e.stopPropagation(); minimizar(true); });
+$("mini").addEventListener("click", () => minimizar(false));
 $("cerrar").addEventListener("click", () => expandir(false));
+$("cerrar").title = "Cerrar el chat";
 
 // ---------- chat ----------
 function enviar(texto) {
@@ -118,7 +142,7 @@ $("excel").addEventListener("click", () => puente && puente.exportarExcel());
 // ---------- conexión con Python ----------
 function conectar(p) {
   puente = p;
-  p.respuesta.connect((t) => { agregar(t, "el"); if (!grande) decir(t); });
+  p.respuesta.connect((t) => { agregar(t, "el"); if (minimizado) $("mini").classList.add("aviso"); else if (!grande) decir(t); });
   p.estado.connect((s) => window.saurio && window.saurio.estado(s));
   p.cursor.connect((dx, dy) => window.saurio && window.saurio.mirar(dx, dy));
   window.saurio && window.saurio.alMover((dx, dy) => p.mover(dx, dy));
@@ -128,7 +152,8 @@ function conectar(p) {
     if (t.startsWith("Escuchando")) $("btnReunion").classList.add("grabando");
     if (t.startsWith("Reunión detenida") || t.startsWith("No pude abrir")) $("btnReunion").classList.remove("grabando");
     if (!t.startsWith("Transcribiendo…") || grande) agregar(t, "aviso");
-    if (!grande) decir(t);
+    if (minimizado) { $("mini").classList.remove("aviso"); void $("mini").offsetWidth; $("mini").classList.add("aviso"); $("mini").title = t; }
+    else if (!grande) decir(t);
   });
   p.pedirPendientes();
   setTimeout(() => decir("¡Hola Elías! Haz clic en mí para platicar."), 800);
@@ -139,3 +164,5 @@ if (window.qt && window.QWebChannel) {
 } else {
   decir("Vista previa sin Python (abre GB Saurio con iniciar.bat).", 60000);
 }
+// para pruebas y para la consola de depuración
+window.gbsUI = { decir, expandir, agregar, pintarPendientes, minimizar };

@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <title>GB Saurio</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="estilo.css">
 </head>
 <body>
   <!-- Panel de chat (visible solo en modo grande) -->
   <section id="panel" hidden>
     <header>
-      <b>GB Saurio</b>
+      <img class="cara" src="sprites/cuadros/saluda.webp" alt="">
+      <div class="nombre"><b>GB Saurio</b><small>Tu asistente Benber</small></div>
       <nav>
         <button class="tab activa" data-tab="chat">Chat</button>
         <button class="tab" data-tab="pend">Pendientes <span id="nPend"></span></button>
@@ -48,6 +50,8 @@
   <!-- Mascota -->
   <div id="globo" hidden></div>
   <div id="mascota"></div>
+  <button id="minimizar" title="Minimizar (queda una carita)" aria-label="Minimizar a GB Saurio">–</button>
+  <button id="mini" hidden title="Abrir a GB Saurio" aria-label="Abrir a GB Saurio"></button>
 
   <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
   <script src="mascota.js"></script>
