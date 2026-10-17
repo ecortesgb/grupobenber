@@ -21,6 +21,7 @@ import archivos
 import buzon
 import datos
 import reuniones
+import voz
 from asistente import Asistente
 
 CHICA = (205, 260)    # solo la mascota (con espacio para el globo)
@@ -36,6 +37,8 @@ class Puente(QObject):
     pendientes = Signal(str)      # JSON de la lista de pendientes
     aviso = Signal(str)           # mensaje corto (recordatorios, errores)
     cursor = Signal(int, int)     # dónde está el mouse respecto a la cara de Saurio (para que lo siga con la mirada)
+    oido = Signal(str)            # lo que Saurio entendió cuando le hablaste
+    microfono = Signal(bool)      # True mientras te está escuchando (botón 🎤 en rojo)
 
     def __init__(self, ventana, cfg):
         super().__init__()
@@ -43,6 +46,9 @@ class Puente(QObject):
         self.cfg = cfg
         self.ocupado = threading.Lock()
         self.grabadora = reuniones.Grabadora()
+        self.oreja = voz.Oido()
+        self.boca = voz.Boca(cfg.get("voz_velocidad", 1))
+        self.por_voz = False  # si le preguntaste hablando, contesta hablando
         self.asistente = Asistente(
             cfg,
             al_proponer_plan=lambda p: self.plan.emit(json.dumps(p, ensure_ascii=False)),
@@ -55,6 +61,7 @@ class Puente(QObject):
         if not datos.ia_lista(self.cfg):
             self.respuesta.emit("Me falta la API key de Claude. Ponla en config.json (campo api_key) y reiníciame.")
             return
+        self.boca.callar()
         threading.Thread(target=self._trabajar, args=(self.asistente.preguntar, texto), daemon=True).start()
 
     def _trabajar(self, fn, *args):
@@ -66,10 +73,72 @@ class Puente(QObject):
                 r = f"Algo falló: {e}"
             self.respuesta.emit(r)
             problema = r.startswith(("Algo falló", "No tengo", "Error", "Claude está saturado", "No pude", "Me falta"))
+            hablar = (self.por_voz or self.cfg.get("voz_responder")) and not problema
+            self.por_voz = False
             if self.grabadora.grabando:
                 self.estado.emit("escuchando")  # sigue en modo reunión
+            elif hablar and self.boca.decir(r, al_terminar=lambda: self.estado.emit("idle"), sin_voz=self._sin_voz):
+                self.estado.emit("diciendo")  # mueve la boca mientras habla
             else:
                 self.estado.emit("preocupado" if problema else "hablando")
+
+    # ---------- voz: le hablas con 🎤 y te contesta hablando ----------
+    @Slot()
+    def escuchar(self):
+        if self.oreja.activo:  # segundo clic: ya terminé de hablar
+            threading.Thread(target=self.oreja.terminar, daemon=True).start()
+            return
+        if not voz.puede_oir():
+            self.aviso.emit("Para hablarme corre una vez instalar_reuniones.bat")
+            return
+        if self.grabadora.grabando:
+            self.aviso.emit("Estoy escuchando una reunión; termínala para hablarme.")
+            return
+        self.boca.callar()
+        try:
+            self.oreja.iniciar(self._entendi, self.cfg["modelo_transcripcion"])
+        except Exception as e:  # noqa: BLE001
+            self.aviso.emit(f"No pude abrir el micrófono: {e}")
+            return
+        self.microfono.emit(True)
+        self.estado.emit("oyendo")
+
+    def _entendi(self, audio):
+        self.microfono.emit(False)
+        if audio is None:
+            self.estado.emit("idle")
+            return
+        self.estado.emit("pensando")
+        try:
+            texto = voz.transcribir(audio, self.cfg["modelo_transcripcion"])
+        except Exception as e:  # noqa: BLE001
+            self.aviso.emit(f"No pude entenderte: {e}")
+            self.estado.emit("preocupado")
+            return
+        if not texto:
+            self.aviso.emit("No te entendí, ¿me repites?")
+            self.estado.emit("preocupado")
+            return
+        self.oido.emit(texto)
+        if not datos.ia_lista(self.cfg):
+            return self.enviar(texto)
+        self.por_voz = True
+        self._trabajar(self.asistente.preguntar, texto)
+
+    @Slot(bool)
+    def responderConVoz(self, si):
+        self.cfg["voz_responder"] = si
+        if not si:
+            self.boca.callar()
+            self.estado.emit("idle")
+
+    @Slot()
+    def callar(self):
+        self.boca.callar()
+        self.estado.emit("idle")
+
+    def _sin_voz(self):
+        self.aviso.emit("No encontré voz en español en Windows: Configuración > Hora e idioma > Voz > Agregar voces > Español (México).")
 
     # ---------- ventana ----------
     @Slot(int, int)

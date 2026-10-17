@@ -103,8 +103,8 @@ header nav { display: flex; gap: 3px; margin-left: auto; }
   border-radius: 999px; padding: 3px 9px; font-size: 11px;
 }
 .tab.activa { background: var(--naranja); border-color: var(--naranja); }
-#cerrar { background: none; border: 0; color: #fff; font-size: 17px; line-height: 1; padding: 2px 6px; }
-#cerrar:hover { background: rgba(255,255,255,.15); }
+#cerrar, #voz { background: none; border: 0; color: #fff; font-size: 17px; line-height: 1; padding: 2px 6px; }
+#cerrar:hover, #voz:hover { background: rgba(255,255,255,.15); }
 
 button {
   font: 600 11.5px var(--letra); color: var(--texto); background: #fff;
@@ -177,3 +177,18 @@ body.chica:hover #minimizar { display: block; }
 #mini.aviso { animation: llama 1.2s ease-in-out 3; }
 @keyframes llama { 0%,100% { box-shadow: 0 0 0 0 rgba(238,102,2,.55); } 50% { box-shadow: 0 0 0 9px rgba(238,102,2,0); } }
 body.minimizado #mascota, body.minimizado #globo, body.minimizado #panel { display: none !important; }
+
+/* ---------- voz ---------- */
+#indicador.oye { font-size: 13px; }
+#mic.grabando, #hablale.grabando {
+  background: var(--rojo); border-color: var(--rojo); color: #fff;
+  animation: late 1s ease-in-out infinite;
+}
+@keyframes late { 0%,100% { box-shadow: 0 0 0 0 rgba(217,83,79,.5); } 50% { box-shadow: 0 0 0 6px rgba(217,83,79,0); } }
+#hablale {
+  position: fixed; right: 16px; bottom: 154px; z-index: 6; display: none;
+  width: 22px; height: 22px; padding: 0; border-radius: 50%;
+  border: 1.5px solid #fff; background: var(--naranja); color: #fff; font-size: 11px; line-height: 16px;
+}
+body.chica:hover #hablale, #hablale.grabando { display: block; }
+body.minimizado #hablale { display: none; }

@@ -43,6 +43,12 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 4. Nada sale de tu laptop. A cambio, responde más lento que Claude y se equivoca más con pendientes y archivos.
    Para volver a Claude, regresa `proveedor` a `claude`.
 
+## Háblale (voz)
+- Presiona **🎤** (en el chat, al pasar el mouse sobre Saurio, o **Ctrl+Espacio**) y habla. Se detiene solo cuando te callas (o vuelve a presionar 🎤).
+- Si le hablaste, te contesta hablando. Con **🔇/🔊** en la barra del chat decides si también habla cuando le escribes. Clic en Saurio mientras habla = se calla.
+- Lo que dices se transcribe en tu laptop (mismo Whisper de las reuniones, requiere haber corrido `instalar_reuniones.bat` una vez). El audio no se guarda ni sale de la laptop.
+- La voz es la de Windows en español (sin internet). Si no tienes una: Configuración > Hora e idioma > Voz > Agregar voces > Español (México). Velocidad: `"voz_velocidad"` en config.json (-10 a 10).
+
 ## Buzón de avisos (para tus macros y tareas programadas)
 Saurio escucha avisos solo dentro de tu laptop (puerto `7788`). Cada aviso lleva una contraseña que se crea sola en `%USERPROFILE%\GbSaurio\buzon_token.txt`; así ninguna página web puede mandarle mensajes.
 Cada aviso se guarda como nota, así que luego puedes preguntarle "¿qué falló hoy?".

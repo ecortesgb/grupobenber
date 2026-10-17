@@ -9,5 +9,7 @@
   "modelo_transcripcion": "small",
   "recordatorio_minutos": 60,
   "conservar_audio": false,
-  "buzon_puerto": 7788
+  "buzon_puerto": 7788,
+  "voz_responder": false,
+  "voz_velocidad": 1
 }

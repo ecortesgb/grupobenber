@@ -27,6 +27,8 @@ CONFIG_DEFECTO = {
     "recordatorio_minutos": 60,
     "conservar_audio": False,
     "buzon_puerto": 7788,
+    "voz_responder": False,         # True: contesta hablando aunque le escribas (si le hablas, siempre contesta hablando)
+    "voz_velocidad": 1,             # -10 (lento) a 10 (rápido)
 }
 
 

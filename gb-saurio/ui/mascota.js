@@ -22,6 +22,7 @@ const SEC = {
   mira_d:   [["mira_d", "mira_d", "mira_d", "frente"], 330, 1],
   mira_i:   [["mira_i", "mira_i", "mira_i", "frente"], 330, 1],
   arriba:   [["mira_arriba", "mira_arriba", "mira_arriba", "frente"], 300, 1],
+  oye:      [["frente", "frente", "frente", "mira_d", "mira_d", "frente"], 380, 0],
 };
 
 // estado: [secuencia, efecto de cuerpo, indicador, ms antes de volver a idle (0 = se queda)]
@@ -35,6 +36,8 @@ const ESTADOS = {
   saludo:      ["saluda", "", "", 0],
   preocupado:  ["preocupa", "tiembla", "", 0],
   arrastrando: ["colgado", "colgado", "", 0],  // al arrastrarlo se queda de frente y se mece colgado
+  oyendo:      ["oye", "respira", "🎤", 0],      // te está escuchando
+  diciendo:    ["habla", "", "", 0],             // habla en voz alta hasta que Python diga que terminó
 };
 
 // precarga: el cambio de cuadro debe ser instantáneo
@@ -82,6 +85,7 @@ function poner(nombre) {
   indicador.textContent = ind;
   indicador.hidden = !ind;
   indicador.classList.toggle("rec", nombre === "escuchando");
+  indicador.classList.toggle("oye", nombre === "oyendo");
   const volver = () => { if (s.estado === nombre) poner("idle"); };
   if (sec) {
     // secuencias finitas regresan a idle al terminar; las infinitas esperan a que Python cambie el estado
@@ -164,6 +168,7 @@ function saludar() {
 
 window.saurio = {
   estado: poner,
+  get actual() { return s.estado; },
   saludar,
   mirar,
   alMover(fn) { s.mover = fn; },

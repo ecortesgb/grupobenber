@@ -62,7 +62,8 @@ mascota.addEventListener("pointermove", (e) => {
   }
 });
 mascota.addEventListener("pointerup", () => {
-  if (arrastre && arrastre.movido <= 4) { window.saurio.saludar(); expandir(!grande); }
+  if (arrastre && arrastre.movido <= 4 && window.saurio.actual === "diciendo") puente && puente.callar(); // clic = cállate
+  else if (arrastre && arrastre.movido <= 4) { window.saurio.saludar(); expandir(!grande); }
   else if (arrastre) window.saurio.estado("idle");
   arrastre = null;
 });
@@ -100,6 +101,30 @@ document.querySelectorAll("[data-pregunta]").forEach((b) =>
   b.addEventListener("click", () => enviar(b.dataset.pregunta)));
 $("btnReunion").addEventListener("click", () => puente && puente.reunion());
 $("btnDeshacer").addEventListener("click", () => puente && puente.deshacer());
+
+// ---------- voz ----------
+const hablarle = () => puente && puente.escuchar();
+$("mic").addEventListener("click", hablarle);
+$("hablale").addEventListener("click", (e) => { e.stopPropagation(); hablarle(); });
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.code === "Space") { e.preventDefault(); hablarle(); }
+});
+let conVoz = false;
+try { conVoz = localStorage.getItem("gbsVoz") === "1"; } catch (_) { /* sin almacenamiento */ }
+function ponerVoz(si) {
+  conVoz = si;
+  $("voz").textContent = si ? "🔊" : "🔇";
+  $("voz").setAttribute("aria-pressed", si);
+  $("voz").title = si ? "Contesta hablando (clic para silenciar)" : "Contestar también hablando";
+  try { localStorage.setItem("gbsVoz", si ? "1" : "0"); } catch (_) { /* sin almacenamiento */ }
+  puente && puente.responderConVoz(si);
+}
+$("voz").addEventListener("click", () => ponerVoz(!conVoz));
+function microfono(si) {
+  $("mic").classList.toggle("grabando", si);
+  $("hablale").classList.toggle("grabando", si);
+  if (si && !grande && !minimizado) decir("Te escucho…", 3000);
+}
 
 // ---------- plan de organización ----------
 $("aplicar").addEventListener("click", () => { $("planCaja").hidden = true; puente.aplicarPlan(); });
@@ -146,6 +171,9 @@ function conectar(p) {
   p.estado.connect((s) => window.saurio && window.saurio.estado(s));
   p.cursor.connect((dx, dy) => window.saurio && window.saurio.mirar(dx, dy));
   window.saurio && window.saurio.alMover((dx, dy) => p.mover(dx, dy));
+  p.oido.connect((t) => agregar(t, "yo"));
+  p.microfono.connect(microfono);
+  ponerVoz(conVoz);
   p.plan.connect(mostrarPlan);
   p.pendientes.connect(pintarPendientes);
   p.aviso.connect((t) => {

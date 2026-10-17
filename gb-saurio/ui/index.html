@@ -16,6 +16,7 @@
         <button class="tab activa" data-tab="chat">Chat</button>
         <button class="tab" data-tab="pend">Pendientes <span id="nPend"></span></button>
       </nav>
+      <button id="voz" title="Contestar también hablando" aria-pressed="false">🔇</button>
       <button id="cerrar" title="Minimizar">–</button>
     </header>
 
@@ -36,7 +37,8 @@
         <button id="btnDeshacer" title="Regresa los archivos del último plan aplicado">↩️ Deshacer</button>
       </div>
       <form id="forma">
-        <textarea id="entrada" rows="2" placeholder="Escríbele a Saurio… (Enter envía, Shift+Enter salto)"></textarea>
+        <textarea id="entrada" rows="2" placeholder="Escríbele o presiona 🎤 y háblale… (Enter envía)"></textarea>
+        <button type="button" id="mic" title="Háblale (Ctrl+Espacio). Se detiene solo cuando te callas.">🎤</button>
         <button class="primario">➤</button>
       </form>
     </div>
@@ -50,6 +52,7 @@
   <!-- Mascota -->
   <div id="globo" hidden></div>
   <div id="mascota"></div>
+  <button id="hablale" title="Háblale a Saurio (se detiene solo cuando te callas)" aria-label="Háblale a Saurio">🎤</button>
   <button id="minimizar" title="Minimizar (queda una carita)" aria-label="Minimizar a GB Saurio">–</button>
   <button id="mini" hidden title="Abrir a GB Saurio" aria-label="Abrir a GB Saurio"></button>
 
