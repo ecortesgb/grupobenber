@@ -25,7 +25,11 @@ VOCABULARIO = ("GB Saurio, Benber, pendientes, Coppel, Elektra, Suburbia, Cimaco
 # "GbSaurio"... Se busca en las letras pegadas (sin espacios ni acentos) o, si solo dijiste "Saurio", como palabra
 # suelta (así "necesario" u "horario" no lo despiertan).
 _GB_SAURIO = re.compile(r"[gjy]e?[bv]e?s?a?u[rd][iey]?[oa]s?")
-_SAURIO = re.compile(r"\b(?:s[aá]u?(?:ri[oó]?|r[oó])s?|z[aá]ur[iy]o|sabr[iy]o)\b", re.I)
+_SAURIO = re.compile(r"\b(?:s[aá]u?(?:ri[oó]?|r[oó])s?|z[aá]ur[iy]o|sabr[iy]o)\b"
+                     # en su laptop también salió "¡Saudio!" y "y disavio": con d o v puede ir pegado a lo de antes
+                     r"|s[aá]u?[dv]i[oó]s?\b", re.I)
+# Con este "empujón" Whisper reconoce el nombre en vez de inventar ("que entró en lo", "el trono"…).
+PROMPT_PALABRA = "GB Saurio."
 
 _modelos = {}
 _candado_modelo = threading.Lock()
@@ -63,9 +67,19 @@ def precargar(nombre):
     threading.Thread(target=_modelo, args=(nombre,), daemon=True).start()
 
 
+def _subir_volumen(audio):
+    """Micrófonos de laptop graban bajito: se sube el volumen (hasta 20x) para que Whisper oiga claro."""
+    import numpy as np
+    pico = float(np.abs(audio).max()) if len(audio) else 0.0
+    if 0 < pico < 0.5:
+        audio = (audio * min(20.0, 0.8 / pico)).astype(np.float32)
+    return audio
+
+
 def transcribir(audio, modelo="small", prompt=VOCABULARIO):
     if audio is None or len(audio) < TASA * 0.4:
         return ""
+    audio = _subir_volumen(audio)
     m = _modelo(modelo)
     with _candado_modelo:
         segmentos, _ = m.transcribe(audio, language="es", vad_filter=True, beam_size=1, initial_prompt=prompt)
@@ -265,7 +279,7 @@ class Oido:
         import time
         t0 = time.time()
         try:
-            texto = transcribir((muestra / 32768).astype("float32"), self.modelo, prompt=None)
+            texto = transcribir((muestra / 32768).astype("float32"), self.modelo, prompt=PROMPT_PALABRA)
         except Exception as e:  # noqa: BLE001
             texto = ""
             bitacora(f"error revisando frase: {e!r}")
@@ -274,7 +288,8 @@ class Oido:
                 self.al_error(e)
         si = dijo_saurio(texto)
         self.estado_revision = "si" if si else "no"
-        bitacora(f"frase revisada ({len(muestra) / TASA:.1f} s, nivel {self.nivel:.0f}): {texto!r} -> {self.estado_revision}")
+        self.nivel = float(__import__("numpy").abs(muestra).max())  # qué tan fuerte llegó tu voz (máx 32768)
+        bitacora(f"frase revisada ({len(muestra) / TASA:.1f} s, pico {self.nivel:.0f}): {texto!r} -> {self.estado_revision}")
         self.al_revisar(texto, si, time.time() - t0)
 
     def _reiniciar_frase(self):
@@ -428,7 +443,11 @@ if __name__ == "__main__":  # autoprueba: py -3 voz.py
                         ("G. B. Saurio, ¿qué pendientes tengo?", "qué pendientes tengo"), ("GbSaurio", ""),
                         ("Jebesa Urio", ""), ("Saurio, apaga", "apaga"), ("Jebes aurio, que pendientes tengo", "que pendientes tengo"),
                         ("Necesito el horario de mañana.", None), ("Es necesario el reporte", None),
-                        ("El sábado vamos al cine.", None), ("Oye, ya mandaste la cuota de copel.", None)]:
+                        ("El sábado vamos al cine.", None), ("Oye, ya mandaste la cuota de copel.", None),
+                        # lo que oyó su laptop el 16/10 al decir "GB Saurio"
+                        ("¡Saudio!", ""), ("Hola, y disavio.", ""), ("Disavio, qué pendientes tengo", "qué pendientes tengo"),
+                        ("que entró en lo", None), ("el trono", None), ("¡Ladrón!", None), ("Luis Alio.", None),
+                        ("El audio no se oye", None), ("Es un sabio", None), ("Revisa el usuario y el salario", None)]:
         assert llamado(t) == esperado, (t, llamado(t))
     assert sin_palabra("Anota que mañana reviso") == "Anota que mañana reviso"
     assert sin_palabra("GB Saurio, ¿qué pendientes tengo?") == "qué pendientes tengo"

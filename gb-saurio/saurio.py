@@ -174,7 +174,7 @@ class Puente(QObject):
             self.aviso.emit("🔧 " + texto)
 
     def _revise(self, texto, si, segundos):
-        self._prueba(f"{'✅ ¡GB Saurio!' if si else '❌ no es para mí'} ({segundos:.1f} s, volumen {self.oreja.nivel:.0f}): «{texto}»")
+        self._prueba(f"{'✅ ¡GB Saurio!' if si else '❌ no es para mí'} ({segundos:.1f} s, tu voz llegó a {self.oreja.nivel / 327.68:.0f}% de fuerza): «{texto}»")
 
     def modoPrueba(self, si):
         self.cfg["voz_prueba"] = si
