@@ -29,7 +29,8 @@ CONFIG_DEFECTO = {
     "buzon_puerto": 7788,
     "voz_responder": False,         # True: contesta hablando aunque le escribas (si le hablas, siempre contesta hablando)
     "voz_velocidad": 1,             # -10 (lento) a 10 (rápido)
-    "voz_modelo": "base",           # Whisper para hablarle: "base" es rápido; "small" entiende mejor pero tarda más
+    "voz_modelo": "small",          # Whisper que entiende tu pregunta ("small" entiende bien; "base" es más rápido)
+    "voz_modelo_activacion": "base",  # Whisper chico que solo reconoce "GB Saurio"
     "palabra_activacion": True,     # escucha "GB Saurio" para activar el micrófono
 }
 

@@ -6,6 +6,7 @@
 - Boca: la voz en español de Windows, que se queda cargada para contestar sin demora.
 """
 import base64
+import difflib
 import re
 import subprocess
 import sys
@@ -20,9 +21,17 @@ REVISAR_A = 1.6          # segundos del inicio de una frase que se revisan busca
 PAUSA_FRASE = 0.5        # silencio que separa una frase de otra
 VOCABULARIO = ("GB Saurio, Benber, pendientes, Coppel, Elektra, Suburbia, Cimaco, Movistar, "
                "Telefónica, Power BI, Excel, cuota, minuta, reunión.")
-_PALABRA = re.compile(r"s[aá]u?r[iy][oó]|z[aá]ur[iy]o|sabr[iy]o", re.I)
-# quita el "GB Saurio" / "oye Saurio" del inicio de lo que dijiste
-_INICIO = re.compile(r"^.{0,25}?(s[aá]u?r[iy][oó]|z[aá]ur[iy]o|sabr[iy]o)[\s,.:;!¡?¿]*", re.I)
+PROMPT_PALABRA = "GB Saurio."
+_PARECIDAS = ("saurio", "sauro", "sario", "zaurio", "saurios")
+
+
+def _palabras(texto):
+    return re.findall(r"[a-záéíóúüñ]+", (texto or "").lower())
+
+
+def _es_saurio(palabra):
+    p = palabra.replace("á", "a").replace("ó", "o").replace("í", "i").replace("z", "s").replace("y", "i")
+    return len(p) >= 4 and max(difflib.SequenceMatcher(None, p, w).ratio() for w in _PARECIDAS) >= 0.72
 
 _modelos = {}
 _candado_modelo = threading.Lock()
@@ -46,23 +55,27 @@ def precargar(nombre):
     threading.Thread(target=_modelo, args=(nombre,), daemon=True).start()
 
 
-def transcribir(audio, modelo="base", vocabulario=True):
+def transcribir(audio, modelo="small", prompt=VOCABULARIO):
     if audio is None or len(audio) < TASA * 0.4:
         return ""
     m = _modelo(modelo)
     with _candado_modelo:
-        segmentos, _ = m.transcribe(audio, language="es", vad_filter=True, beam_size=1,
-                                    initial_prompt=VOCABULARIO if vocabulario else None)
+        segmentos, _ = m.transcribe(audio, language="es", vad_filter=True, beam_size=1, initial_prompt=prompt)
         return " ".join(s.text.strip() for s in segmentos).strip()
 
 
 def dijo_saurio(texto):
-    return bool(_PALABRA.search(texto or ""))
+    """Whisper no siempre escribe "Saurio" igual ("Sauro", "Zaurio", "Sario"…): se compara por parecido."""
+    return any(_es_saurio(p) for p in _palabras(texto))
 
 
 def sin_palabra(texto):
     """'GB Saurio, ¿qué pendientes tengo?' -> '¿qué pendientes tengo?'"""
-    return _INICIO.sub("", texto, count=1).strip() if dijo_saurio(texto[:40]) else texto.strip()
+    texto = (texto or "").strip()
+    for m in re.finditer(r"[A-Za-záéíóúüñÁÉÍÓÚÜÑ]+", texto[:45]):
+        if _es_saurio(m.group().lower()):
+            return texto[m.end():].lstrip(" ,.:;!¡?¿-").strip()
+    return texto
 
 
 class Oido:
@@ -71,11 +84,16 @@ class Oido:
     - grabando: guarda lo que dices hasta que te callas y lo entrega a al_terminar(audio, por_palabra).
     """
 
-    def __init__(self, al_terminar, al_despertar=None, pausado=lambda: False, modelo="base"):
+    def __init__(self, al_terminar, al_despertar=None, pausado=lambda: False, modelo="base",
+                 al_error=None, al_revisar=None):
         self.al_terminar = al_terminar
         self.al_despertar = al_despertar or (lambda: None)
         self.pausado = pausado            # True mientras Saurio habla, piensa o graba una reunión
-        self.modelo = modelo
+        self.modelo = modelo              # Whisper chico y rápido, solo para reconocer "GB Saurio"
+        self.al_error = al_error or (lambda e: None)
+        self.al_revisar = al_revisar or (lambda texto, si, seg: None)  # modo prueba: qué oyó
+        self.error_avisado = False
+        self.nivel = 0.0                  # volumen más alto del último medio segundo (para el modo prueba)
         self.vigilar = False
         self.modo = "apagado"
         self.stream = None
@@ -141,15 +159,18 @@ class Oido:
         import pyaudiowpatch as pyaudio
         try:
             self._procesar(self._a16k(datos))
-        except Exception:  # noqa: BLE001 - un trocito raro nunca debe tumbar el micrófono
-            pass
+        except Exception as e:  # noqa: BLE001 - un trocito raro nunca debe tumbar el micrófono
+            if not self.error_avisado:  # pero sí se avisa (una vez), para no fallar en silencio
+                self.error_avisado = True
+                threading.Thread(target=self.al_error, args=(e,), daemon=True).start()
         return (None, pyaudio.paContinue)
 
     def _procesar(self, x):
         import numpy as np
         dur = len(x) / TASA
         volumen = float(np.sqrt(np.mean(x ** 2))) if len(x) else 0.0
-        umbral = max(450.0, self.piso * 3)
+        self.nivel = max(volumen, self.nivel * 0.9)
+        umbral = max(220.0, self.piso * 2.5)  # micrófonos de laptop suelen sonar bajito
         voz = volumen > umbral
         if not voz:  # el ruido del cuarto se va midiendo solo
             self.piso = 0.97 * self.piso + 0.03 * volumen
@@ -208,11 +229,18 @@ class Oido:
             self._reiniciar_frase()  # ruido cortito
 
     def _revisar(self, muestra):
+        import time
+        t0 = time.time()
         try:
-            texto = transcribir((muestra / 32768).astype('float32'), self.modelo, vocabulario=False)
-        except Exception:  # noqa: BLE001
+            texto = transcribir((muestra / 32768).astype("float32"), self.modelo, prompt=PROMPT_PALABRA)
+        except Exception as e:  # noqa: BLE001
             texto = ""
-        self.estado_revision = "si" if dijo_saurio(texto) else "no"
+            if not self.error_avisado:
+                self.error_avisado = True
+                self.al_error(e)
+        si = dijo_saurio(texto)
+        self.estado_revision = "si" if si else "no"
+        self.al_revisar(texto, si, time.time() - t0)
 
     def _reiniciar_frase(self):
         self.previo = deque(maxlen=8)
@@ -237,7 +265,7 @@ class Oido:
         with self.candado:
             if self.modo not in ("grabando", "entregando"):
                 return
-            trozos, hablo, por_palabra = self.trozos, self.hablo or self.por_palabra, self.por_palabra
+            trozos, por_palabra = self.trozos, self.por_palabra
             self.trozos = []
             self._reiniciar_frase()
             if self.vigilar:
@@ -245,7 +273,8 @@ class Oido:
             else:
                 self.modo = "apagado"
                 self._cerrar()
-        audio = (np.concatenate(trozos) / 32768).astype(np.float32) if hablo and trozos else None
+        # se entrega aunque el medidor no haya notado voz: Whisper decide si dijiste algo
+        audio = (np.concatenate(trozos) / 32768).astype(np.float32) if trozos else None
         self.al_terminar(audio, por_palabra)
 
     def apagar(self):

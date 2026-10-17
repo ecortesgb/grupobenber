@@ -47,7 +47,8 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
 - Di **"GB Saurio"** y luego tu pregunta (puede ser de corrido: "GB Saurio, ¿qué pendientes tengo hoy?"). También funciona **🎤** en el chat, al pasar el mouse sobre Saurio, o **Ctrl+Espacio**. Deja de escuchar solo cuando te callas.
 - Mientras espera "GB Saurio" solo revisa el inicio de cada frase y la descarta al momento: no graba nada ni sale de la laptop. Windows muestra el ícono de micrófono en uso. Se apaga desde el ícono junto al reloj: "Escuchar "GB Saurio"" (o `"palabra_activacion": false`). No escucha mientras graba una reunión o mientras él mismo habla.
 - Si le hablaste, te contesta hablando y corto. Con **🔇/🔊** en el chat decides si también habla cuando le escribes. Clic en Saurio mientras habla = se calla.
-- Usa el Whisper de las reuniones (`instalar_reuniones.bat` una vez). `"voz_modelo": "base"` es rápido; `"small"` entiende mejor pero tarda más.
+- Usa el Whisper de las reuniones (`instalar_reuniones.bat` una vez): `"voz_modelo": "small"` entiende tu pregunta y `"voz_modelo_activacion": "base"` (más chico) solo reconoce "GB Saurio". La primera vez baja el modelo base (~150 MB).
+- **Si no te oye o no te entiende:** ícono junto al reloj > "Modo prueba de voz". En el chat verás qué oyó en cada frase, el volumen y cuánto tardó Whisper y la IA.
 - Voz de Windows en español (sin internet). Si no tienes: Configuración > Hora e idioma > Voz > Agregar voces > Español (México). Velocidad: `"voz_velocidad"` (-10 a 10).
 
 ### Para que conteste rápido (Ollama)

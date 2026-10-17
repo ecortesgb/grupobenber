@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPoint, Qt, QTimer, QUrl, Signal, Slot
@@ -47,8 +48,11 @@ class Puente(QObject):
         self.ocupado = threading.Lock()
         self.grabadora = reuniones.Grabadora()
         self.boca = voz.Boca(cfg.get("voz_velocidad", 1), sin_voz=self._sin_voz)
-        self.oreja = voz.Oido(self._entendi, al_despertar=self._desperto, modelo=cfg.get("voz_modelo", "base"),
-                              pausado=lambda: self.boca.hablando or self.ocupado.locked() or self.grabadora.grabando)
+        self.oreja = voz.Oido(self._entendi, al_despertar=self._desperto,
+                              modelo=cfg.get("voz_modelo_activacion", "base"),
+                              pausado=lambda: self.boca.hablando or self.ocupado.locked() or self.grabadora.grabando,
+                              al_error=lambda e: self.aviso.emit(f"Problema con el micrófono: {e}"),
+                              al_revisar=self._revise)
         self.por_voz = False  # si le preguntaste hablando, contesta hablando
         self.asistente = Asistente(
             cfg,
@@ -68,18 +72,22 @@ class Puente(QObject):
     def _trabajar(self, fn, *args):
         with self.ocupado:
             self.estado.emit("pensando")
+            t0 = time.time()
             try:
                 r = fn(*args)
             except Exception as e:  # noqa: BLE001
                 r = f"Algo falló: {e}"
             self.respuesta.emit(r)
+            self._prueba(f"La IA tardó {time.time() - t0:.1f} s en contestar.")
             problema = r.startswith(("Algo falló", "No tengo", "Error", "Claude está saturado", "No pude", "Me falta"))
             hablar = (self.por_voz or self.cfg.get("voz_responder")) and not problema
             self.por_voz = False
             if self.grabadora.grabando:
                 self.estado.emit("escuchando")  # sigue en modo reunión
-            elif hablar and self.boca.decir(r, al_terminar=lambda: self.estado.emit("idle"), sin_voz=self._sin_voz):
-                self.estado.emit("diciendo")  # mueve la boca mientras habla
+            elif hablar:
+                self.estado.emit("diciendo")  # mueve la boca mientras habla; al terminar vuelve a idle
+                if not self.boca.decir(r, al_terminar=lambda: self.estado.emit("idle")):
+                    self.estado.emit("hablando")
             else:
                 self.estado.emit("preocupado" if problema else "hablando")
 
@@ -89,7 +97,8 @@ class Puente(QObject):
         threading.Thread(target=self.boca.preparar, daemon=True).start()
         if not voz.puede_oir():
             return
-        voz.precargar(self.cfg.get("voz_modelo", "base"))
+        voz.precargar(self.cfg.get("voz_modelo", "small"))
+        voz.precargar(self.cfg.get("voz_modelo_activacion", "base"))
         self.palabraActivacion(bool(self.cfg.get("palabra_activacion", True)))
 
     def palabraActivacion(self, si):
@@ -133,24 +142,43 @@ class Puente(QObject):
     def _entendi(self, audio, por_palabra=False):
         self.microfono.emit(False)
         if audio is None:
-            self.estado.emit("idle")
+            self.aviso.emit("No te oí. Revisa que el micrófono de la laptop esté prendido.")
+            self.estado.emit("preocupado")
             return
         self.estado.emit("pensando")
+        t0 = time.time()
         try:
-            texto = voz.sin_palabra(voz.transcribir(audio, self.cfg.get("voz_modelo", "base")))
+            crudo = voz.transcribir(audio, self.cfg.get("voz_modelo", "small"))
         except Exception as e:  # noqa: BLE001
             self.aviso.emit(f"No pude entenderte: {e}")
             self.estado.emit("preocupado")
             return
+        self._prueba(f"Whisper tardó {time.time() - t0:.1f} s en {len(audio) / voz.TASA:.1f} s de audio. Oí: «{crudo}»")
+        texto = voz.sin_palabra(crudo)
         if len(texto.strip(" .,¿?¡!")) < 2:
-            self.aviso.emit("¿Sí? No alcancé a oír qué necesitas." if por_palabra else "No te entendí, ¿me repites?")
-            self.estado.emit("idle" if por_palabra else "preocupado")
+            self.aviso.emit("¿Sí? No alcancé a oír qué necesitas." if por_palabra and crudo
+                            else "No te oí bien, ¿me repites un poco más fuerte?")
+            self.estado.emit("idle" if por_palabra and crudo else "preocupado")
             return
         self.oido.emit(texto)
         if not datos.ia_lista(self.cfg):
             return self.enviar(texto)
         self.por_voz = True
         self._trabajar(lambda x: self.asistente.preguntar(x, por_voz=True), texto)
+
+    # ---------- modo prueba de voz: dice qué oyó y cuánto tardó cada paso ----------
+    def _prueba(self, texto):
+        if self.cfg.get("voz_prueba"):
+            self.aviso.emit("🔧 " + texto)
+
+    def _revise(self, texto, si, segundos):
+        self._prueba(f"{'✅ ¡GB Saurio!' if si else '❌ no es para mí'} ({segundos:.1f} s, volumen {self.oreja.nivel:.0f}): «{texto}»")
+
+    def modoPrueba(self, si):
+        self.cfg["voz_prueba"] = si
+        if si:
+            self.aviso.emit(f"🔧 Modo prueba. Micrófono: {'escuchando' if self.oreja.modo != 'apagado' else 'apagado'}, "
+                            f"ruido del cuarto {self.oreja.piso:.0f}. Di \"GB Saurio\" y te muestro lo que oigo.")
 
     @Slot(bool)
     def responderConVoz(self, si):
@@ -384,8 +412,12 @@ def main():
     a_palabra.setCheckable(True)
     a_palabra.setChecked(bool(cfg.get("palabra_activacion", True)))
     a_palabra.toggled.connect(puente.palabraActivacion)
+    a_prueba = QAction("Modo prueba de voz")
+    a_prueba.setCheckable(True)
+    a_prueba.toggled.connect(puente.modoPrueba)
     menu.addAction(a_mostrar)
     menu.addAction(a_palabra)
+    menu.addAction(a_prueba)
     menu.addAction(a_actualizar)
     menu.addAction(a_salir)
     bandeja.setContextMenu(menu)

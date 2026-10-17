@@ -12,6 +12,7 @@
   "buzon_puerto": 7788,
   "voz_responder": false,
   "voz_velocidad": 1,
-  "voz_modelo": "base",
+  "voz_modelo": "small",
+  "voz_modelo_activacion": "base",
   "palabra_activacion": true
 }
