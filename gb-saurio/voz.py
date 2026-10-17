@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import threading
+import unicodedata
 from collections import deque
 
 TASA = 16000
@@ -20,9 +21,11 @@ REVISAR_A = 1.6          # segundos del inicio de una frase que se revisan busca
 PAUSA_FRASE = 0.5        # silencio que separa una frase de otra
 VOCABULARIO = ("GB Saurio, Benber, pendientes, Coppel, Elektra, Suburbia, Cimaco, Movistar, "
                "Telefónica, Power BI, Excel, cuota, minuta, reunión.")
-_PALABRA = re.compile(r"s[aá]u?r[iy][oó]|z[aá]ur[iy]o|sabr[iy]o", re.I)
-# quita el "GB Saurio" / "oye Saurio" del inicio de lo que dijiste
-_INICIO = re.compile(r"^.{0,25}?(s[aá]u?r[iy][oó]|z[aá]ur[iy]o|sabr[iy]o)[\s,.:;!¡?¿]*", re.I)
+# Whisper (sin vocabulario) escribe "GB Saurio" de muchas formas: "Jebe Saudio", "Jebes aurio", "G. B. Saurio",
+# "GbSaurio"... Se busca en las letras pegadas (sin espacios ni acentos) o, si solo dijiste "Saurio", como palabra
+# suelta (así "necesario" u "horario" no lo despiertan).
+_GB_SAURIO = re.compile(r"[gjy]e?[bv]e?s?a?u[rd][iey]?[oa]s?")
+_SAURIO = re.compile(r"\b(?:s[aá]u?(?:ri[oó]?|r[oó])s?|z[aá]ur[iy]o|sabr[iy]o)\b", re.I)
 
 _modelos = {}
 _candado_modelo = threading.Lock()
@@ -56,13 +59,33 @@ def transcribir(audio, modelo="base", vocabulario=True):
         return " ".join(s.text.strip() for s in segmentos).strip()
 
 
+def llamado(texto):
+    """Si en el texto lo llamaron ("GB Saurio"), devuelve lo que dijiste después (puede ser ""); si no, None."""
+    m = _SAURIO.search(texto)
+    if m:
+        return texto[m.end():].strip(" ,.;:!?¡¿")
+    t = unicodedata.normalize("NFD", texto)
+    letras, pos = [], []
+    for i, ch in enumerate(t):
+        if ch.isascii() and ch.isalpha():
+            letras.append(ch.lower())
+            pos.append(i)
+    m = _GB_SAURIO.search("".join(letras))
+    if not m:
+        return None
+    fin = pos[m.end() - 1] + 1
+    while fin < len(t) and (t[fin].isalpha() or unicodedata.combining(t[fin])):
+        fin += 1  # termina la palabra donde quedó el nombre
+    return unicodedata.normalize("NFC", t[fin:]).strip(" ,.;:!?¡¿")
+
+
 def dijo_saurio(texto):
-    return bool(_PALABRA.search(texto or ""))
+    return llamado(texto or "") is not None
 
 
 def sin_palabra(texto):
-    """'GB Saurio, ¿qué pendientes tengo?' -> '¿qué pendientes tengo?'"""
-    return _INICIO.sub("", texto, count=1).strip() if dijo_saurio(texto[:40]) else texto.strip()
+    """'GB Saurio, ¿qué pendientes tengo?' -> 'qué pendientes tengo' (solo si lo llamaste al inicio)."""
+    return llamado(texto) if dijo_saurio(texto[:40]) else texto.strip()
 
 
 class Oido:
@@ -356,3 +379,15 @@ class Boca:
             self.proc = None
             threading.Thread(target=self.preparar, daemon=True).start()
         self.hablando = False
+
+
+if __name__ == "__main__":  # autoprueba: py -3 voz.py
+    for t, esperado in [("Jebe Saudio", ""), ("Jebes Aureo, anota que mañana revisó el reporte", "anota que mañana revisó el reporte"),
+                        ("G. B. Saurio, ¿qué pendientes tengo?", "qué pendientes tengo"), ("GbSaurio", ""),
+                        ("Jebesa Urio", ""), ("Saurio, apaga", "apaga"), ("Jebes aurio, que pendientes tengo", "que pendientes tengo"),
+                        ("Necesito el horario de mañana.", None), ("Es necesario el reporte", None),
+                        ("El sábado vamos al cine.", None), ("Oye, ya mandaste la cuota de copel.", None)]:
+        assert llamado(t) == esperado, (t, llamado(t))
+    assert sin_palabra("Anota que mañana reviso") == "Anota que mañana reviso"
+    assert sin_palabra("GB Saurio, ¿qué pendientes tengo?") == "qué pendientes tengo"
+    print("ok")
