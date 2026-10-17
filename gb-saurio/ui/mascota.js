@@ -1,5 +1,7 @@
 // GB Saurio animado por cuadros (los mismos 32 cuadros del Saurio del dashboard de RRHH, en sprites/cuadros/).
-// Cada estado es una secuencia de cuadros; en ratos libres guiña, mira hacia tu cursor y da paseítos.
+// Cada estado es una secuencia de cuadros; en ratos libres guiña, mira hacia tu cursor y saluda.
+// (El paseíto existe pero está apagado hasta que mejoremos los cuadros de caminar: CAMINA = true lo prende.)
+const CAMINA = false;
 const caja = document.getElementById("mascota");
 caja.innerHTML = `
   <div id="indicador" hidden></div>
@@ -106,14 +108,16 @@ function microAnimar() {
   if (QUIETO) return;
   s.tMicro = setTimeout(() => {
     if (libre()) {
+      // como una persona: casi siempre parpadea o mira a un lado; de vez en cuando saluda
       const r = Math.random();
-      if (r < 0.4) correr("guino");
+      if (CAMINA && r < 0.1) pasear();
+      else if (r < 0.4) correr("guino");
       else if (r < 0.7) correr(azar(["mira_d", "mira_i"]));
-      else if (r < 0.85) pasear();
+      else if (r < 0.85) correr("saluda");
       else correr("arriba");
     }
     if (s.estado === "idle") microAnimar();
-  }, 5000 + Math.random() * 6000);
+  }, 6000 + Math.random() * 9000);
 }
 
 // Camina un poco a la izquierda y regresa a su lugar (mueve la ventana; siempre vuelve a donde estaba).

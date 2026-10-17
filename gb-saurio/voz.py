@@ -1,23 +1,30 @@
-"""Voz de Saurio: te escucha cuando presionas 🎤 y te contesta hablando.
+"""Voz de Saurio: lo despiertas diciendo "GB Saurio" (o con 🎤) y te contesta hablando.
 
-- Oído: graba SOLO tu micrófono mientras hablas y se detiene solo cuando te callas.
-  Transcribe en tu laptop con faster-whisper (el audio nunca sale de la laptop y no se guarda).
-- Boca: lee la respuesta con la voz en español de Windows (sin internet, sin costo).
+- Oído: escucha tu micrófono en la laptop. Mientras espera, solo revisa el inicio de cada frase para ver
+  si dijiste "GB Saurio"; lo demás se descarta al momento. Nada se graba en disco ni sale de la laptop.
+  Transcribe con faster-whisper (el mismo de las reuniones).
+- Boca: la voz en español de Windows, que se queda cargada para contestar sin demora.
 """
 import base64
 import re
 import subprocess
 import sys
 import threading
+from collections import deque
 
 TASA = 16000
 MAX_SEGUNDOS = 40        # tope por si nunca te callas
-SILENCIO_FIN = 1.4       # segundos callado después de hablar = terminaste
-SIN_HABLAR_MAX = 7       # si en 7 s no dijiste nada, deja de escuchar
-VOCABULARIO = ("Saurio, Benber, pendientes, Coppel, Elektra, Suburbia, Cimaco, Movistar, "
+SILENCIO_FIN = 1.2       # segundos callado después de hablar = terminaste
+SIN_HABLAR_MAX = 6       # si en 6 s no dijiste nada, deja de escuchar
+REVISAR_A = 1.6          # segundos del inicio de una frase que se revisan buscando "GB Saurio"
+PAUSA_FRASE = 0.5        # silencio que separa una frase de otra
+VOCABULARIO = ("GB Saurio, Benber, pendientes, Coppel, Elektra, Suburbia, Cimaco, Movistar, "
                "Telefónica, Power BI, Excel, cuota, minuta, reunión.")
+_PALABRA = re.compile(r"s[aá]u?r[iy][oó]|z[aá]ur[iy]o|sabr[iy]o", re.I)
+# quita el "GB Saurio" / "oye Saurio" del inicio de lo que dijiste
+_INICIO = re.compile(r"^.{0,25}?(s[aá]u?r[iy][oó]|z[aá]ur[iy]o|sabr[iy]o)[\s,.:;!¡?¿]*", re.I)
 
-_modelo = None
+_modelos = {}
 _candado_modelo = threading.Lock()
 
 
@@ -26,46 +33,66 @@ def puede_oir():
     return reuniones.disponible()
 
 
-def _cargar_modelo(nombre):
+def _modelo(nombre):
     """Whisper tarda unos segundos en cargar: se carga una vez y se reusa."""
-    global _modelo
     with _candado_modelo:
-        if _modelo is None or _modelo[0] != nombre:
+        if nombre not in _modelos:
             from faster_whisper import WhisperModel
-            _modelo = (nombre, WhisperModel(nombre, device="cpu", compute_type="int8"))
-        return _modelo[1]
+            _modelos[nombre] = WhisperModel(nombre, device="cpu", compute_type="int8")
+        return _modelos[nombre]
 
 
-def transcribir(audio, modelo="small"):
+def precargar(nombre):
+    threading.Thread(target=_modelo, args=(nombre,), daemon=True).start()
+
+
+def transcribir(audio, modelo="base", vocabulario=True):
     if audio is None or len(audio) < TASA * 0.4:
         return ""
-    segmentos, _ = _cargar_modelo(modelo).transcribe(
-        audio, language="es", vad_filter=True, beam_size=1, initial_prompt=VOCABULARIO)
-    return " ".join(s.text.strip() for s in segmentos).strip()
+    m = _modelo(modelo)
+    with _candado_modelo:
+        segmentos, _ = m.transcribe(audio, language="es", vad_filter=True, beam_size=1,
+                                    initial_prompt=VOCABULARIO if vocabulario else None)
+        return " ".join(s.text.strip() for s in segmentos).strip()
+
+
+def dijo_saurio(texto):
+    return bool(_PALABRA.search(texto or ""))
+
+
+def sin_palabra(texto):
+    """'GB Saurio, ¿qué pendientes tengo?' -> '¿qué pendientes tengo?'"""
+    return _INICIO.sub("", texto, count=1).strip() if dijo_saurio(texto[:40]) else texto.strip()
 
 
 class Oido:
-    """Micrófono en modo 'presiona y habla'. Llama a al_terminar(audio) cuando te callas o presionas otra vez."""
+    """Un solo micrófono con dos modos:
+    - vigilando: espera "GB Saurio" (si está prendida la palabra de activación).
+    - grabando: guarda lo que dices hasta que te callas y lo entrega a al_terminar(audio, por_palabra).
+    """
 
-    def __init__(self):
+    def __init__(self, al_terminar, al_despertar=None, pausado=lambda: False, modelo="base"):
+        self.al_terminar = al_terminar
+        self.al_despertar = al_despertar or (lambda: None)
+        self.pausado = pausado            # True mientras Saurio habla, piensa o graba una reunión
+        self.modelo = modelo
+        self.vigilar = False
+        self.modo = "apagado"
         self.stream = None
         self.pa = None
         self.candado = threading.Lock()
+        self.piso = 300.0
+        self._reiniciar_frase()
 
     @property
     def activo(self):
-        return self.stream is not None
+        return self.modo == "grabando"
 
-    def iniciar(self, al_terminar, modelo="small"):
-        import numpy as np
+    # ---------- abrir / cerrar el micrófono ----------
+    def _abrir(self):
+        if self.stream:
+            return
         import pyaudiowpatch as pyaudio
-        self.np = np
-        self.al_terminar = al_terminar
-        self.trozos = []
-        self.hablo = False
-        self.callado = 0.0
-        self.total = 0.0
-        self.piso = None
         self.pa = pyaudio.PyAudio()
         wasapi = self.pa.get_host_api_info_by_type(pyaudio.paWASAPI)
         mic = self.pa.get_device_info_by_index(wasapi["defaultInputDevice"])
@@ -74,69 +101,182 @@ class Oido:
         self.stream = self.pa.open(format=pyaudio.paInt16, channels=self.canales, rate=self.tasa, input=True,
                                    input_device_index=mic["index"], frames_per_buffer=1024,
                                    stream_callback=self._cb)
-        # mientras hablas, Whisper se va cargando
-        threading.Thread(target=_cargar_modelo, args=(modelo,), daemon=True).start()
 
-    def _cb(self, datos, frames, tiempo, estado):
-        import pyaudiowpatch as pyaudio
-        np = self.np
-        x = np.frombuffer(datos, dtype=np.int16).astype(np.float32).reshape(-1, self.canales).mean(axis=1)
-        self.trozos.append(x)
-        dur = len(x) / self.tasa
-        self.total += dur
-        volumen = float(np.sqrt(np.mean(x ** 2))) if len(x) else 0.0
-        if self.piso is None or self.total < 0.3:  # ruido del cuarto
-            self.piso = volumen if self.piso is None else min(self.piso, volumen)
-        umbral = max(500.0, (self.piso or 0) * 3)
-        if volumen > umbral:
-            self.hablo, self.callado = True, 0.0
-        else:
-            self.callado += dur
-        fin = ((self.hablo and self.callado > SILENCIO_FIN) or self.total > MAX_SEGUNDOS
-               or (not self.hablo and self.total > SIN_HABLAR_MAX))
-        if fin:
-            threading.Thread(target=self.terminar, daemon=True).start()
-            return (None, pyaudio.paComplete)
-        return (None, pyaudio.paContinue)
-
-    def terminar(self):
-        """Cierra el micrófono y entrega el audio (16 kHz mono, -1..1). Seguro de llamar dos veces."""
-        with self.candado:
-            if not self.stream:
-                return
-            stream, self.stream = self.stream, None
+    def _cerrar(self):
+        stream, pa = self.stream, self.pa
+        self.stream = self.pa = None
+        if stream:
             try:
                 stream.stop_stream()
                 stream.close()
             finally:
-                self.pa.terminate()
-                self.pa = None
-        np = self.np
-        audio = None
-        if self.hablo and self.trozos:
-            x = np.concatenate(self.trozos)
-            n = int(len(x) * TASA / self.tasa)
-            audio = (np.interp(np.linspace(0, len(x) - 1, n), np.arange(len(x)), x) / 32768).astype(np.float32)
-        self.trozos = []
-        self.al_terminar(audio)
+                pa.terminate()
+
+    def vigilancia(self, si):
+        """Prende o apaga la escucha de "GB Saurio"."""
+        with self.candado:
+            self.vigilar = si
+            if si and self.modo == "apagado":
+                self._abrir()
+                self._reiniciar_frase()
+                self.modo = "vigilando"
+            elif not si and self.modo == "vigilando":
+                self.modo = "apagado"
+                self._cerrar()
+
+    def escuchar_ya(self):
+        """Botón 🎤: empieza a grabar ahora mismo."""
+        with self.candado:
+            self._abrir()
+            self._empezar_grabacion([], hablo=False, por_palabra=False)
+
+    # ---------- el audio llega aquí en trocitos ----------
+    def _a16k(self, datos):
+        import numpy as np
+        x = np.frombuffer(datos, dtype=np.int16).astype(np.float32).reshape(-1, self.canales).mean(axis=1)
+        n = int(len(x) * TASA / self.tasa)
+        return np.interp(np.linspace(0, len(x) - 1, n), np.arange(len(x)), x) if n else x[:0]
+
+    def _cb(self, datos, frames, tiempo, estado):
+        import pyaudiowpatch as pyaudio
+        try:
+            self._procesar(self._a16k(datos))
+        except Exception:  # noqa: BLE001 - un trocito raro nunca debe tumbar el micrófono
+            pass
+        return (None, pyaudio.paContinue)
+
+    def _procesar(self, x):
+        import numpy as np
+        dur = len(x) / TASA
+        volumen = float(np.sqrt(np.mean(x ** 2))) if len(x) else 0.0
+        umbral = max(450.0, self.piso * 3)
+        voz = volumen > umbral
+        if not voz:  # el ruido del cuarto se va midiendo solo
+            self.piso = 0.97 * self.piso + 0.03 * volumen
+        if self.modo == "grabando":
+            self._grabar(x, dur, voz)
+        elif self.modo == "vigilando":
+            self._vigilar(x, dur, voz)
+
+    def _grabar(self, x, dur, voz):
+        self.trozos.append(x)
+        self.total += dur
+        if voz:
+            self.hablo, self.callado = True, 0.0
+        else:
+            self.callado += dur
+        if ((self.hablo and self.callado > SILENCIO_FIN) or self.total > MAX_SEGUNDOS
+                or (not self.hablo and self.total > SIN_HABLAR_MAX)):
+            self.modo = "entregando"  # antes de soltar el hilo: si no, podría pisar el "vigilando" que pone terminar()
+            threading.Thread(target=self.terminar, daemon=True).start()
+
+    def _vigilar(self, x, dur, voz):
+        if self.pausado():
+            self._reiniciar_frase()
+            return
+        self.previo.append(x)  # medio segundo antes de que empieces a hablar
+        if not self.en_frase:
+            if voz:
+                self.en_frase = True
+                self.frase = list(self.previo)
+                self.largo = sum(len(t) for t in self.frase) / TASA
+                self.callado = 0.0
+            return
+        self.frase.append(x)
+        self.largo += dur
+        self.callado = 0.0 if voz else self.callado + dur
+        termino = self.callado > PAUSA_FRASE
+        if self.estado_revision == "no":
+            if termino:
+                self._reiniciar_frase()  # no era para Saurio: se tira
+            return
+        if self.estado_revision == "si":
+            # ¡te oyó! sigue grabando lo que dices después de "GB Saurio".
+            # Si ya dijiste algo más después de lo revisado, eso es tu pregunta: no hay que esperar más.
+            siguio = (self.largo - self.callado) > self.revisado + 0.3
+            self._empezar_grabacion(self.frase, hablo=not termino or siguio, por_palabra=True)
+            threading.Thread(target=self.al_despertar, daemon=True).start()
+            return
+        if self.estado_revision is None and (self.largo >= REVISAR_A or (termino and self.largo >= 0.5)):
+            self.estado_revision = "revisando"
+            self.revisado = self.largo
+            muestra = __import__("numpy").concatenate(self.frase)
+            threading.Thread(target=self._revisar, args=(muestra,), daemon=True).start()
+        if termino and self.estado_revision == "revisando":
+            return  # espera la revisión antes de tirar la frase
+        if termino and self.estado_revision is None:
+            self._reiniciar_frase()  # ruido cortito
+
+    def _revisar(self, muestra):
+        try:
+            texto = transcribir((muestra / 32768).astype('float32'), self.modelo, vocabulario=False)
+        except Exception:  # noqa: BLE001
+            texto = ""
+        self.estado_revision = "si" if dijo_saurio(texto) else "no"
+
+    def _reiniciar_frase(self):
+        self.previo = deque(maxlen=8)
+        self.en_frase = False
+        self.frase = []
+        self.largo = 0.0
+        self.callado = 0.0
+        self.estado_revision = None
+        self.revisado = 0.0
+
+    def _empezar_grabacion(self, inicio, hablo, por_palabra):
+        self.trozos = list(inicio)
+        self.total = 0.0  # los límites cuentan desde ahora
+        self.hablo = hablo
+        self.callado = 0.0
+        self.por_palabra = por_palabra
+        self.modo = "grabando"
+
+    def terminar(self):
+        """Deja de grabar y entrega el audio (16 kHz mono, -1..1). Seguro de llamar dos veces."""
+        import numpy as np
+        with self.candado:
+            if self.modo not in ("grabando", "entregando"):
+                return
+            trozos, hablo, por_palabra = self.trozos, self.hablo or self.por_palabra, self.por_palabra
+            self.trozos = []
+            self._reiniciar_frase()
+            if self.vigilar:
+                self.modo = "vigilando"
+            else:
+                self.modo = "apagado"
+                self._cerrar()
+        audio = (np.concatenate(trozos) / 32768).astype(np.float32) if hablo and trozos else None
+        self.al_terminar(audio, por_palabra)
+
+    def apagar(self):
+        with self.candado:
+            self.vigilar = False
+            self.modo = "apagado"
+            self._cerrar()
 
 
 # ---------- boca ----------
+# PowerShell se queda abierto con la voz cargada; cada línea que recibe (texto en base64) la dice y responde FIN.
 _PS = r"""
 Add-Type -AssemblyName System.Speech
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
 $v = $s.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.Name -like 'es*' } |
      Sort-Object { $_.VoiceInfo.Culture.Name -ne 'es-MX' } | Select-Object -First 1
-if (-not $v) { exit 3 }
+if (-not $v) { [Console]::Out.WriteLine('SINVOZ'); exit 3 }
 $s.SelectVoice($v.VoiceInfo.Name)
 $s.Rate = __VELOCIDAD__
-$s.Speak([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__TEXTO__')))
+[Console]::Out.WriteLine('LISTO')
+while ($null -ne ($l = [Console]::In.ReadLine())) {
+  $s.Speak([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($l)))
+  [Console]::Out.WriteLine('FIN')
+}
 """
 
 
 def para_leer(texto, limite=450):
     """Lo que tiene sentido decir en voz alta: sin código, sin markdown, sin emojis, y corto."""
-    t = re.sub(r"```.*?```", " Te dejé el código en el chat. ", texto, flags=re.S)
+    t = re.sub(r"<think>.*?</think>", " ", texto, flags=re.S)
+    t = re.sub(r"```.*?```", " Te dejé el código en el chat. ", t, flags=re.S)
     t = re.sub(r"https?://\S+", "el enlace del chat", t)
     t = re.sub(r"[`*_#>|]", "", t)
     t = re.sub(r"^\s*[-•]\s*", "", t, flags=re.M)
@@ -149,40 +289,70 @@ def para_leer(texto, limite=450):
 
 
 class Boca:
-    def __init__(self, velocidad=1):
+    def __init__(self, velocidad=1, sin_voz=None):
+        self.velocidad = max(-10, min(10, int(velocidad)))
+        self.sin_voz = sin_voz or (lambda: None)
         self.proc = None
-        self.velocidad = int(velocidad)
         self.turno = 0
+        self.hablando = False
+        self.candado = threading.Lock()
+        self.sin_espanol = False
 
-    def decir(self, texto, al_terminar, sin_voz=None):
-        """Habla en segundo plano. al_terminar() solo se llama si nadie lo calló antes."""
+    def preparar(self):
+        """Abre PowerShell con la voz cargada (tarda ~1 s la primera vez; después ya no)."""
+        if sys.platform != "win32" or self.sin_espanol:
+            return None
+        with self.candado:
+            if self.proc and self.proc.poll() is None:
+                return self.proc
+            script = _PS.replace("__VELOCIDAD__", str(self.velocidad))
+            proc = subprocess.Popen(
+                ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                 base64.b64encode(script.encode("utf-16-le")).decode("ascii")],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                text=True, encoding="ascii", errors="ignore", creationflags=0x08000000)
+            primera = proc.stdout.readline().strip()
+            if primera != "LISTO":
+                self.sin_espanol = primera == "SINVOZ"
+                proc.kill()
+                if self.sin_espanol:
+                    self.sin_voz()
+                return None
+            self.proc = proc
+            return proc
+
+    def decir(self, texto, al_terminar):
+        """Habla en segundo plano. al_terminar() se llama al acabar, salvo que alguien lo calle antes."""
         self.callar()
-        if sys.platform != "win32":
-            return False
         t = para_leer(texto)
-        if not t:
+        if sys.platform != "win32" or self.sin_espanol or not t:
             return False
-        script = (_PS.replace("__VELOCIDAD__", str(max(-10, min(10, self.velocidad))))
-                  .replace("__TEXTO__", base64.b64encode(t.encode("utf-8")).decode("ascii")))
         self.turno += 1
         turno = self.turno
-        self.proc = subprocess.Popen(
-            ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand",
-             base64.b64encode(script.encode("utf-16-le")).decode("ascii")],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
+        self.hablando = True
 
-        def esperar(proc):
-            codigo = proc.wait()
-            if turno != self.turno:
-                return  # lo callaron o empezó otra frase
-            if codigo == 3 and sin_voz:
-                sin_voz()
-            al_terminar()
-        threading.Thread(target=esperar, args=(self.proc,), daemon=True).start()
+        def hablar():
+            proc = self.preparar()
+            ok = False
+            if proc and turno == self.turno:
+                try:
+                    proc.stdin.write(base64.b64encode(t.encode("utf-8")).decode("ascii") + "\n")
+                    proc.stdin.flush()
+                    ok = proc.stdout.readline().strip() == "FIN"
+                except (OSError, ValueError):
+                    pass
+            if turno == self.turno:  # nadie lo calló
+                self.hablando = False
+                if not ok:
+                    self.proc = None
+                al_terminar()
+        threading.Thread(target=hablar, daemon=True).start()
         return True
 
     def callar(self):
         self.turno += 1
-        if self.proc and self.proc.poll() is None:
-            self.proc.kill()
-        self.proc = None
+        if self.hablando and self.proc:
+            self.proc.kill()  # cortar a media frase; se vuelve a abrir solo
+            self.proc = None
+            threading.Thread(target=self.preparar, daemon=True).start()
+        self.hablando = False

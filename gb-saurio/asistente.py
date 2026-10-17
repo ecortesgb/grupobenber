@@ -1,5 +1,8 @@
 """Cerebro de GB Saurio: conversación con Claude + herramientas locales."""
 import json
+import re
+import threading
+import urllib.request
 from datetime import date
 
 import anthropic
@@ -107,7 +110,26 @@ class Asistente:
 
     def _sistema(self):
         hoy = date.today()
-        return SISTEMA + f"\nHoy es {DIAS[hoy.weekday()]} {hoy.isoformat()}."
+        s = SISTEMA + f"\nHoy es {DIAS[hoy.weekday()]} {hoy.isoformat()}."
+        if self.local and "qwen3" in self.modelo:
+            s += "\n/no_think"  # qwen3 "piensa" en silencio antes de contestar; apagado responde varias veces más rápido
+        return s
+
+    def calentar(self):
+        """Ollama descarga el modelo de la memoria tras 5 min sin uso y recargarlo tarda. Esto lo carga ya
+        y lo deja listo 2 horas (se llama al arrancar y cada vez que le hablas)."""
+        if not self.local:
+            return
+
+        def pedir():
+            cuerpo = json.dumps({"model": self.modelo, "keep_alive": "2h"}).encode()
+            req = urllib.request.Request(self.cfg["ollama_url"].rstrip("/") + "/api/generate", data=cuerpo,
+                                         headers={"Content-Type": "application/json"})
+            try:
+                urllib.request.urlopen(req, timeout=300).read()
+            except OSError:
+                pass  # si Ollama no está, el chat ya lo avisa
+        threading.Thread(target=pedir, daemon=True).start()
 
     def _ejecutar(self, nombre, e):
         cfg = self.cfg
@@ -141,10 +163,12 @@ class Asistente:
             return r
         return {"error": f"Herramienta desconocida: {nombre}"}
 
-    def preguntar(self, texto):
+    def preguntar(self, texto, por_voz=False):
         """Envía un mensaje y resuelve todas las herramientas. Devuelve el texto final."""
         if len(self.mensajes) >= self.MAX_MENSAJES:
             self.mensajes = []
+        if por_voz:  # se va a leer en voz alta: corto se genera y se escucha más rápido
+            texto += "\n\n(Te lo dije por voz: contesta en una o dos frases cortas, sin listas ni código.)"
         self.mensajes.append({"role": "user", "content": texto})
         for _ in range(15):  # tope de vueltas por seguridad
             try:
@@ -186,7 +210,8 @@ class Asistente:
                 return "No puedo ayudar con eso. Reinicié la conversación."
             usos = [b for b in resp.content if b.type == "tool_use"]
             if resp.stop_reason != "tool_use" or not usos:
-                texto_final = "".join(b.text for b in resp.content if b.type == "text").strip()
+                texto_final = "".join(b.text for b in resp.content if b.type == "text")
+                texto_final = re.sub(r"<think>.*?</think>", "", texto_final, flags=re.S).strip()
                 if resp.stop_reason == "max_tokens":
                     texto_final += "\n\n(La respuesta se cortó por largo.)"
                 return texto_final or "Listo."

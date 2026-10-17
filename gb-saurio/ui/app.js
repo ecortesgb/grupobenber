@@ -123,7 +123,8 @@ $("voz").addEventListener("click", () => ponerVoz(!conVoz));
 function microfono(si) {
   $("mic").classList.toggle("grabando", si);
   $("hablale").classList.toggle("grabando", si);
-  if (si && !grande && !minimizado) decir("Te escucho…", 3000);
+  if (si && !grande && !minimizado) decir("¿Sí? Te escucho…", 3000);
+  if (si && minimizado) { $("mini").classList.remove("aviso"); void $("mini").offsetWidth; $("mini").classList.add("aviso"); }
 }
 
 // ---------- plan de organización ----------

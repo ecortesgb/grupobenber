@@ -46,8 +46,9 @@ class Puente(QObject):
         self.cfg = cfg
         self.ocupado = threading.Lock()
         self.grabadora = reuniones.Grabadora()
-        self.oreja = voz.Oido()
-        self.boca = voz.Boca(cfg.get("voz_velocidad", 1))
+        self.boca = voz.Boca(cfg.get("voz_velocidad", 1), sin_voz=self._sin_voz)
+        self.oreja = voz.Oido(self._entendi, al_despertar=self._desperto, modelo=cfg.get("voz_modelo", "base"),
+                              pausado=lambda: self.boca.hablando or self.ocupado.locked() or self.grabadora.grabando)
         self.por_voz = False  # si le preguntaste hablando, contesta hablando
         self.asistente = Asistente(
             cfg,
@@ -82,7 +83,32 @@ class Puente(QObject):
             else:
                 self.estado.emit("preocupado" if problema else "hablando")
 
-    # ---------- voz: le hablas con 🎤 y te contesta hablando ----------
+    # ---------- voz: "GB Saurio" o 🎤, y te contesta hablando ----------
+    def preparar_voz(self):
+        """Al arrancar: deja cargados Whisper, la voz de Windows y (si aplica) la escucha de "GB Saurio"."""
+        threading.Thread(target=self.boca.preparar, daemon=True).start()
+        if not voz.puede_oir():
+            return
+        voz.precargar(self.cfg.get("voz_modelo", "base"))
+        self.palabraActivacion(bool(self.cfg.get("palabra_activacion", True)))
+
+    def palabraActivacion(self, si):
+        self.cfg["palabra_activacion"] = si
+        if si and not voz.puede_oir():
+            self.aviso.emit("Para hablarme corre una vez instalar_reuniones.bat")
+            return
+        try:
+            self.oreja.vigilancia(si)
+        except Exception as e:  # noqa: BLE001
+            self.aviso.emit(f"No pude abrir el micrófono: {e}")
+
+    def _desperto(self):
+        """Dijiste "GB Saurio"."""
+        self.boca.callar()
+        self.asistente.calentar()
+        self.microfono.emit(True)
+        self.estado.emit("oyendo")
+
     @Slot()
     def escuchar(self):
         if self.oreja.activo:  # segundo clic: ya terminé de hablar
@@ -96,34 +122,35 @@ class Puente(QObject):
             return
         self.boca.callar()
         try:
-            self.oreja.iniciar(self._entendi, self.cfg["modelo_transcripcion"])
+            self.oreja.escuchar_ya()
         except Exception as e:  # noqa: BLE001
             self.aviso.emit(f"No pude abrir el micrófono: {e}")
             return
+        self.asistente.calentar()
         self.microfono.emit(True)
         self.estado.emit("oyendo")
 
-    def _entendi(self, audio):
+    def _entendi(self, audio, por_palabra=False):
         self.microfono.emit(False)
         if audio is None:
             self.estado.emit("idle")
             return
         self.estado.emit("pensando")
         try:
-            texto = voz.transcribir(audio, self.cfg["modelo_transcripcion"])
+            texto = voz.sin_palabra(voz.transcribir(audio, self.cfg.get("voz_modelo", "base")))
         except Exception as e:  # noqa: BLE001
             self.aviso.emit(f"No pude entenderte: {e}")
             self.estado.emit("preocupado")
             return
-        if not texto:
-            self.aviso.emit("No te entendí, ¿me repites?")
-            self.estado.emit("preocupado")
+        if len(texto.strip(" .,¿?¡!")) < 2:
+            self.aviso.emit("¿Sí? No alcancé a oír qué necesitas." if por_palabra else "No te entendí, ¿me repites?")
+            self.estado.emit("idle" if por_palabra else "preocupado")
             return
         self.oido.emit(texto)
         if not datos.ia_lista(self.cfg):
             return self.enviar(texto)
         self.por_voz = True
-        self._trabajar(self.asistente.preguntar, texto)
+        self._trabajar(lambda x: self.asistente.preguntar(x, por_voz=True), texto)
 
     @Slot(bool)
     def responderConVoz(self, si):
@@ -352,7 +379,13 @@ def main():
     a_actualizar.triggered.connect(lambda: actualizar(app, puente.aviso.emit))
     a_salir = QAction("Salir")
     a_salir.triggered.connect(app.quit)
+    app.aboutToQuit.connect(puente.oreja.apagar)
+    a_palabra = QAction("Escuchar \"GB Saurio\"")
+    a_palabra.setCheckable(True)
+    a_palabra.setChecked(bool(cfg.get("palabra_activacion", True)))
+    a_palabra.toggled.connect(puente.palabraActivacion)
     menu.addAction(a_mostrar)
+    menu.addAction(a_palabra)
     menu.addAction(a_actualizar)
     menu.addAction(a_salir)
     bandeja.setContextMenu(menu)
@@ -370,6 +403,10 @@ def main():
     reloj.timeout.connect(puente.revisar_vencidos)
     reloj.start(int(cfg["recordatorio_minutos"]) * 60_000)
     vista.loadFinished.connect(lambda ok: QTimer.singleShot(2500, puente.revisar_vencidos))
+
+    # deja todo cargado para que conteste rápido: el modelo de Ollama, Whisper, la voz y el "GB Saurio"
+    puente.asistente.calentar()
+    QTimer.singleShot(4000, puente.preparar_voz)
 
     if not datos.ia_lista(cfg):
         QTimer.singleShot(3000, lambda: puente.aviso.emit("Falta la API key en config.json"))

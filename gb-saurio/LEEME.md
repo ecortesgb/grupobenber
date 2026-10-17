@@ -44,10 +44,15 @@ Haz clic en él para abrir el chat; arrástralo para moverlo. Ícono junto al re
    Para volver a Claude, regresa `proveedor` a `claude`.
 
 ## Háblale (voz)
-- Presiona **🎤** (en el chat, al pasar el mouse sobre Saurio, o **Ctrl+Espacio**) y habla. Se detiene solo cuando te callas (o vuelve a presionar 🎤).
-- Si le hablaste, te contesta hablando. Con **🔇/🔊** en la barra del chat decides si también habla cuando le escribes. Clic en Saurio mientras habla = se calla.
-- Lo que dices se transcribe en tu laptop (mismo Whisper de las reuniones, requiere haber corrido `instalar_reuniones.bat` una vez). El audio no se guarda ni sale de la laptop.
-- La voz es la de Windows en español (sin internet). Si no tienes una: Configuración > Hora e idioma > Voz > Agregar voces > Español (México). Velocidad: `"voz_velocidad"` en config.json (-10 a 10).
+- Di **"GB Saurio"** y luego tu pregunta (puede ser de corrido: "GB Saurio, ¿qué pendientes tengo hoy?"). También funciona **🎤** en el chat, al pasar el mouse sobre Saurio, o **Ctrl+Espacio**. Deja de escuchar solo cuando te callas.
+- Mientras espera "GB Saurio" solo revisa el inicio de cada frase y la descarta al momento: no graba nada ni sale de la laptop. Windows muestra el ícono de micrófono en uso. Se apaga desde el ícono junto al reloj: "Escuchar "GB Saurio"" (o `"palabra_activacion": false`). No escucha mientras graba una reunión o mientras él mismo habla.
+- Si le hablaste, te contesta hablando y corto. Con **🔇/🔊** en el chat decides si también habla cuando le escribes. Clic en Saurio mientras habla = se calla.
+- Usa el Whisper de las reuniones (`instalar_reuniones.bat` una vez). `"voz_modelo": "base"` es rápido; `"small"` entiende mejor pero tarda más.
+- Voz de Windows en español (sin internet). Si no tienes: Configuración > Hora e idioma > Voz > Agregar voces > Español (México). Velocidad: `"voz_velocidad"` (-10 a 10).
+
+### Para que conteste rápido (Ollama)
+- Al arrancar y cada vez que le hablas, Saurio deja cargado el modelo de Ollama 2 horas (si no, Ollama lo saca de memoria a los 5 min y recargarlo tarda).
+- Con qwen3 se apaga el "pensamiento" silencioso (`/no_think`), que era lo que más tardaba.
 
 ## Buzón de avisos (para tus macros y tareas programadas)
 Saurio escucha avisos solo dentro de tu laptop (puerto `7788`). Cada aviso lleva una contraseña que se crea sola en `%USERPROFILE%\GbSaurio\buzon_token.txt`; así ninguna página web puede mandarle mensajes.

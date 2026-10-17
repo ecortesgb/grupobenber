@@ -11,5 +11,7 @@
   "conservar_audio": false,
   "buzon_puerto": 7788,
   "voz_responder": false,
-  "voz_velocidad": 1
+  "voz_velocidad": 1,
+  "voz_modelo": "base",
+  "palabra_activacion": true
 }
