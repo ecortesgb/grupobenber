@@ -149,7 +149,9 @@ class Puente(QObject):
         t0 = time.time()
         try:
             crudo = voz.transcribir(audio, self.cfg.get("voz_modelo", "small"))
+            voz.bitacora(f"entendí: {crudo!r}")
         except Exception as e:  # noqa: BLE001
+            voz.bitacora(f"error transcribiendo: {e!r}")
             self.aviso.emit(f"No pude entenderte: {e}")
             self.estado.emit("preocupado")
             return
