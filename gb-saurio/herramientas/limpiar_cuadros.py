@@ -19,6 +19,7 @@ CARPETA = Path(__file__).resolve().parent.parent / "ui" / "sprites" / "cuadros"
 CLARO = 200        # qué tan claro debe ser un pixel para considerarlo "blanco"
 INICIO = 0.55      # una mancha que empieza debajo de esta altura (fracción) es fondo
 AJUSTES = {"escribe": 0.78}  # sentado: la camisa queda más abajo
+MOTA = 150         # pedazos sueltos más chicos que esto (pixeles) se borran
 
 
 def manchas(mascara):
@@ -60,6 +61,11 @@ def limpiar(ruta):
     abajo = np.zeros_like(quitar); abajo[int(alto * inicio):] = True
     sombra = abajo & (alfa < 200) & (rgb.min(-1) > 150)
     total = quitar | orilla | sombra
+    # motitas sueltas: pedacitos de fondo que quedaron flotando lejos del cuerpo
+    for pix in manchas((alfa > 20) & ~total):
+        if len(pix) < MOTA:
+            ys, xs = zip(*pix)
+            total[list(ys), list(xs)] = True
     im[total, 3] = 0
     Image.fromarray(im).save(ruta, "WEBP", lossless=True)
     return int(total.sum())
