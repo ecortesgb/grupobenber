@@ -31,6 +31,20 @@ _modelos = {}
 _candado_modelo = threading.Lock()
 
 
+def bitacora(msg):
+    """Deja rastro de lo que oyó (volumen y texto, nunca audio) en GbSaurio\\voz.log para revisar fallas."""
+    from datetime import datetime
+    from datos import CARPETA_DATOS
+    ruta = CARPETA_DATOS / "voz.log"
+    try:
+        if ruta.exists() and ruta.stat().st_size > 300_000:
+            ruta.unlink()  # ponytail: se reinicia al llegar a 300 KB, no hace falta rotación
+        with ruta.open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {msg}\n")
+    except OSError:
+        pass
+
+
 def puede_oir():
     import reuniones
     return reuniones.disponible()
@@ -124,6 +138,8 @@ class Oido:
         self.stream = self.pa.open(format=pyaudio.paInt16, channels=self.canales, rate=self.tasa, input=True,
                                    input_device_index=mic["index"], frames_per_buffer=1024,
                                    stream_callback=self._cb)
+        self.nivel_max, self.nivel_t, self.error_cb = 0.0, 0.0, False
+        bitacora(f"micrófono abierto: {mic['name']} ({self.tasa} Hz, {self.canales} canales)")
 
     def _cerrar(self):
         stream, pa = self.stream, self.pa
@@ -164,8 +180,10 @@ class Oido:
         import pyaudiowpatch as pyaudio
         try:
             self._procesar(self._a16k(datos))
-        except Exception:  # noqa: BLE001 - un trocito raro nunca debe tumbar el micrófono
-            pass
+        except Exception as e:  # noqa: BLE001 - un trocito raro nunca debe tumbar el micrófono
+            if not self.error_cb:
+                self.error_cb = True
+                bitacora(f"error procesando audio: {e!r}")
         return (None, pyaudio.paContinue)
 
     def _procesar(self, x):
@@ -176,6 +194,12 @@ class Oido:
         voz = volumen > umbral
         if not voz:  # el ruido del cuarto se va midiendo solo
             self.piso = 0.97 * self.piso + 0.03 * volumen
+        # cada 5 s, si hubo sonido, deja en la bitácora qué tan fuerte llegó (para calibrar el umbral)
+        self.nivel_max, self.nivel_t = max(self.nivel_max, volumen), self.nivel_t + dur
+        if self.nivel_t >= 5:
+            if self.nivel_max > 150:
+                bitacora(f"nivel {self.modo}: máx {self.nivel_max:.0f}, umbral {umbral:.0f}, ruido {self.piso:.0f}")
+            self.nivel_max, self.nivel_t = 0.0, 0.0
         if self.modo == "grabando":
             self._grabar(x, dur, voz)
         elif self.modo == "vigilando":
@@ -233,9 +257,11 @@ class Oido:
     def _revisar(self, muestra):
         try:
             texto = transcribir((muestra / 32768).astype('float32'), self.modelo, vocabulario=False)
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            bitacora(f"error revisando frase: {e!r}")
             texto = ""
         self.estado_revision = "si" if dijo_saurio(texto) else "no"
+        bitacora(f"frase revisada ({len(muestra) / TASA:.1f} s): {texto!r} -> {self.estado_revision}")
 
     def _reiniciar_frase(self):
         self.previo = deque(maxlen=8)
@@ -269,6 +295,8 @@ class Oido:
                 self.modo = "apagado"
                 self._cerrar()
         audio = (np.concatenate(trozos) / 32768).astype(np.float32) if hablo and trozos else None
+        bitacora(f"grabación terminada: hablaste={hablo}, {sum(len(t) for t in trozos) / TASA:.1f} s, "
+                 f"por palabra={por_palabra}")
         self.al_terminar(audio, por_palabra)
 
     def apagar(self):

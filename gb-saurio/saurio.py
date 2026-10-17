@@ -78,7 +78,7 @@ class Puente(QObject):
             self.por_voz = False
             if self.grabadora.grabando:
                 self.estado.emit("escuchando")  # sigue en modo reunión
-            elif hablar and self.boca.decir(r, al_terminar=lambda: self.estado.emit("idle"), sin_voz=self._sin_voz):
+            elif hablar and self.boca.decir(r, al_terminar=lambda: self.estado.emit("idle")):
                 self.estado.emit("diciendo")  # mueve la boca mientras habla
             else:
                 self.estado.emit("preocupado" if problema else "hablando")
@@ -138,7 +138,9 @@ class Puente(QObject):
         self.estado.emit("pensando")
         try:
             texto = voz.sin_palabra(voz.transcribir(audio, self.cfg.get("voz_modelo", "base")))
+            voz.bitacora(f"entendí: {texto!r}")
         except Exception as e:  # noqa: BLE001
+            voz.bitacora(f"error transcribiendo: {e!r}")
             self.aviso.emit(f"No pude entenderte: {e}")
             self.estado.emit("preocupado")
             return
