@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Centro de Mando GB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Figtree:wght@400;600;800&display=swap">
+<style>
+/* Layout: barra oscura tipo consola, franja de misión destacada, fila de 6 accesos con íconos de línea,
+   y abajo el mundo LEGO (canvas) a la izquierda con la consola de paneles a la derecha. Tema oscuro único a propósito. */
+:root{
+  --bg:#0e110f; --bar:#161a17; --panel:#1b201c; --panel2:#232924; --line:#2f3731;
+  --fg:#eef3ec; --muted:#98a49a;
+  --green:#1f9d3a; --green-d:#137a2a; --lime:#a6f01c; --yellow:#ffd500;
+  --red:#e0362a; --blue:#2f7be0; --orange:#ff8a18; --purple:#9b3fbf;
+  --display:"Lilita One","Arial Black",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1500px;margin:0 auto}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.01em;text-wrap:balance;margin:0}
+
+/* Barra superior */
+.top{background:var(--bar);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:20px;padding-block:10px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--fg)}
+.brand-brick{width:38px;height:28px;background:var(--green);border-radius:4px;position:relative;display:grid;place-items:center;font-family:var(--display);font-size:14px;color:#fff;box-shadow:inset 0 -5px 0 var(--green-d)}
+.brand-brick::before,.brand-brick::after{content:"";position:absolute;top:-5px;width:10px;height:6px;background:var(--green);border-radius:2px 2px 0 0}
+.brand-brick::before{left:6px}.brand-brick::after{right:6px}
+.brand b{font-family:var(--display);font-weight:400;font-size:20px;letter-spacing:.02em}
+.nav{display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:0}
+.nav button{background:none;border:0;padding:6px 10px;border-radius:4px;color:var(--fg);font-size:14px}
+.nav button:hover{background:var(--panel2)}
+.nav button[aria-current="true"]{box-shadow:inset 0 -2px 0 var(--lime)}
+.me-chip{display:flex;align-items:center;gap:10px;font-size:13px}
+.online{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 3px rgba(166,240,28,.15)}
+.lvl{border:2px solid var(--fg);border-radius:999px;padding:3px 10px;font-weight:800;font-variant-numeric:tabular-nums}
+.mode{font-size:12px;color:var(--yellow)}
+
+/* Franja destacada */
+.hero{background:linear-gradient(90deg,#0b0d0c 0%,#0b0d0c 45%,rgba(11,13,12,.6) 100%),repeating-linear-gradient(90deg,#173a1f 0 40px,#1a4223 40px 80px);border-bottom:1px solid var(--line)}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding-block:22px}
+.tag{display:inline-block;background:var(--yellow);color:#111;font-weight:800;font-size:12px;letter-spacing:.08em;padding:2px 8px;text-transform:uppercase}
+.hero h1{font-size:clamp(26px,3.4vw,42px);line-height:1.05;margin-top:8px}
+.hero p{margin:6px 0 0;color:#cfd8cf;max-width:65ch}
+.cta{display:inline-flex;align-items:center;gap:10px;background:var(--lime);color:#0b1a00;border:0;padding:10px 22px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-size:14px;text-decoration:none}
+.cta:hover{background:#bfff3d}
+.cta svg{width:10px;height:10px}
+
+/* Fila de accesos */
+.tiles{background:#f2f5f0;color:#107c10}
+.tiles .wrap{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding-block:14px}
+.tile{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border-radius:6px;color:#107c10}
+.tile:hover{background:#e3eae0}
+.tile svg{width:40px;height:40px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.tile span{font-weight:800;font-size:13px;letter-spacing:.06em;text-transform:uppercase;text-align:center}
+.tile small{color:#4d5a4d;font-weight:600;font-size:12px;font-variant-numeric:tabular-nums}
+
+/* Principal */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:16px;padding-block:16px}
+.world{position:relative;min-width:0;background:#222;border:1px solid var(--line);height:620px;overflow:hidden;border-radius:6px}
+.world canvas{display:block;width:100%;height:100%;touch-action:none;cursor:pointer}
+.hint{position:absolute;left:10px;bottom:10px;background:rgba(10,12,10,.78);padding:6px 10px;border-radius:4px;font-size:12px;color:#d8e0d8}
+.hint kbd{font-family:var(--body);font-weight:800;border:1px solid #556;border-radius:3px;padding:0 4px}
+.pad{position:absolute;right:12px;bottom:12px;display:none;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:4px}
+.pad button{background:rgba(20,24,20,.8);border:1px solid #445;border-radius:8px;color:#fff;font-size:18px;touch-action:none}
+.pad .pu{grid-column:2;grid-row:1}.pad .pl{grid-column:1;grid-row:2}.pad .pe{grid-column:2;grid-row:2;font-size:12px;font-weight:800;background:var(--green)}.pad .pr{grid-column:3;grid-row:2}.pad .pd{grid-column:2;grid-row:3}
+@media (pointer:coarse){.pad{display:grid}.hint{display:none}}
+
+.console{background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0;display:flex;flex-direction:column;max-height:620px}
+.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{flex:1;background:none;border:0;padding:12px 8px;font-weight:800;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--fg);box-shadow:inset 0 -3px 0 var(--lime)}
+.pane{padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;min-height:0}
+.pane h2{font-size:22px}
+.sub{color:var(--muted);font-size:13px;margin:2px 0 0}
+form.add{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--panel2);padding:12px;border-radius:6px}
+form.add .full{grid-column:1/-1}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);min-width:0}
+input,select,textarea{background:#101411;border:1px solid var(--line);border-radius:4px;padding:8px;font-size:14px;min-width:0;width:100%}
+textarea{resize:vertical;min-height:54px}
+.btn{background:var(--green);color:#fff;border:0;border-radius:4px;padding:9px 14px;font-weight:800;font-size:13px;letter-spacing:.04em}
+.btn:hover{background:#26b545}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.ghost{background:none;border:1px solid var(--line);color:var(--fg);border-radius:4px;padding:5px 10px;font-size:12px;font-weight:700}
+.ghost:hover{border-color:var(--muted)}
+.ghost.done{border-color:var(--lime);color:var(--lime)}
+.ghost.warn{border-color:var(--red);color:#ff8d84}
+.seg{display:flex;gap:4px}
+.seg button{background:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--fg);color:#111;border-color:var(--fg)}
+ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;background:var(--panel2);border-radius:6px;padding:10px 12px;border-left:4px solid var(--c,#555)}
+.item b{display:block;overflow-wrap:anywhere}
+.item small{display:block;color:var(--muted);font-size:12px}
+.item .acts{grid-column:2;display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.chip{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--c,#555);color:#111;white-space:nowrap}
+.chip.light{color:#fff}
+.late{color:#ff8d84!important}
+.empty{border:2px dashed var(--line);border-radius:6px;padding:18px;text-align:center;color:var(--muted);font-size:13px}
+.portals{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.portal{background:var(--panel2);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:6px;border-top:4px solid var(--green);min-width:0}
+.portal b{overflow-wrap:anywhere}
+.portal p{margin:0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.portal .row{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto}
+.portal a{color:var(--lime);font-weight:800;font-size:12px;letter-spacing:.06em;text-decoration:none}
+.rank{display:grid;grid-template-columns:28px 36px minmax(0,1fr) auto;gap:10px;align-items:center;background:var(--panel2);border-radius:6px;padding:8px 12px}
+.rank .n{font-family:var(--display);font-size:20px;color:var(--muted);text-align:center}
+.rank img{width:36px;height:36px;border-radius:50%}
+.bar{height:6px;background:#0f1310;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--lime)}
+.rank .xp{font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
+.rank .xp small{display:block;color:var(--muted);font-weight:600}
+.builder{display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;align-items:start}
+.builder canvas{width:150px;height:190px;background:radial-gradient(circle at 50% 70%,#2c352e,#151a16);border-radius:6px}
+.opt{display:flex;flex-direction:column;gap:5px}
+.opt + .opt{margin-top:10px}
+.sw{display:flex;flex-wrap:wrap;gap:5px}
+.sw button{width:24px;height:24px;border-radius:4px;border:2px solid transparent;background:var(--c)}
+.sw button[aria-pressed="true"]{border-color:#fff;box-shadow:0 0 0 2px var(--green)}
+.sw.txt button{width:auto;height:auto;padding:3px 8px;background:var(--panel2);border:1px solid var(--line);font-size:12px;font-weight:700;color:var(--fg)}
+.sw.txt button[aria-pressed="true"]{background:var(--fg);color:#111}
+.note{background:#2a2410;border:1px solid #5a4b10;color:#ffe680;border-radius:6px;padding:8px 10px;font-size:13px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#111;border:1px solid var(--lime);color:#fff;padding:10px 16px;border-radius:6px;font-weight:700;z-index:30}
+
+.login{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(8,10,9,.92);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.login form{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:24px;width:min(360px,100%);display:flex;flex-direction:column;gap:12px}
+.login .err{color:#ff8d84;font-size:13px;min-height:1.2em;margin:0}
+.salir{background:none;border:1px solid var(--line);border-radius:4px;padding:4px 10px;font-size:12px;font-weight:700}
+
+@media (max-width:1020px){
+  .main{grid-template-columns:1fr}
+  .world{height:440px}
+  .console{max-height:none}
+}
+@media (max-width:640px){
+  .tiles .wrap{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .hero .wrap{grid-template-columns:1fr}
+  .nav{display:none}
+  form.add{grid-template-columns:1fr}
+  .builder{grid-template-columns:1fr;justify-items:start}
+  .world{height:380px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#oficina" aria-label="Centro de Mando GB">
+      <span class="brand-brick">GB</span><b>Centro de Mando</b>
+    </a>
+    <nav class="nav" aria-label="Secciones">
+      <button data-go="misiones">Misiones</button>
+      <button data-go="cambios">Cambios</button>
+      <button data-go="dashboards">Dashboards</button>
+      <button data-go="ranking">Ranking</button>
+      <button data-go="personaje">Mi personaje</button>
+    </nav>
+    <div class="me-chip">
+      <span class="online"><span class="dot"></span><span id="online">Solo tú en la oficina</span></span>
+      <span class="lvl" id="mylvl">Nv 1 · 0 XP</span>
+      <button class="salir" id="salir" type="button">Salir</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero" aria-label="Misión destacada">
+  <div class="wrap">
+    <div style="min-width:0">
+      <span class="tag" id="heroTag">Misión destacada</span>
+      <h1 id="heroTitle">Arma tu personaje y entra a la oficina</h1>
+      <p id="heroText">Camina hasta el Tablero de Misiones para ver los pendientes del equipo.</p>
+    </div>
+    <button class="cta" id="heroCta">Ir a la misión <svg viewBox="0 0 10 10"><path d="M2 0l6 5-6 5z" fill="currentColor"/></svg></button>
+  </div>
+</section>
+
+<section class="tiles" aria-label="Accesos">
+  <div class="wrap">
+    <button class="tile" data-go="misiones"><svg viewBox="0 0 40 40"><path d="M9 36V5M9 6h20l-4 6 4 6H9"/></svg><span>Misiones</span><small id="tMis">0 activas</small></button>
+    <button class="tile" data-go="cambios"><svg viewBox="0 0 40 40"><path d="M6 11h28M6 20h28M6 29h28"/><circle cx="14" cy="11" r="3"/><circle cx="26" cy="20" r="3"/><circle cx="18" cy="29" r="3"/></svg><span>Cambios</span><small id="tCam">0 por aplicar</small></button>
+    <button class="tile" data-go="dashboards"><svg viewBox="0 0 40 40"><rect x="4" y="6" width="32" height="22" rx="2"/><path d="M14 34h12M20 28v6M11 22v-5M17 22v-9M23 22v-6M29 22v-11"/></svg><span>Dashboards</span><small id="tDash">0 accesos</small></button>
+    <button class="tile" data-go="ranking"><svg viewBox="0 0 40 40"><path d="M12 5h16v9a8 8 0 01-16 0zM12 8H6v3a6 6 0 006 6M28 8h6v3a6 6 0 01-6 6M20 22v7M13 35h14l-2-6H15z"/></svg><span>Ranking</span><small id="tRank">Sin XP aún</small></button>
+    <button class="tile" data-go="personaje"><svg viewBox="0 0 40 40"><rect x="11" y="8" width="18" height="16" rx="5"/><path d="M16 5h8v3h-8zM16 15v1M24 15v1M16 19q4 3 8 0M12 34l3-10h10l3 10"/></svg><span>Personaje</span><small id="tPer">Edita tu look</small></button>
+    <button class="tile" data-go="oficina"><svg viewBox="0 0 40 40"><rect x="4" y="6" width="32" height="28" rx="2"/><path d="M4 18h12V6M24 34V22h12"/><circle cx="29" cy="12" r="2.5"/></svg><span>Oficina</span><small>Camina y explora</small></button>
+  </div>
+</section>
+
+<main class="wrap main" id="oficina">
+  <div class="world" id="world">
+    <canvas id="cv" aria-label="Oficina virtual. Muévete con flechas o WASD, E para abrir la zona." tabindex="0"></canvas>
+    <div class="hint"><kbd>WASD</kbd>/<kbd>flechas</kbd> o clic para caminar · <kbd>E</kbd> abre la zona</div>
+    <div class="pad" id="pad" aria-hidden="true">
+      <button class="pu" data-k="up">▲</button><button class="pl" data-k="left">◀</button>
+      <button class="pe" data-k="act">E</button><button class="pr" data-k="right">▶</button><button class="pd" data-k="down">▼</button>
+    </div>
+  </div>
+
+  <section class="console" aria-label="Consola">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="misiones" aria-selected="true">Misiones</button>
+      <button role="tab" data-tab="cambios">Cambios</button>
+      <button role="tab" data-tab="dashboards">Dashboards</button>
+      <button role="tab" data-tab="ranking">Ranking</button>
+      <button role="tab" data-tab="personaje">Personaje</button>
+    </div>
+
+    <div class="pane" data-pane="misiones">
+      <div><h2>Tablero de Misiones</h2><p class="sub">Cada misión cumplida da XP a quien la tiene asignada: baja 10, media 25, alta 50.</p></div>
+      <div class="note ro" hidden>Tienes acceso de solo lectura. Pide nivel Colaborador para crear o cumplir misiones.</div>
+      <form class="add" id="fMis">
+        <label class="f full">Misión<input id="mTitle" required maxlength="140" placeholder="Ej. Cerrar conciliación de ventas de octubre"></label>
+        <label class="f">Asignar a<select id="mOwner"></select></label>
+        <label class="f">Prioridad<select id="mPri"><option value="baja">Baja · 10 XP</option><option value="media" selected>Media · 25 XP</option><option value="alta">Alta · 50 XP</option></select></label>
+        <label class="f">Fecha límite<input id="mDue" type="date"></label>
+        <div style="display:flex;align-items:end"><button class="btn" style="width:100%">Publicar misión</button></div>
+      </form>
+      <div class="seg" id="mFilter"><button aria-pressed="true" data-f="activas">Activas</button><button aria-pressed="false" data-f="mias">Mías</button><button aria-pressed="false" data-f="cumplidas">Cumplidas</button></div>
+      <ul class="list" id="mList"></ul>
+    </div>
+
+    <div class="pane" data-pane="cambios" hidden>
+      <div><h2>Bitácora de Cambios</h2><p class="sub">Registra cambios a reportes, procesos o sistemas. Flujo: propuesto, aprobado, aplicado.</p></div>
+      <div class="note ro" hidden>Tienes acceso de solo lectura.</div>
+      <form class="add" id="fCam">
+        <label class="f full">Qué cambia<input id="cTitle" required maxlength="140" placeholder="Ej. Nueva columna de margen en reporte semanal"></label>
+        <label class="f">Sistema o área<input id="cSys" maxlength="60" placeholder="Power BI, Excel, ERP…"></label>
+        <div style="display:flex;align-items:end"><button class="btn" style="width:100%">Registrar cambio</button></div>
+        <label class="f full">Detalle<textarea id="cDet" maxlength="600" placeholder="Qué se modifica, por qué y a quién afecta"></textarea></label>
+      </form>
+      <ul class="list" id="cList"></ul>
+    </div>
+
+    <div class="pane" data-pane="dashboards" hidden>
+      <div><h2>Sala de Dashboards</h2><p class="sub">Accesos a los tableros del grupo. Cada pantalla en la sala es uno de estos.</p></div>
+      <div class="note ro" hidden>Tienes acceso de solo lectura.</div>
+      <form class="add" id="fDash">
+        <label class="f">Nombre<input id="dName" required maxlength="60" placeholder="Ventas diarias"></label>
+        <label class="f">Liga (https)<input id="dUrl" required type="url" placeholder="https://app.powerbi.com/…"></label>
+        <label class="f full">Para qué sirve<input id="dDesc" maxlength="140" placeholder="Seguimiento de venta vs meta por sucursal"></label>
+        <div class="full"><button class="btn">Agregar acceso</button></div>
+      </form>
+      <div class="portals" id="dList"></div>
+    </div>
+
+    <div class="pane" data-pane="ranking" hidden>
+      <div><h2>Salón de la Fama</h2><p class="sub">XP por misiones cumplidas. Cada 100 XP sube un nivel.</p></div>
+      <div class="list" id="rList"></div>
+    </div>
+
+    <div class="pane" data-pane="personaje" hidden>
+      <div><h2>Vestidor</h2><p class="sub">Arma tu minifigura. Los cambios se ven al instante en la oficina.</p></div>
+      <div class="builder">
+        <canvas id="pv" width="300" height="380" aria-label="Vista previa de tu personaje"></canvas>
+        <div id="opts"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="saveFig">Guardar personaje</button><button class="ghost" id="rndFig" type="button">Aleatorio</button></div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<div class="login" id="login" hidden>
+  <form id="fLogin">
+    <span class="brand"><span class="brand-brick">GB</span><b>Centro de Mando</b></span>
+    <p class="sub" style="margin:0">Entra con tu usuario y contraseña de RH GB.</p>
+    <label class="f">Usuario<input id="lUser" autocomplete="username" required></label>
+    <label class="f">Contraseña<input id="lPass" type="password" autocomplete="current-password" required></label>
+    <p class="err" id="lErr"></p>
+    <button class="cta" style="justify-content:center">Entrar</button>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>window.CM_CFG = {"url": "https://pzbesenfqcbfvmyuerfq.supabase.co", "key": "sb_publishable_TEbzoyAkjdJIRR91xjWMhA_tXBJWxKQ", "dominio": "@usuarios.rhgb.app"};</script>
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const rid = () => Math.random().toString(36).slice(2, 10);
+
+const PRI = { baja:{xp:10,c:"#2f7be0",l:"Baja"}, media:{xp:25,c:"#ffd500",l:"Media"}, alta:{xp:50,c:"#e0362a",l:"Alta"} };
+const CST = { propuesto:{c:"#ffd500",l:"Propuesto",next:"aprobado",btn:"Aprobar"}, aprobado:{c:"#2f7be0",l:"Aprobado",next:"aplicado",btn:"Marcar aplicado"}, aplicado:{c:"#a6f01c",l:"Aplicado"} };
+const SKIN = ["#F2CD37","#F6D7B3","#E0A87C","#B5774B","#7A4A2A","#4A2C1A"];
+const COLORS = ["#C91A09","#0055BF","#F2CD37","#237841","#1B1B1B","#F4F4F4","#FE8A18","#6C6E68","#E4CD9E","#81007B","#BBE90B","#36AEBF","#7C503A","#FC97AC"];
+const HAIR = [["corto","Corto"],["largo","Largo"],["chongo","Chongo"],["gorra","Gorra"],["casco","Casco"],["calvo","Sin cabello"]];
+const ACC = [["ninguno","Nada"],["lentes","Lentes"],["audifonos","Audífonos"],["portafolio","Portafolio"]];
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const randomFig = () => ({ skin:pick(SKIN), hair:pick(HAIR)[0], hairColor:pick(["#1B1B1B","#7C503A","#E4CD9E","#C91A09","#F2CD37","#6C6E68"]), torso:pick(COLORS), legs:pick(COLORS), acc:pick(ACC)[0] });
+
+const S = {
+  sb:null, ch:null, chReady:false, uid:null, canWrite:true,
+  missions:[], changes:[], portals:[], players:{}, profiles:{},
+  fig:randomFig(), tab:"misiones", filter:"activas",
+  remote:{}, floaters:[], keys:{}, target:null, zone:null,
+};
+try { const f = JSON.parse(localStorage.getItem("gb-fig")); if (f && f.skin) S.fig = f; } catch {}
+
+// ---------- datos en Supabase (proyecto RH, tablas cm_*) ----------
+// La página usa nombres cortos en inglés; la base, columnas en español. MAP traduce en ambos sentidos.
+const TABLA = { missions:"cm_misiones", changes:"cm_cambios", portals:"cm_dashboards" };
+const MAP = {
+  missions:{ title:"titulo", owner:"responsable", pri:"prioridad", due:"vence", status:"estado", createdBy:"creado_por", createdAt:"creado", doneAt:"cumplida", doneBy:"cumplida_por" },
+  changes:{ title:"titulo", sys:"sistema", det:"detalle", status:"estado", by:"creado_por", at:"creado", approvedBy:"aprobado_por", approvedAt:"aprobado", appliedBy:"aplicado_por", appliedAt:"aplicado" },
+  portals:{ name:"nombre", url:"url", desc:"descripcion", by:"creado_por", at:"creado" },
+};
+const FECHAS = new Set(["creado","cumplida","aprobado","aplicado"]);
+function toDb(col, d){
+  const r = {};
+  for (const [k,v] of Object.entries(d)) { const c = MAP[col][k]; if (c) r[c] = FECHAS.has(c) && typeof v === "number" ? new Date(v).toISOString() : (v === "" ? null : v); }
+  return r;
+}
+function fromDb(col, r){
+  const d = { id:r.id };
+  for (const [k,c] of Object.entries(MAP[col])) d[k] = FECHAS.has(c) ? (r[c] ? Date.parse(r[c]) : null) : r[c];
+  return d;
+}
+const errMsg = e => /row-level security|permission/i.test(e?.message || "") ? "Tu usuario no tiene permiso para guardar esto." : "No se pudo guardar. Revisa tu conexión e intenta de nuevo.";
+async function addDoc(col, data){
+  const { error } = await S.sb.from(TABLA[col]).insert(toDb(col, data)); if (error) toast(errMsg(error)); else load(col);
+}
+async function updDoc(col, id, patch){
+  const { error } = await S.sb.from(TABLA[col]).update(toDb(col, patch)).eq("id", id); if (error) toast(errMsg(error)); else load(col);
+}
+async function delDoc(col, id){
+  const { error } = await S.sb.from(TABLA[col]).delete().eq("id", id); if (error) toast(errMsg(error)); else load(col);
+}
+async function load(col){
+  if (col === "players") {
+    const { data, error } = await S.sb.from("cm_jugadores").select("id,fig"); if (error) return;
+    S.players = {}; data.forEach(r => S.players[r.id] = { fig:sanitizeFig(r.fig) }); renderData(); return;
+  }
+  const { data, error } = await S.sb.from(TABLA[col]).select("*").order("creado", { ascending:col === "portals" }).limit(500);
+  if (error) { toast("No se pudo leer " + col); return; }
+  S[col] = data.map(r => fromDb(col, r)); renderData();
+}
+
+const me = () => S.uid || "local";
+const name = id => !id ? "Sin asignar" : (S.profiles[id]?.name || (id === me() ? "Tú" : "Colaborador"));
+const xpOf = m => PRI[m.pri]?.xp || 0;
+function xpTable(){
+  const t = {};
+  for (const id of Object.keys(S.players)) t[id] = { xp:0, n:0 };
+  t[me()] ||= { xp:0, n:0 };
+  for (const m of S.missions) if (m.status === "cumplida") {
+    const o = m.owner || m.createdBy; if (!o) continue;
+    t[o] ||= { xp:0, n:0 }; t[o].xp += xpOf(m); t[o].n++;
+  }
+  return Object.entries(t).map(([id,v]) => ({ id, ...v })).sort((a,b) => b.xp - a.xp);
+}
+const lvl = xp => 1 + Math.floor(xp/100);
+
+// nombres de perfiles de RH: se leen al entrar y otra vez cuando aparece un id desconocido
+let profBusy = false;
+async function refreshProfiles(){
+  if (!S.uid || profBusy) return;
+  const ids = new Set([...Object.keys(S.players), S.uid]);
+  for (const m of S.missions) { ids.add(m.owner); ids.add(m.createdBy); }
+  for (const c of S.changes) { ids.add(c.by); ids.add(c.approvedBy); ids.add(c.appliedBy); }
+  for (const r of Object.values(S.remote)) ids.add(r.uid);
+  if ([...ids].every(id => !id || S.profiles[id])) return;
+  profBusy = true;
+  try {
+    const { data } = await S.sb.rpc("cm_nombres");
+    const p = {}; (data || []).forEach(x => p[x.id] = { name:x.nombre || "" });
+    for (const id of ids) if (id) p[id] ||= { name:"" };
+    S.profiles = p; renderData();
+  } finally { profBusy = false; }
+}
+
+// ---------- UI ----------
+function toast(t){ const el = $("#toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => el.hidden = true, 2600); }
+const fmtDate = d => d ? new Date(d + "T12:00:00").toLocaleDateString("es-MX", { day:"numeric", month:"short" }) : "";
+const today = () => new Date().toISOString().slice(0,10);
+const ago = t => { const m = Math.round((Date.now()-t)/60000); return m < 1 ? "ahora" : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m/60)} h` : new Date(t).toLocaleDateString("es-MX",{day:"numeric",month:"short"}); };
+
+function setTab(t){
+  if (t === "oficina") { $("#cv").focus(); $("#world").scrollIntoView({ behavior:"smooth", block:"center" }); return; }
+  S.tab = t;
+  document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  document.querySelectorAll("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== t);
+  document.querySelectorAll(".nav [data-go]").forEach(b => b.setAttribute("aria-current", b.dataset.go === t));
+}
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
+  const z = ZONES.find(z => z.tab === b.dataset.go);
+  setTab(b.dataset.go); if (z) walkTo(z);
+});
+
+function renderData(){
+  const active = S.missions.filter(m => m.status !== "cumplida");
+  const pendCh = S.changes.filter(c => c.status !== "aplicado");
+  const table = xpTable(); const mine = table.find(r => r.id === me()) || { xp:0 };
+  $("#tMis").textContent = `${active.length} activas`;
+  $("#tCam").textContent = `${pendCh.length} por aplicar`;
+  $("#tDash").textContent = `${S.portals.length} accesos`;
+  $("#tRank").textContent = table[0]?.xp ? `Líder: ${name(table[0].id)}` : "Sin XP aún";
+  $("#mylvl").textContent = `Nv ${lvl(mine.xp)} · ${mine.xp} XP`;
+
+  // destacada
+  const order = { alta:0, media:1, baja:2 };
+  const feat = [...active].sort((a,b) => order[a.pri]-order[b.pri] || (a.due||"9").localeCompare(b.due||"9"))[0];
+  if (feat) {
+    $("#heroTag").textContent = feat.due && feat.due < today() ? "Vencida" : `Prioridad ${PRI[feat.pri].l}`;
+    $("#heroTitle").textContent = feat.title;
+    $("#heroText").textContent = `Asignada a ${name(feat.owner)}${feat.due ? " · vence " + fmtDate(feat.due) : ""} · +${xpOf(feat)} XP al cumplirla.`;
+    $("#heroCta").firstChild.textContent = "Ir a la misión ";
+  } else {
+    $("#heroTag").textContent = "Misión destacada";
+    $("#heroTitle").textContent = S.missions.length ? "Todas las misiones cumplidas" : "Publica la primera misión del equipo";
+    $("#heroText").textContent = "Camina al Tablero de Misiones para crear una nueva.";
+    $("#heroCta").firstChild.textContent = "Crear misión ";
+  }
+
+  // asignables
+  const sel = $("#mOwner"), keep = sel.value || me();
+  const ids = [...new Set([me(), ...Object.keys(S.players)])];
+  sel.innerHTML = ids.map(id => `<option value="${esc(id)}">${esc(id === me() ? (name(id) === "Tú" ? "Yo" : name(id) + " (yo)") : name(id))}</option>`).join("");
+  sel.value = ids.includes(keep) ? keep : me();
+
+  // misiones
+  let ms = S.missions;
+  if (S.filter === "activas") ms = active;
+  if (S.filter === "mias") ms = active.filter(m => m.owner === me());
+  if (S.filter === "cumplidas") ms = S.missions.filter(m => m.status === "cumplida");
+  const ro = S.canWrite ? "" : " disabled";
+  $("#mList").innerHTML = ms.length ? ms.map(m => {
+    const p = PRI[m.pri] || PRI.media, late = m.due && m.due < today() && m.status !== "cumplida";
+    const acts = m.status === "cumplida" ? `<span class="chip" style="--c:#a6f01c">+${p.xp} XP</span>` :
+      (m.status === "pendiente" ? `<button class="ghost" data-act="start" data-id="${esc(m.id)}"${ro}>Iniciar</button>` : `<span class="chip light" style="--c:#2f7be0">En curso</span>`) +
+      `<button class="ghost done" data-act="done" data-id="${esc(m.id)}"${ro}>Cumplir ✓</button>`;
+    return `<li class="item" style="--c:${p.c}"><span class="chip" style="--c:${p.c}">${p.l}</span><div><b>${esc(m.title)}</b>
+      <small>${esc(name(m.owner))}${m.due ? ` · <span class="${late ? "late" : ""}">${late ? "venció" : "vence"} ${esc(fmtDate(m.due))}</span>` : ""}${m.doneAt ? " · cumplida " + esc(ago(m.doneAt)) : ""}</small></div>
+      <div class="acts">${acts}<button class="ghost warn" data-act="del" data-id="${esc(m.id)}"${ro}>Quitar</button></div></li>`;
+  }).join("") : `<li class="empty">${S.filter === "cumplidas" ? "Aún no hay misiones cumplidas." : S.filter === "mias" ? "No tienes misiones activas asignadas." : "No hay misiones activas. Publica una arriba y aparecerá como ficha en el tablero de la oficina."}</li>`;
+
+  // cambios
+  $("#cList").innerHTML = S.changes.length ? S.changes.map(c => {
+    const st = CST[c.status] || CST.propuesto;
+    const trail = [`Registró ${name(c.by)} ${ago(c.at)}`, c.approvedBy && `aprobó ${name(c.approvedBy)}`, c.appliedBy && `aplicó ${name(c.appliedBy)} ${ago(c.appliedAt)}`].filter(Boolean).join(" · ");
+    return `<li class="item" style="--c:${st.c}"><span class="chip" style="--c:${st.c}">${st.l}</span><div><b>${esc(c.title)}</b>
+      <small>${c.sys ? esc(c.sys) + " · " : ""}${esc(trail)}</small>${c.det ? `<small style="color:var(--fg);margin-top:4px">${esc(c.det)}</small>` : ""}</div>
+      <div class="acts">${st.next ? `<button class="ghost done" data-act="adv" data-id="${esc(c.id)}"${ro}>${st.btn}</button>` : ""}<button class="ghost warn" data-act="del" data-id="${esc(c.id)}"${ro}>Quitar</button></div></li>`;
+  }).join("") : `<li class="empty">Sin cambios registrados. Cada cambio pendiente enciende una luz en la consola de la oficina.</li>`;
+
+  // dashboards
+  $("#dList").innerHTML = S.portals.length ? S.portals.map(d => `<div class="portal"><b>${esc(d.name)}</b>${d.desc ? `<p>${esc(d.desc)}</p>` : ""}
+    <div class="row"><a href="${esc(d.url)}" target="_blank" rel="noopener">ABRIR ›</a><button class="ghost warn" data-act="del" data-id="${esc(d.id)}"${ro}>Quitar</button></div></div>`).join("")
+    : `<div class="empty" style="grid-column:1/-1">Agrega la liga de cada dashboard del grupo. Cada uno se vuelve una pantalla en la Sala de Dashboards.</div>`;
+
+  // ranking
+  const avatar = id => S.profiles[id]?.avatarUrl;
+  $("#rList").innerHTML = table.map((r,i) => `<div class="rank"><span class="n">${i+1}</span>
+    ${avatar(r.id) ? `<img src="${esc(avatar(r.id))}" alt="">` : `<span class="brand-brick" style="width:36px">${i+1}</span>`}
+    <div style="min-width:0"><b>${esc(name(r.id))}</b> <small style="color:var(--muted)">Nv ${lvl(r.xp)}</small><div class="bar"><i style="width:${r.xp % 100}%"></i></div></div>
+    <div class="xp">${r.xp} XP<small>${r.n} cumplidas</small></div></div>`).join("");
+
+  document.querySelectorAll("form.add button, form.add input, form.add select, form.add textarea").forEach(el => el.disabled = !S.canWrite);
+  document.querySelectorAll(".note.ro").forEach(n => n.hidden = S.canWrite);
+  refreshProfiles();
+}
+
+$("#mFilter").onclick = e => { const b = e.target.closest("button"); if (!b) return; S.filter = b.dataset.f;
+  $("#mFilter").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderData(); };
+
+function confirmDel(btn, fn){
+  if (btn.dataset.armed) return fn();
+  btn.dataset.armed = 1; btn.textContent = "¿Seguro?";
+  setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = "Quitar"; } }, 2500);
+}
+$("#mList").onclick = e => {
+  const b = e.target.closest("button[data-act]"); if (!b) return; const id = b.dataset.id;
+  const m = S.missions.find(x => x.id === id); if (!m) return;
+  if (b.dataset.act === "start") updDoc("missions", id, { status:"en curso" });
+  if (b.dataset.act === "done") {
+    updDoc("missions", id, { status:"cumplida", doneAt:Date.now(), doneBy:me() });
+    S.floaters.push({ x:P.x, y:P.y-60, t:0, text:`+${xpOf(m)} XP` });
+    toast(`Misión cumplida: +${xpOf(m)} XP para ${name(m.owner)}`);
+  }
+  if (b.dataset.act === "del") confirmDel(b, () => delDoc("missions", id));
+};
+$("#cList").onclick = e => {
+  const b = e.target.closest("button[data-act]"); if (!b) return; const id = b.dataset.id;
+  const c = S.changes.find(x => x.id === id); if (!c) return;
+  if (b.dataset.act === "adv") {
+    const nx = CST[c.status]?.next; if (!nx) return;
+    updDoc("changes", id, nx === "aprobado" ? { status:nx, approvedBy:me(), approvedAt:Date.now() } : { status:nx, appliedBy:me(), appliedAt:Date.now() });
+  }
+  if (b.dataset.act === "del") confirmDel(b, () => delDoc("changes", id));
+};
+$("#dList").onclick = e => { const b = e.target.closest("button[data-act]"); if (b) confirmDel(b, () => delDoc("portals", b.dataset.id)); };
+
+$("#fMis").onsubmit = e => { e.preventDefault(); const t = $("#mTitle").value.trim(); if (!t) return;
+  addDoc("missions", { title:t, owner:$("#mOwner").value, pri:$("#mPri").value, due:$("#mDue").value || null, status:"pendiente", createdBy:me(), createdAt:Date.now() });
+  $("#mTitle").value = ""; $("#mDue").value = ""; };
+$("#fCam").onsubmit = e => { e.preventDefault(); const t = $("#cTitle").value.trim(); if (!t) return;
+  addDoc("changes", { title:t, sys:$("#cSys").value.trim(), det:$("#cDet").value.trim(), status:"propuesto", by:me(), at:Date.now() });
+  $("#cTitle").value = $("#cSys").value = $("#cDet").value = ""; };
+$("#fDash").onsubmit = e => { e.preventDefault(); const url = $("#dUrl").value.trim();
+  if (!/^https?:\/\//i.test(url)) { toast("La liga debe empezar con https://"); return; }
+  addDoc("portals", { name:$("#dName").value.trim(), url, desc:$("#dDesc").value.trim(), by:me(), at:Date.now() });
+  $("#dName").value = $("#dUrl").value = $("#dDesc").value = ""; };
+$("#heroCta").onclick = () => { setTab("misiones"); walkTo(ZONES[0]); };
+
+// ---------- vestidor ----------
+function renderOpts(){
+  const f = S.fig;
+  const sw = (key, list) => `<div class="sw">${list.map(c => `<button type="button" style="--c:${c}" aria-label="${c}" aria-pressed="${f[key] === c}" data-k="${key}" data-v="${c}"></button>`).join("")}</div>`;
+  const tx = (key, list) => `<div class="sw txt">${list.map(([v,l]) => `<button type="button" aria-pressed="${f[key] === v}" data-k="${key}" data-v="${v}">${l}</button>`).join("")}</div>`;
+  $("#opts").innerHTML = `<div class="opt"><label class="f">Piel</label>${sw("skin", SKIN)}</div>
+    <div class="opt"><label class="f">Cabello o casco</label>${tx("hair", HAIR)}</div>
+    <div class="opt"><label class="f">Color de cabello</label>${sw("hairColor", COLORS)}</div>
+    <div class="opt"><label class="f">Torso</label>${sw("torso", COLORS)}</div>
+    <div class="opt"><label class="f">Piernas</label>${sw("legs", COLORS)}</div>
+    <div class="opt"><label class="f">Accesorio</label>${tx("acc", ACC)}</div>`;
+  drawPreview();
+}
+$("#opts").onclick = e => { const b = e.target.closest("button[data-k]"); if (!b) return; S.fig = { ...S.fig, [b.dataset.k]:b.dataset.v }; renderOpts(); };
+$("#rndFig").onclick = () => { S.fig = randomFig(); renderOpts(); };
+$("#saveFig").onclick = async () => {
+  try { localStorage.setItem("gb-fig", JSON.stringify(S.fig)); } catch {}
+  const { error } = await S.sb.from("cm_jugadores").upsert({ id:S.uid, fig:S.fig, actualizado:new Date().toISOString() });
+  if (error) toast(errMsg(error)); else { toast("Personaje guardado"); load("players"); }
+};
+function drawPreview(){
+  const c = $("#pv").getContext("2d"); c.clearRect(0,0,300,380);
+  c.fillStyle = "#2a332c"; c.beginPath(); c.ellipse(150,330,80,18,0,0,7); c.fill();
+  drawFig(c, 150, 330, S.fig, 0, 0, false, 5.4);
+}
+
+// ---------- mundo ----------
+const W = 1400, H = 900;
+const ZONES = [
+  { id:"misiones", tab:"misiones", name:"Tablero de Misiones", x:110, y:60, w:320, h:200, col:"#9a6a3c" },
+  { id:"cambios", tab:"cambios", name:"Bitácora de Cambios", x:560, y:60, w:280, h:200, col:"#0055BF" },
+  { id:"dash", tab:"dashboards", name:"Sala de Dashboards", x:970, y:60, w:320, h:200, col:"#237841" },
+  { id:"vestidor", tab:"personaje", name:"Vestidor", x:110, y:640, w:260, h:200, col:"#81007B" },
+  { id:"fama", tab:"ranking", name:"Salón de la Fama", x:1030, y:640, w:260, h:200, col:"#FE8A18" },
+];
+const BUILD_H = 104; // parte sólida de cada zona; el resto es la placa para pararse
+const TABLE = { x:560, y:430, w:280, h:90 };
+const PLANTS = [[470,300],[900,300],[470,780],[900,780]];
+const OBST = [
+  { x:0, y:0, w:W, h:44 }, { x:0, y:H-24, w:W, h:24 }, { x:0, y:0, w:24, h:H }, { x:W-24, y:0, w:24, h:H },
+  ...ZONES.map(z => z.id === "vestidor" || z.id === "fama" ? { x:z.x, y:z.y + z.h - BUILD_H, w:z.w, h:BUILD_H - 12 } : { x:z.x, y:z.y, w:z.w, h:BUILD_H }),
+  { ...TABLE, h:TABLE.h - 10 },
+  ...PLANTS.map(([x,y]) => ({ x:x-20, y:y-20, w:40, h:30 })),
+];
+// placa activable: arriba las zonas tienen la placa abajo; abajo, la placa arriba
+const padOf = z => z.id === "vestidor" || z.id === "fama" ? { x:z.x, y:z.y, w:z.w, h:z.h - BUILD_H } : { x:z.x, y:z.y + BUILD_H, w:z.w, h:z.h - BUILD_H };
+
+const P = { x:700 + (Math.random()*120-60), y:620, dir:0, phase:0, walking:false };
+const cv = $("#cv"), ctx = cv.getContext("2d");
+let dpr = 1, zoom = 1, vw = 0, vh = 0, camX = 0, camY = 0;
+
+function shade(hex, amt){
+  const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = n >> 8 & 255, b = n & 255;
+  const t = amt < 0 ? 0 : 255, p = Math.abs(amt);
+  r = Math.round((t - r) * p + r); g = Math.round((t - g) * p + g); b = Math.round((t - b) * p + b);
+  return `rgb(${r},${g},${b})`;
+}
+function rr(c,x,y,w,h,r){ c.beginPath(); c.roundRect ? c.roundRect(x,y,w,h,r) : c.rect(x,y,w,h); c.fill(); }
+function circ(c,x,y,r){ c.beginPath(); c.arc(x,y,r,0,Math.PI*2); c.fill(); }
+function studs(c,x,y,w,h,col,s=20,r=6){
+  const lo = shade(col,-.22), hi = shade(col,.14);
+  for (let sx = x + s/2; sx < x + w - 2; sx += s) for (let sy = y + s/2; sy < y + h - 2; sy += s) {
+    c.fillStyle = lo; circ(c,sx,sy+1.6,r); c.fillStyle = hi; circ(c,sx,sy,r);
+  }
+}
+function brick(c,x,y,w,h,col,depth=22){
+  c.fillStyle = shade(col,-.32); c.fillRect(x, y + h - depth, w, depth);
+  c.fillStyle = col; c.fillRect(x, y, w, h - depth);
+  studs(c, x, y, w, h - depth, col);
+}
+
+// piso pre-renderizado
+const floor = document.createElement("canvas"); floor.width = W; floor.height = H;
+(() => {
+  const c = floor.getContext("2d");
+  c.fillStyle = "#3d4440"; c.fillRect(0,0,W,H); studs(c,0,0,W,H,"#3d4440",24,6.5);
+  c.fillStyle = "#6f6450"; c.fillRect(480,330,440,420); studs(c,480,330,440,420,"#6f6450",24,6.5);
+  for (const z of ZONES) { const p = padOf(z); c.fillStyle = shade(z.col,-.45); c.fillRect(p.x,p.y,p.w,p.h); studs(c,p.x,p.y,p.w,p.h,shade(z.col,-.45),24,6.5); }
+  // muros
+  c.fillStyle = "#2a2d2b"; c.fillRect(0,0,W,44); c.fillRect(0,H-24,W,24); c.fillRect(0,0,24,H); c.fillRect(W-24,0,24,H);
+  c.fillStyle = "#353936";
+  for (let y = 0; y < 44; y += 11) for (let x = (y/11 % 2) * 20; x < W; x += 40) c.fillRect(x+1,y+1,38,9);
+})();
+
+function signText(c, txt, x, y, w, col){
+  c.fillStyle = "rgba(0,0,0,.35)"; c.fillRect(x + 10, y + 3, w - 20, 16);
+  c.fillStyle = "#fff"; c.font = "14px 'Lilita One', 'Arial Black', sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillText(txt, x + w/2, y + 11.5);
+}
+
+function drawZone(c, z, t){
+  const top = z.id === "vestidor" || z.id === "fama";
+  const bx = z.x, by = top ? z.y + z.h - BUILD_H : z.y, bw = z.w, bh = BUILD_H;
+  brick(c, bx, by, bw, bh, z.col, 26);
+  const face = by + bh - 24;
+  if (z.id === "misiones") {
+    // tablero: una ficha por misión activa, color por prioridad
+    c.fillStyle = "#e8dcc0"; c.fillRect(bx + 14, by + 10, bw - 28, bh - 46);
+    const act = S.missions.filter(m => m.status !== "cumplida").slice(0, 24);
+    act.forEach((m,i) => { const col = PRI[m.pri]?.c || "#999"; const cx = bx + 22 + (i % 12) * 23, cy = by + 16 + Math.floor(i / 12) * 22;
+      c.fillStyle = shade(col,-.3); rr(c,cx,cy+2,18,16,2); c.fillStyle = col; rr(c,cx,cy,18,16,2); });
+    if (!act.length) { c.fillStyle = "#7a6a4a"; c.font = "12px Figtree, sans-serif"; c.textAlign = "center"; c.fillText("Sin misiones activas", bx + bw/2, by + 40); }
+  }
+  if (z.id === "cambios") {
+    c.fillStyle = "#0b1730"; c.fillRect(bx + 16, by + 10, bw - 32, bh - 46);
+    const pend = S.changes.filter(ch => ch.status !== "aplicado").length;
+    for (let i = 0; i < 12; i++) { const on = i < pend; const blink = on && Math.sin(t/300 + i) > -.2;
+      c.fillStyle = on ? (blink ? "#ffd500" : "#8a7300") : "#1d2b4a"; circ(c, bx + 34 + (i % 6) * 40, by + 24 + Math.floor(i / 6) * 22, 7); }
+  }
+  if (z.id === "dash") {
+    const n = Math.max(1, Math.min(4, S.portals.length || 1));
+    const sw = (bw - 28 - (n-1)*8) / n;
+    for (let i = 0; i < n; i++) { const sx = bx + 14 + i*(sw+8);
+      c.fillStyle = "#081008"; c.fillRect(sx, by + 10, sw, bh - 46);
+      if (S.portals[i]) for (let k = 0; k < 5; k++) { const hgt = 8 + ((Math.sin(k*1.7 + i*2.1 + t/1400) + 1) * 12);
+        c.fillStyle = "#a6f01c"; c.fillRect(sx + 8 + k*(sw-16)/5, by + bh - 40 - hgt, (sw-16)/5 - 4, hgt); }
+      else { c.fillStyle = "#2c3a2c"; c.font = "11px Figtree, sans-serif"; c.textAlign = "center"; c.fillText("Sin accesos", sx + sw/2, by + 40); }
+    }
+  }
+  if (z.id === "vestidor") {
+    c.fillStyle = "#a9d8ff"; c.fillRect(bx + 20, by + 8, 70, bh - 42); c.fillStyle = "rgba(255,255,255,.5)"; c.fillRect(bx + 28, by + 14, 10, bh - 54);
+    ["#C91A09","#0055BF","#F2CD37","#237841","#FE8A18"].forEach((col,i) => { c.fillStyle = col; rr(c, bx + 110 + i*28, by + 18, 22, 34, 3); });
+  }
+  if (z.id === "fama") {
+    const top3 = xpTable().filter(r => r.xp > 0).slice(0, 3);
+    const spots = [[bx + bw/2 - 28, 30, "#ffd500"], [bx + bw/2 - 92, 18, "#c0c0c0"], [bx + bw/2 + 36, 10, "#cd7f32"]];
+    spots.forEach(([sx, hgt, col], i) => { c.fillStyle = col; c.fillRect(sx, by + bh - 30 - hgt, 56, hgt + 6);
+      c.fillStyle = "#111"; c.font = "12px 'Lilita One', sans-serif"; c.textAlign = "center"; c.fillText(String(i+1), sx + 28, by + bh - 30 - hgt/2 + 3);
+      const r = top3[i]; if (r) drawFig(c, sx + 28, by + bh - 30 - hgt, figOf(r.id), 0, 0, false, .8); });
+  }
+  signText(c, z.name, bx, face, bw, z.col);
+}
+const figOf = id => id === me() ? S.fig : (S.players[id]?.fig || Object.values(S.remote).find(r => r.uid === id)?.fig || { skin:"#F2CD37", hair:"corto", hairColor:"#1B1B1B", torso:"#6C6E68", legs:"#1B1B1B", acc:"ninguno" });
+
+function drawTable(c){
+  brick(c, TABLE.x, TABLE.y, TABLE.w, TABLE.h, "#E4CD9E", 20);
+}
+function drawPlant(c, x, y){
+  c.fillStyle = "#5a3a22"; c.fillRect(x-16, y-6, 32, 16); c.fillStyle = "#7C503A"; c.fillRect(x-16, y-12, 32, 8);
+  c.fillStyle = "#1e6b34"; circ(c, x, y-24, 18); c.fillStyle = "#2c8a46"; circ(c, x-8, y-30, 10); circ(c, x+9, y-28, 9); circ(c, x+1, y-38, 9);
+}
+
+// minifigura: (x,y) son los pies
+function drawFig(c, x, y, f, dir, phase, walking, s=1){
+  c.save(); c.translate(x, y); c.scale(s, s);
+  const sw = walking ? Math.sin(phase) * 3 : 0;
+  const skinD = shade(f.skin, -.18);
+  c.fillStyle = "rgba(0,0,0,.28)"; c.beginPath(); c.ellipse(0, 0, 13, 4.5, 0, 0, 7); c.fill();
+  const side = dir === 2 || dir === 3, flip = dir === 2 ? -1 : 1;
+  // piernas
+  if (side) {
+    c.fillStyle = shade(f.legs,-.2); c.fillRect(-4 - sw*flip, -14, 8, 14);
+    c.fillStyle = f.legs; c.fillRect(-4 + sw*flip, -14, 8, 14);
+  } else {
+    c.fillStyle = f.legs; c.fillRect(-8, -14 + Math.max(0, sw), 7, 14 - Math.max(0, sw)); c.fillRect(1, -14 + Math.max(0, -sw), 7, 14 - Math.max(0, -sw));
+    c.fillStyle = shade(f.legs,-.25); c.fillRect(-8, -3, 7, 3); c.fillRect(1, -3, 7, 3);
+  }
+  c.fillStyle = shade(f.legs,-.15); c.fillRect(-9, -18, 18, 4);
+  // torso
+  c.fillStyle = f.torso; c.beginPath(); c.moveTo(-9,-17); c.lineTo(9,-17); c.lineTo(7,-31); c.lineTo(-7,-31); c.closePath(); c.fill();
+  if (dir === 0) { c.fillStyle = shade(f.torso, f.torso === "#F4F4F4" ? -.5 : .55); c.font = "bold 5px sans-serif"; c.textAlign = "center"; c.fillText("GB", 0, -22); }
+  // brazos y manos
+  const armSw = walking ? Math.sin(phase) * 2.5 : 0;
+  c.fillStyle = shade(f.torso,-.12);
+  if (side) { c.fillRect(-2 + armSw*flip, -30, 4, 11); c.fillStyle = f.skin; circ(c, armSw*flip, -18, 2.6); }
+  else {
+    c.fillRect(-12, -30 - armSw, 4, 11); c.fillRect(8, -30 + armSw, 4, 11);
+    c.fillStyle = f.skin; circ(c, -10, -18 - armSw, 2.6); circ(c, 10, -18 + armSw, 2.6);
+  }
+  if (f.acc === "portafolio" && dir !== 1) { c.fillStyle = "#5a3a22"; c.fillRect(side ? 3*flip - 4 : 8, -19, 9, 7); c.fillStyle = "#3a2516"; c.fillRect(side ? 3*flip - 1 : 11, -21, 3, 2); }
+  // cabeza
+  c.fillStyle = f.skin; c.fillRect(-3, -33, 6, 2); rr(c, -7, -44, 14, 12, 4);
+  c.fillStyle = skinD; c.fillRect(-4, -47, 8, 3);
+  if (dir !== 1) {
+    const ox = dir === 2 ? -2.5 : dir === 3 ? 2.5 : 0;
+    c.fillStyle = "#1b1b1b";
+    if (side) circ(c, ox + 1.5*flip, -39, 1.3); else { circ(c, -3, -39, 1.3); circ(c, 3, -39, 1.3); }
+    c.strokeStyle = "#1b1b1b"; c.lineWidth = .9; c.beginPath(); c.arc(ox, -37.5, 2.6, .2, Math.PI - .2); c.stroke();
+    if (f.acc === "lentes") { c.strokeStyle = "#111"; c.lineWidth = 1; if (side) c.strokeRect(ox + 1.5*flip - 2, -41, 4, 3.5); else { c.strokeRect(-5, -41, 4, 3.5); c.strokeRect(1, -41, 4, 3.5); c.beginPath(); c.moveTo(-1,-39.5); c.lineTo(1,-39.5); c.stroke(); } }
+  }
+  // cabello / sombrero
+  const hc = f.hairColor, back = dir === 1;
+  c.fillStyle = hc;
+  if (f.hair === "corto") { rr(c, -8, -47, 16, back ? 13 : 6, 4); if (!back) { c.fillRect(-8,-43,2,4); c.fillRect(6,-43,2,4); } }
+  if (f.hair === "largo" || f.hair === "chongo") { rr(c, -8, -47, 16, back ? 15 : 6, 4); if (f.hair === "largo") { c.fillRect(-9,-45,3,back ? 18 : 15); c.fillRect(6,-45,3,back ? 18 : 15); } else { circ(c, 0, -49, 4); c.fillRect(-8,-43,2,4); c.fillRect(6,-43,2,4); } }
+  if (f.hair === "gorra") { rr(c, -8, -48, 16, back ? 10 : 7, 3); c.fillStyle = shade(hc,-.25); if (dir === 0) c.fillRect(-9,-42,18,2.5); else if (side) c.fillRect(flip > 0 ? 4 : -13, -42, 9, 2.5); }
+  if (f.hair === "casco") { rr(c, -9, -49, 18, back ? 15 : 10, 6); c.fillStyle = shade(hc,.3); c.fillRect(-6,-48,12,2); }
+  if (f.acc === "audifonos") { c.strokeStyle = "#222"; c.lineWidth = 1.6; c.beginPath(); c.arc(0,-41,8.5,Math.PI,0); c.stroke(); c.fillStyle = "#222"; circ(c,-8,-39,2.6); circ(c,8,-39,2.6); }
+  c.restore();
+}
+
+function nameTag(c, x, y, txt, mine){
+  c.font = "600 11px Figtree, sans-serif"; const w = c.measureText(txt).width + 12;
+  c.fillStyle = mine ? "rgba(166,240,28,.95)" : "rgba(10,12,10,.8)"; rr(c, x - w/2, y - 60, w, 16, 8);
+  c.fillStyle = mine ? "#0b1a00" : "#fff"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(txt, x, y - 52);
+}
+
+function hit(x, y){
+  const L = x - 9, R = x + 9, T = y - 6, B = y;
+  return OBST.some(o => R > o.x && L < o.x + o.w && B > o.y && T < o.y + o.h);
+}
+function walkTo(z){ const p = padOf(z); S.target = { x:p.x + p.w/2, y:p.y + p.h/2 }; }
+
+function resize(){
+  const r = $("#world").getBoundingClientRect(); dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  zoom = clamp(r.width / 980, .5, 1.15); vw = r.width / zoom; vh = r.height / zoom;
+}
+new ResizeObserver(resize).observe($("#world"));
+
+// entrada
+const KEYMAP = { ArrowUp:"up", w:"up", W:"up", ArrowDown:"down", s:"down", S:"down", ArrowLeft:"left", a:"left", A:"left", ArrowRight:"right", d:"right", D:"right" };
+const typing = () => /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);
+addEventListener("keydown", e => {
+  if (typing()) return;
+  const k = KEYMAP[e.key]; if (k) { S.keys[k] = true; if (document.activeElement === cv) e.preventDefault(); }
+  if ((e.key === "e" || e.key === "E" || (e.key === "Enter" && document.activeElement === cv)) && S.zone) setTab(S.zone.tab);
+});
+addEventListener("keyup", e => { const k = KEYMAP[e.key]; if (k) S.keys[k] = false; });
+addEventListener("blur", () => S.keys = {});
+cv.addEventListener("pointerdown", e => {
+  cv.focus();
+  const r = cv.getBoundingClientRect(); const wx = camX + (e.clientX - r.left) / zoom, wy = camY + (e.clientY - r.top) / zoom;
+  const z = ZONES.find(z => wx > z.x && wx < z.x + z.w && wy > z.y && wy < z.y + z.h);
+  if (z) { walkTo(z); setTab(z.tab); } else S.target = { x:wx, y:wy };
+});
+$("#pad").querySelectorAll("button").forEach(b => {
+  const k = b.dataset.k;
+  b.addEventListener("pointerdown", e => { e.preventDefault(); if (k === "act") { if (S.zone) setTab(S.zone.tab); } else S.keys[k] = true; });
+  ["pointerup","pointerleave","pointercancel"].forEach(ev => b.addEventListener(ev, () => { if (k !== "act") S.keys[k] = false; }));
+});
+
+// presencia
+let lastSent = 0, sentKey = "";
+// ponytail: presencia de Supabase cada 150 ms (≈7/s por persona); si el canal se satura, mandar el movimiento por broadcast
+const MI_LLAVE = rid();
+function sendPresence(now){
+  if (!S.chReady) return;
+  const key = `${Math.round(P.x)},${Math.round(P.y)},${P.dir},${P.walking},${JSON.stringify(S.fig)}`;
+  if (key === sentKey || now - lastSent < 150) return;
+  sentKey = key; lastSent = now;
+  S.ch.track({ x:Math.round(P.x), y:Math.round(P.y), d:P.dir, w:P.walking, fig:S.fig, uid:S.uid }).catch(() => {});
+}
+function syncPeers(){
+  const seen = new Set();
+  for (const [peer, metas] of Object.entries(S.ch.presenceState())) {
+    if (peer === MI_LLAVE) continue;
+    const pr = metas[metas.length - 1] || {}; if (typeof pr.x !== "number" || typeof pr.y !== "number") continue;
+    seen.add(peer);
+    const r = S.remote[peer] ||= { x:pr.x, y:pr.y, phase:0 };
+    Object.assign(r, { tx:clamp(pr.x,0,W), ty:clamp(pr.y,0,H), dir:[0,1,2,3].includes(pr.d) ? pr.d : 0, walking:!!pr.w, fig:sanitizeFig(pr.fig), uid:typeof pr.uid === "string" ? pr.uid : null });
+  }
+  for (const k of Object.keys(S.remote)) if (!seen.has(k)) delete S.remote[k];
+  const n = Object.keys(S.remote).length;
+  $("#online").textContent = n ? `${n + 1} en la oficina` : "Solo tú en la oficina";
+  refreshProfiles();
+}
+const isHex = v => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+function sanitizeFig(f){
+  f = f && typeof f === "object" ? f : {};
+  return { skin:isHex(f.skin) ? f.skin : "#F2CD37", hair:HAIR.some(h => h[0] === f.hair) ? f.hair : "corto", hairColor:isHex(f.hairColor) ? f.hairColor : "#1B1B1B",
+    torso:isHex(f.torso) ? f.torso : "#6C6E68", legs:isHex(f.legs) ? f.legs : "#1B1B1B", acc:ACC.some(a => a[0] === f.acc) ? f.acc : "ninguno" };
+}
+
+// bucle
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  let dx = (S.keys.right ? 1 : 0) - (S.keys.left ? 1 : 0), dy = (S.keys.down ? 1 : 0) - (S.keys.up ? 1 : 0);
+  if (dx || dy) S.target = null;
+  else if (S.target) { const vx = S.target.x - P.x, vy = S.target.y - P.y, d = Math.hypot(vx, vy); if (d < 4) S.target = null; else { dx = vx / d; dy = vy / d; } }
+  const len = Math.hypot(dx, dy); P.walking = false;
+  if (len) {
+    dx /= len; dy /= len; const sp = 190 * dt;
+    const ox = P.x, oy = P.y;
+    if (!hit(P.x + dx*sp, P.y)) P.x += dx*sp;
+    if (!hit(P.x, P.y + dy*sp)) P.y += dy*sp;
+    P.walking = Math.hypot(P.x - ox, P.y - oy) > .1;
+    if (!P.walking && S.target) S.target = null;
+    P.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0);
+  }
+  if (P.walking) P.phase += dt * 12;
+  const z = ZONES.find(z => { const p = padOf(z); return P.x > p.x && P.x < p.x + p.w && P.y > p.y && P.y < p.y + p.h; }) || null;
+  if (z && z !== S.zone) setTab(z.tab);
+  S.zone = z;
+  for (const r of Object.values(S.remote)) { r.x += (r.tx - r.x) * Math.min(1, dt*10); r.y += (r.ty - r.y) * Math.min(1, dt*10); if (r.walking) r.phase += dt*12; }
+  sendPresence(now);
+  draw(now, dt);
+  requestAnimationFrame(frame);
+}
+
+function draw(t, dt){
+  ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = "#151816"; ctx.fillRect(0,0,cv.width,cv.height);
+  camX = vw >= W ? (W - vw)/2 : clamp(P.x - vw/2, 0, W - vw);
+  camY = vh >= H ? (H - vh)/2 : clamp(P.y - vh/2 - 30, 0, H - vh);
+  const k = dpr * zoom; ctx.setTransform(k,0,0,k,-camX*k,-camY*k);
+  ctx.drawImage(floor, 0, 0);
+  if (S.zone) { const p = padOf(S.zone); ctx.strokeStyle = "#a6f01c"; ctx.lineWidth = 3; ctx.setLineDash([10,6]); ctx.lineDashOffset = -t/40; ctx.strokeRect(p.x+2, p.y+2, p.w-4, p.h-4); ctx.setLineDash([]); }
+  // orden por profundidad
+  const items = [
+    ...ZONES.map(z => ({ y:(z.id === "vestidor" || z.id === "fama") ? z.y + z.h : z.y + BUILD_H, f:() => drawZone(ctx, z, t) })),
+    { y:TABLE.y + TABLE.h, f:() => drawTable(ctx) },
+    ...PLANTS.map(([x,y]) => ({ y:y+10, f:() => drawPlant(ctx, x, y) })),
+    ...Object.values(S.remote).map(r => ({ y:r.y, f:() => { drawFig(ctx, r.x, r.y, r.fig, r.dir, r.phase, r.walking); nameTag(ctx, r.x, r.y, name(r.uid), false); } })),
+    { y:P.y, f:() => { drawFig(ctx, P.x, P.y, S.fig, P.dir, P.phase, P.walking); nameTag(ctx, P.x, P.y, S.profiles[S.uid]?.name || "Tú", true); } },
+  ].sort((a,b) => a.y - b.y);
+  items.forEach(i => i.f());
+  if (S.target) { ctx.strokeStyle = "rgba(166,240,28,.8)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(S.target.x, S.target.y, 10, 4, 0, 0, 7); ctx.stroke(); }
+  if (S.zone) {
+    const txt = `E · Abrir ${S.zone.name}`; ctx.font = "800 12px Figtree, sans-serif"; const w = ctx.measureText(txt).width + 20;
+    ctx.fillStyle = "#a6f01c"; rr(ctx, P.x - w/2, P.y - 88, w, 22, 4); ctx.fillStyle = "#0b1a00"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, P.x, P.y - 77);
+  }
+  S.floaters = S.floaters.filter(f => (f.t += dt) < 1.6);
+  for (const f of S.floaters) { ctx.globalAlpha = 1 - f.t/1.6; ctx.fillStyle = "#ffd500"; ctx.font = "20px 'Lilita One', sans-serif"; ctx.textAlign = "center"; ctx.fillText(f.text, f.x, f.y - f.t*40); ctx.globalAlpha = 1; }
+}
+
+// ---------- arranque ----------
+renderOpts(); renderData(); resize(); requestAnimationFrame(frame);
+
+const CFG = window.CM_CFG;
+S.sb = window.supabase.createClient(CFG.url, CFG.key, { auth:{ persistSession:true, autoRefreshToken:true } });
+
+async function entrar(){
+  const { data:{ user } } = await S.sb.auth.getUser();
+  if (!user) { $("#login").hidden = false; $("#lUser").focus(); return; }
+  S.uid = user.id;
+  const { data:esMiembro } = await S.sb.rpc("cm_es_miembro");
+  if (!esMiembro) { S.canWrite = false; toast("Tu usuario no tiene perfil en RH GB. Pide que lo activen."); }
+  await Promise.all(["missions","changes","portals","players"].map(load));
+  if (S.players[S.uid]) { S.fig = S.players[S.uid].fig; renderOpts(); }
+  else { setTab("personaje"); toast("Arma tu personaje y guárdalo para aparecer en el equipo"); }
+
+  // cambios en vivo: cuando alguien escribe, se vuelve a leer esa tabla (son pocas filas)
+  const espera = {};
+  const recargar = col => { clearTimeout(espera[col]); espera[col] = setTimeout(() => load(col), 250); };
+  let datos = S.sb.channel("cm-datos");
+  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"]])
+    datos = datos.on("postgres_changes", { event:"*", schema:"public", table:t }, () => recargar(col));
+  datos.subscribe();
+
+  S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
+  S.ch.on("presence", { event:"sync" }, syncPeers).subscribe(st => { S.chReady = st === "SUBSCRIBED"; if (S.chReady) sentKey = ""; });
+}
+
+$("#fLogin").onsubmit = async e => {
+  e.preventDefault(); $("#lErr").textContent = "";
+  const u = $("#lUser").value.trim(), email = u.includes("@") ? u : u.toLowerCase() + CFG.dominio;
+  const { error } = await S.sb.auth.signInWithPassword({ email, password:$("#lPass").value });
+  if (error) { $("#lErr").textContent = "Usuario o contraseña incorrectos"; return; }
+  $("#login").hidden = true; $("#lPass").value = ""; entrar();
+};
+$("#salir").onclick = async () => { await S.sb.auth.signOut(); location.reload(); };
+entrar();
+})();
+</script>
+</body>
+</html>
