@@ -1958,7 +1958,8 @@ async function entrar(){
   if (!user) { $("#fLogin").hidden = false; $("#lUser").focus(); return; }
   S.uid = user.id;
   const { data:esMiembro } = await S.sb.rpc("cm_es_miembro");
-  if (!esMiembro) { S.canWrite = false; toast("Tu usuario no tiene perfil en RH GB. Pide que lo activen."); }
+  // el Centro de Mando es solo del equipo de Analítica: cualquier otro usuario sale de inmediato
+  if (!esMiembro) { await S.sb.auth.signOut(); S.uid = null; toast("El Centro de Mando es solo para el equipo de Analítica."); $("#fLogin").hidden = false; $("#lUser").focus(); return; }
   const { data:jf } = await S.sb.rpc("cm_jefes"); S.jefes = (jf || []).map(r => r.id);
   await S.sb.rpc("cm_vincular_cuenta");    // si esta persona tenía tareas a su nombre "sin cuenta", pasan a su usuario
   await S.sb.rpc("cm_generar_semana");     // crea las tareas de la semana si aún no existen (no repite)
