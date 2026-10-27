@@ -2172,7 +2172,9 @@ async function entrar(){
     datos = datos.on("postgres_changes", { event:"*", schema:"public", table:t }, () => recargar(col));
   datos.subscribe();
   S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
-  S.ch.on("presence", { event:"sync" }, syncPeers).subscribe(st => { S.chReady = st === "SUBSCRIBED"; if (S.chReady) sentKey = ""; });
+  S.ch.on("presence", { event:"sync" }, syncPeers).subscribe(st => { S.chReady = st === "SUBSCRIBED"; if (S.chReady) { sentKey = ""; lastSent = 0; sendPresence(performance.now()); } });
+  // también con la pestaña en segundo plano (ahí el navegador detiene el dibujo, pero no este reloj): así siempre se ve quién está
+  setInterval(() => { if (S.mode === "play" && S.chReady) { sentKey = ""; sendPresence(performance.now()); } }, 20000);
 
   // entra a la oficina: el personaje saluda y el GBSaurio también
   $("#boot").classList.add("out"); setTimeout(() => $("#boot").hidden = true, 800);
