@@ -465,6 +465,16 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
         <ul class="list" id="jMias"></ul>
       </section>
 
+      <section data-sec="usuarios">
+        <p class="sub">Quién del equipo entra a qué. Con su usuario y contraseña abren el Centro de Mando y los tableros que tengan marcados; en Pospago ven los DN completos. Los cambios valen desde su siguiente entrada.</p>
+        <ul class="list" id="uLista"></ul>
+        <form class="add" id="fUsr" style="grid-template-columns:2fr auto;margin-top:14px">
+          <label class="f">Agregar al equipo (cuentas que ya existen)<select id="uNuevo"></select></label>
+          <button class="btn">Agregar</button>
+        </form>
+        <p class="sub" style="margin-top:14px">Contraseñas y activar o quitar cuentas se hacen en RH, porque ahí se pide la verificación en dos pasos: <a href="https://ecortesgb.github.io/grupobenber/rh/" target="_blank" rel="noopener" style="color:var(--brand-l)">abrir RH › Usuarios</a>. Una cuenta nueva se crea con <code>crear_usuario.py</code> y luego se agrega aquí.</p>
+      </section>
+
       <section data-sec="fama">
         <p class="sub">XP por tareas completadas. Nivel 2 en 250 XP, nivel 5 en 2,500 y nivel 10 en 11,250.</p>
         <div class="list" id="rList" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -601,6 +611,10 @@ async function load(col){
   if (col === "evid") {
     const { data, error } = await S.sb.from("cm_evidencias").select("*").order("subida"); if (error) return;
     S.evid = {}; data.forEach(e => (S.evid[e.tarea_id] ||= []).push(e)); renderData(); return;
+  }
+  if (col === "usuarios") {
+    const { data, error } = await S.sb.rpc("cm_usuarios"); if (error) { toast("No se pudo leer el equipo"); return; }
+    S.usr = data; renderUsuarios(); return;
   }
   if (col === "turnos") {
     const desde = new Date(); desde.setDate(desde.getDate() - 1); desde.setHours(0, 0, 0, 0);
@@ -779,6 +793,45 @@ $("#mdl").addEventListener("change", e => { if (e.target.id === "evFile") agrega
 $("#mdl").addEventListener("dragover", e => { if (e.target.closest("#evDrop")) { e.preventDefault(); $("#evDrop").classList.add("on"); } });
 $("#mdl").addEventListener("drop", e => { if (e.target.closest("#evDrop")) { e.preventDefault(); $("#evDrop").classList.remove("on"); agregarEv([...e.dataTransfer.files]); } });
 addEventListener("paste", e => { if (MDL?.t && e.clipboardData?.files.length) { e.preventDefault(); agregarEv([...e.clipboardData.files]); } });
+
+// ---------- usuarios y acceso (solo líderes): quién del equipo entra a qué tablero ----------
+const TABS = [["centro", "Centro de Mando"], ["pospago", "Pospago"], ["elektra", "Elektra"], ["avance", "Avance GB"]];
+function renderUsuarios(){
+  const u = S.usr; if (!u) return;
+  const f = d => d ? new Date(d).toLocaleString("es-MX", { dateStyle:"medium", timeStyle:"short" }) : "nunca ha entrado";
+  $("#uLista").innerHTML = u.equipo.map(x => {
+    const st = !x.id ? ["Sin cuenta", "#ff6b5e"] : !x.activo ? ["Sin acceso", "#ff6b5e"] : x.debe_cambiar_clave ? ["Clave temporal", "#ffcc33"] : ["Activo", "#3fbf6a"];
+    const yo = x.id === me();
+    return `<li class="item" style="--c:${st[1]}"><span class="chip" style="--c:${st[1]}">${st[0]}</span>
+      <div><b>${x.id ? who(x.id) : esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(x.rol || "sin rol")} · último ingreso: ${esc(f(x.ultimo))}</small></div>
+      <div class="acts seg">${TABS.map(([k, l]) => `<button type="button" aria-pressed="${x.tableros.includes(k)}" data-uacc="${esc(x.usuario)}" data-tab="${k}"${yo && k === "centro" ? ' disabled title="No puedes quitarte el Centro de Mando"' : ""}>${l}</button>`).join("")}
+      ${yo ? "" : `<button class="ghost warn" type="button" data-uquitar="${esc(x.usuario)}">Quitar del equipo</button>`}</div></li>`;
+  }).join("");
+  $("#uNuevo").innerHTML = u.otros.length ? u.otros.map(o => `<option value="${esc(o.usuario)}">${esc(o.nombre)} · ${esc(o.usuario)} · ${esc(o.rol)}</option>`).join("") : `<option value="">No hay más cuentas activas</option>`;
+}
+$("#uLista").addEventListener("click", async e => {
+  const t = e.target.closest("button[data-uacc]");
+  if (t) {
+    const x = S.usr.equipo.find(r => r.usuario === t.dataset.uacc), set = new Set(x.tableros);
+    set.has(t.dataset.tab) ? set.delete(t.dataset.tab) : set.add(t.dataset.tab);
+    t.disabled = true;
+    const { error } = await S.sb.rpc("cm_equipo_guardar", { p_usuario:x.usuario, p_tableros:TABS.map(([k]) => k).filter(k => set.has(k)) });
+    if (error) toast(/líder|quitarte|existe|inválido/.test(error.message) ? error.message : errMsg(error)); else toast("Acceso actualizado");
+    return load("usuarios");
+  }
+  const q = e.target.closest("button[data-uquitar]");
+  if (q) return confirmDel(q, async () => {
+    const { error } = await S.sb.rpc("cm_equipo_quitar", { p_usuario:q.dataset.uquitar });
+    if (error) toast(/líder|quitarte/.test(error.message) ? error.message : errMsg(error)); else toast("Quitado del equipo: ya no entra al Centro de Mando ni a los tableros con su usuario");
+    load("usuarios");
+  });
+});
+$("#fUsr").onsubmit = async e => {
+  e.preventDefault(); const v = $("#uNuevo").value; if (!v) return;
+  const { error } = await S.sb.rpc("cm_equipo_guardar", { p_usuario:v, p_tableros:TABS.map(([k]) => k) });
+  if (error) { toast(/líder|existe/.test(error.message) ? error.message : errMsg(error)); return; }
+  toast("Agregado al equipo con todos los tableros"); load("usuarios");
+};
 
 // ---------- turno: checar entrada y salida ----------
 const miTurno = () => S.turnos.find(r => r.usuario === me() && !r.fin);
@@ -1605,11 +1658,12 @@ function enterRoom(r){
 }
 function openPanel(r){
   S.panel = r.id;
-  $("#pTitle").innerHTML = `${esc(r.name)}<small>${{ pendientes:"Tareas del equipo con responsable y fecha", recurrentes:"Lo que toca cada semana", dashboards:"Tableros del grupo", herramientas:"Archivos, calculadoras y formatos", cambios:"Bitácora de cambios", armario:"Arma tu minifigura paso a paso", fama:"Ranking por XP", juntas:"Autorizaciones, ayuda y dudas con dirección" }[r.id]}</small>`;
+  $("#pTitle").innerHTML = `${esc(r.name)}<small>${{ pendientes:"Tareas del equipo con responsable y fecha", recurrentes:"Lo que toca cada semana", dashboards:"Tableros del grupo", herramientas:"Archivos, calculadoras y formatos", cambios:"Bitácora de cambios", usuarios:"Equipo, accesos y tableros", armario:"Arma tu minifigura paso a paso", fama:"Ranking por XP", juntas:"Autorizaciones, ayuda y dudas con dirección" }[r.id]}</small>`;
   document.querySelectorAll("[data-sec]").forEach(s => s.hidden = s.dataset.sec !== r.id);
   $(".panel-in").classList.toggle("claro", r.id === "armario");
   if (r.id === "armario") { ARM.saved = { ...S.fig }; armView("ed"); renderArm(); }
   if (r.id === "juntas") load("sols");
+  if (r.id === "usuarios") load("usuarios");
   if (r.id === "recurrentes") { S.dia = dayIdx(); renderData(); }
   $("#panel").hidden = false; $("#pClose").focus();
 }
@@ -1630,7 +1684,7 @@ function renderPause(){
     <div class="bar"><i style="width:${lvlPct(mine.xp)}%"></i></div>
     <div class="stats"><div><b>${act}</b><span>tareas abiertas</span></div><div><b>${toca}</b><span>tocan hoy</span></div><div><b>${mine.n}</b><span>completadas</span></div></div>`;
   const sinLeer = convKeys().reduce((a, k) => a + unread(k), 0), teNec = badgeOf("juntas");
-  const items = [["reanudar","Reanudar",""], ["mensajes","Mensajes", sinLeer ? `${sinLeer} sin leer` : ""], ...ROOMS.map(r => [r.id, r.name, { pendientes:`${S.tareas.filter(t => !t.actividad_id && abierta(t)).length} activos`, recurrentes:`${toca} hoy`, dashboards:`${S.portals.filter(p => p.tipo !== "herramienta").length}`, herramientas:`${S.portals.filter(p => p.tipo === "herramienta").length}`, cambios:`${S.changes.filter(c => c.status !== "aplicado").length} abiertos`, juntas:teNec ? `${teNec} te necesitan` : "" }[r.id] || ""]), ["salir","Cerrar sesión",""]];
+  const items = [["reanudar","Reanudar",""], ["mensajes","Mensajes", sinLeer ? `${sinLeer} sin leer` : ""], ...ROOMS.map(r => [r.id, r.name, { pendientes:`${S.tareas.filter(t => !t.actividad_id && abierta(t)).length} activos`, recurrentes:`${toca} hoy`, dashboards:`${S.portals.filter(p => p.tipo !== "herramienta").length}`, herramientas:`${S.portals.filter(p => p.tipo === "herramienta").length}`, cambios:`${S.changes.filter(c => c.status !== "aplicado").length} abiertos`, juntas:teNec ? `${teNec} te necesitan` : "" }[r.id] || ""]), ...(esJefe() ? [["usuarios","Usuarios y acceso",""]] : []), ["salir","Cerrar sesión",""]];
   const sel = document.activeElement?.dataset?.go;
   $("#pMenu").innerHTML = items.map(([k, l, n]) => `<button type="button" data-go="${k}">${esc(l)}<small>${esc(n)}</small></button>`).join("");
   ($(`#pMenu [data-go="${sel}"]`) || $("#pMenu button")).focus();
@@ -1642,6 +1696,7 @@ $("#pMenu").onclick = async e => {
   closePause();
   if (k === "salir") { await S.sb.auth.signOut(); location.reload(); return; }
   if (k === "mensajes") { openMsgs(); return; }
+  if (k === "usuarios") { if (S.busy) return; S.busy = true; openPanel({ id:"usuarios", name:"Usuarios y acceso" }); return; }
   const r = ROOMS.find(x => x.id === k); if (r) atajo(r);
 };
 // desde la pausa no se camina: el personaje aparece en la puerta y la sala se abre ya (al cerrarla, el círculo se abre ahí)
