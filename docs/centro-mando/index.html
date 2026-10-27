@@ -144,6 +144,24 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
 .tk .acts{justify-content:flex-start}
 .tk .acts button{padding:3px 8px;font-size:11px}
 .tk.hecha{opacity:.7}.tk.hecha b{text-decoration:line-through}
+.mdl{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.62);display:grid;place-items:center;padding:16px}
+.mdl-in{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(760px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.mdl-in h3{font-size:22px;margin:0}
+.mdl-in .sub{margin:0}
+.mdl-in .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:24px;text-align:center;color:var(--muted);font-size:14px;cursor:pointer}
+.drop.on{border-color:var(--brand);color:var(--ink)}
+.evs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.evs figure{margin:0;background:#141211;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.evs img{width:100%;display:block;cursor:zoom-in}
+.evs figcaption{font-size:11.5px;color:var(--muted);padding:6px 8px;display:flex;justify-content:space-between;gap:6px}
+.evs .pdf{padding:30px 10px;text-align:center;color:var(--brand-l);font-weight:800}
+.nota-rev{font-size:12px;color:var(--warn);background:rgba(255,204,51,.08);border-radius:4px;padding:4px 6px}
+.sug{grid-column:1/-1;margin:0;font-size:12px;color:var(--muted)}
+.sug b{color:var(--brand-l)}
+.turnobtn{position:fixed;top:max(12px,env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));z-index:6;border:1px solid #3a332e;background:rgba(18,16,15,.85);border-radius:999px;padding:9px 14px;font-weight:800;font-size:13px;color:#fff;display:flex;align-items:center;gap:8px}
+.turnobtn i{width:9px;height:9px;border-radius:50%;background:#8a8580;display:inline-block}
+.turnobtn.on{border-color:var(--ok)}.turnobtn.on i{background:var(--ok)}
 .cat{margin-top:14px}.cat summary{cursor:pointer;font-weight:700;color:var(--muted);margin-bottom:8px}
 .dias{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0}.dias label{font-size:12px;display:flex;gap:3px;align-items:center;text-transform:none;letter-spacing:0}
 .rank{display:grid;grid-template-columns:34px 52px minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--panel2);border-radius:8px;padding:8px 14px}
@@ -335,13 +353,15 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
       <section data-sec="pendientes">
         <p class="sub">Ordenados por cuándo vencen. Una tarea completada a tiempo da 10 XP por hora estimada; un pendiente suelto da según prioridad (baja 10, media 25, alta 50, crítica 80). Tarde da la mitad, y con más de un día de atraso, la cuarta parte.</p>
         <div class="ro" hidden>Tienes acceso de solo lectura.</div>
-        <form class="add" id="fMis" style="grid-template-columns:2fr 1fr 1fr 1fr .8fr auto">
-          <label class="f">Pendiente<input id="mTitle" required maxlength="140" placeholder="Ej. Cerrar conciliación de ventas de octubre"></label>
+        <form class="add" id="fMis" style="grid-template-columns:2fr 1.3fr 1.1fr .9fr 1fr .8fr auto">
+          <label class="f">Pendiente<input id="mTitle" required maxlength="140" placeholder="Ej. Calcular incentivo Motorola de octubre"></label>
+          <label class="f">Categoría<select id="mCat"></select></label>
           <label class="f">Responsable<select id="mOwner"></select></label>
           <label class="f">Prioridad<select id="mPri"><option value="baja">Baja</option><option value="media" selected>Media</option><option value="alta">Alta</option><option value="critica">Crítica</option></select></label>
           <label class="f">Fecha límite<input id="mDue" type="date" required></label>
           <label class="f">Hora<input id="mHora" type="time" value="18:00"></label>
           <button class="btn">Agregar</button>
+          <p class="sug" id="mSug"></p>
         </form>
         <div class="seg" id="mFilter"><button type="button" aria-pressed="true" data-f="activas">Todos</button><button type="button" aria-pressed="false" data-f="mias">Míos</button><button type="button" aria-pressed="false" data-f="cumplidas">Completados</button></div>
         <div class="kan" id="mCols"></div>
@@ -429,6 +449,8 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
       </section>
 
       <section data-sec="juntas">
+        <div id="jRev" hidden><h3 style="font-size:22px;margin-bottom:8px">Evidencias por revisar <span id="jRevN" class="chip" style="--c:#b48cf0"></span></h3><div class="kan gente" id="jRevL" style="margin-bottom:16px"></div></div>
+        <h3 style="font-size:22px;margin-bottom:8px">Turnos de hoy</h3><ul class="list" id="jTurnos" style="margin-bottom:16px"></ul>
         <p class="sub">Pide una autorización, ayuda o resuelve una duda con dirección. Cada solicitud solo la ven quien la pide y a quien se le pide.</p>
         <div id="jJefe" hidden><h3 style="font-size:22px;margin-bottom:8px">Te necesitan <span id="jN" class="chip" style="--c:#ff6b5e;color:#fff"></span></h3><ul class="list" id="jTeNec"></ul></div>
         <div class="ro" hidden>Tienes acceso de solo lectura.</div>
@@ -467,6 +489,8 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
 </div>
 
 <div class="toast" id="toast" hidden></div>
+<div class="mdl" id="mdl" hidden role="dialog" aria-modal="true"><div class="mdl-in" id="mdlIn"></div></div>
+<button class="turnobtn" id="turnoBtn" type="button" hidden></button>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>window.CM_CFG = {"url": "https://pzbesenfqcbfvmyuerfq.supabase.co", "key": "sb_publishable_TEbzoyAkjdJIRR91xjWMhA_tXBJWxKQ", "dominio": "@usuarios.rhgb.app"};</script>
@@ -508,7 +532,7 @@ const ARM_TABS = [
 const dayIdx = () => (new Date().getDay() + 6) % 7 + 1;   // 1 = lunes
 const S = {
   sb:null, ch:null, chReady:false, uid:null, canWrite:true, session:null,
-  tareas:[], acts:[], xpt:{}, changes:[], portals:[], players:{}, profiles:{},
+  tareas:[], acts:[], xpt:{}, evid:{}, turnos:[], changes:[], portals:[], players:{}, profiles:{},
   sols:[], solSeen:null, jefes:[], msgs:[], msgSeen:0, conv:"grupo",
   fig:{ ...GENERIC }, outfits:[], remote:{}, floaters:[], keys:{}, filter:"activas", dia:dayIdx(),
   mode:"boot", panel:null, paused:false, busy:false,
@@ -572,7 +596,16 @@ async function load(col){
       S.sb.rpc("cm_xp_total")]);
     if (t.error) { toast("No se pudieron leer las tareas"); return; }
     S.tareas = t.data; S.xpt = {}; (x.data || []).forEach(r => S.xpt[r.usuario] = { xp:+r.xp, n:+r.completadas });
-    renderData(); return;
+    return load("evid");
+  }
+  if (col === "evid") {
+    const { data, error } = await S.sb.from("cm_evidencias").select("*").order("subida"); if (error) return;
+    S.evid = {}; data.forEach(e => (S.evid[e.tarea_id] ||= []).push(e)); renderData(); return;
+  }
+  if (col === "turnos") {
+    const desde = new Date(); desde.setDate(desde.getDate() - 1); desde.setHours(0, 0, 0, 0);
+    const { data, error } = await S.sb.from("cm_turnos").select("*").or(`fin.is.null,inicio.gte.${desde.toISOString()}`).order("inicio"); if (error) return;
+    S.turnos = data; renderData(); pintarTurno(); return;
   }
   if (col === "acts") {
     const { data, error } = await S.sb.from("cm_actividades").select("*").eq("activa", true).order("titulo"); if (error) return;
@@ -618,25 +651,152 @@ function cuando(t){
   const d = new Date(t.limite), h = d.toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" });
   return `${vencida(t) ? "venció" : "vence"} ${ymd(d) === today() ? "hoy" : d.toLocaleDateString("es-MX", { weekday:"short", day:"numeric", month:"short" })} ${h}`;
 }
+const CATS = ["Reportes y avances", "Comisiones, cuotas e incentivos", "Incentivos y marcas", "Nómina, checks, altas y bajas", "Plataformas y accesos",
+  "Operación de módulos y tiendas", "Inventario y equipos", "Guardia, atención y reuniones", "Otro"];
+// a quién se le puede asignar: quien ya juega, quien ya tiene tareas, y los nombres sin cuenta en RH ("n:Nombre")
+function gente(){
+  const ids = [...new Set([me(), ...Object.keys(S.players), ...S.tareas.map(t => t.responsable), ...S.acts.map(a => a.responsable)].filter(Boolean))];
+  return [...ids, ...new Set([...S.tareas, ...S.acts].filter(t => !t.responsable && t.responsable_nombre).map(t => "n:" + t.responsable_nombre))];
+}
+const opsGente = sel => gente().map(id => `<option value="${esc(id)}"${id === sel ? " selected" : ""}>${esc(id === me() ? "Yo" : nombreDe(id))}</option>`).join("");
+// palabras de un texto recortadas a 6 letras (incentivo = incentivos), sin acentos
+const raices = s => new Set(((s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]{4,}/g) || []).map(w => w.slice(0, 6)));
+// categoría y responsable sugeridos: lo que más se parece en el catálogo (palabras del título) y quién lleva más de esa categoría
+function sugerencia(titulo, cat){
+  const p = raices(titulo), cuenta = (txt, base) => { let n = base; for (const w of raices(txt)) if (p.has(w)) n += 3; return n; };
+  if (!cat) { const sc = {}; for (const a of S.acts) if (a.categoria) sc[a.categoria] = (sc[a.categoria] || 0) + cuenta(a.titulo + " " + a.categoria, 0);
+    const best = Object.entries(sc).sort((a, b) => b[1] - a[1])[0]; cat = best && best[1] ? best[0] : null; }
+  const sc = {};
+  for (const a of S.acts) { const k = a.responsable || (a.responsable_nombre ? "n:" + a.responsable_nombre : null); if (!k) continue;
+    const n = cuenta(a.titulo, a.categoria === cat ? 2 : 0); if (n) sc[k] = (sc[k] || 0) + n; }
+  const best = Object.entries(sc).sort((a, b) => b[1] - a[1])[0];
+  return { cat, quien: best ? best[0] : null, n: best ? S.acts.filter(a => (a.responsable || "n:" + a.responsable_nombre) === best[0] && a.categoria === cat).length : 0 };
+}
 // tarjeta de tarea: solo muestra los botones que esa persona puede usar en ese estado
 function tarjeta(t){
   const [el, ec] = TST[t.estado], p = PRI[t.prioridad] || PRI.media, ok = S.canWrite && puedeMover(t), id = esc(t.id), min = minutosDe(t), late = vencida(t);
   const b = (acc, txt, cls = "") => ok ? `<button class="ghost ${cls}" data-mv="${acc}" data-id="${id}">${txt}</button>` : "";
-  const acts = t.estado === "asignada" ? b("iniciar", "Iniciar") + b("enviar", "Terminar ✓", "ok")
-    : t.estado === "en_proceso" ? (t.en_marcha_desde ? b("pausar", "Pausar") : b("reanudar", "Reanudar")) + b("enviar", t.requiere_evidencia ? "Enviar" : "Terminar ✓", "ok")
-    : t.estado === "en_revision" ? (esJefe() ? b("validar", "Validar", "ok") + b("rechazar", "Rechazar", "warn") : "")
+  const fin = t.requiere_evidencia ? (ok ? `<button class="ghost ok" data-entregar="${id}">Entregar ✓</button>` : "") : b("enviar", "Terminar ✓", "ok");
+  const pasa = ok && t.estado !== "completada" && t.estado !== "en_revision" && (esJefe() || t.responsable === me()) ? `<button class="ghost" data-pasar="${id}" title="Pasar a quien la cubre o apoya">Pasar</button>` : "";
+  const acts = t.estado === "asignada" ? b("iniciar", "Iniciar") + fin + pasa
+    : t.estado === "en_proceso" ? (t.en_marcha_desde ? b("pausar", "Pausar") : b("reanudar", "Reanudar")) + fin + pasa
+    : t.estado === "en_revision" ? (esJefe() ? `<button class="ghost ok" data-revisar="${id}">Revisar evidencia</button>` : "")
     : `<span class="chip" style="--c:#3fbf6a">+${t.xp} XP</span>` + b("reabrir", "Reabrir");
+  const nev = (S.evid[t.id] || []).length;
   const quitar = !t.actividad_id && S.canWrite && (esJefe() || (t.asignada_por === me() && t.estado === "asignada")) ? `<button class="ghost warn" data-tdel="${id}">Quitar</button>` : "";
   return `<div class="tk${t.estado === "completada" ? " hecha" : ""}" style="--c:${late ? "var(--bad)" : ec}"><b>${esc(t.titulo)}</b>
-    <small>${quien(t)}<span class="${late ? "late" : ""}">${esc(cuando(t))}</span>${t.estado === "en_proceso" || t.estado === "en_revision" ? `<span class="chip" style="--c:${ec}">${el}</span>` : ""}${t.actividad_id ? "" : `<span class="chip" style="--c:${p.c}">${p.l}</span>`}${min ? `<span>${t.en_marcha_desde ? "⏱ " : ""}${min} min</span>` : ""}</small>
+    <small>${quien(t)}<span class="${late ? "late" : ""}">${esc(cuando(t))}</span>${t.estado === "en_proceso" || t.estado === "en_revision" ? `<span class="chip" style="--c:${ec}">${el}</span>` : ""}${t.actividad_id ? "" : `<span class="chip" style="--c:${p.c}">${p.l}</span>`}${min ? `<span>${t.en_marcha_desde ? "⏱ " : ""}${min} min</span>` : ""}${nev ? `<span title="Capturas de entrega">📎 ${nev}</span>` : ""}</small>
+    ${t.nota_revision && t.estado === "en_proceso" ? `<span class="nota-rev">Rechazada: ${esc(t.nota_revision)}</span>` : ""}
     ${acts || quitar ? `<div class="acts">${acts}${quitar}</div>` : ""}</div>`;
 }
-async function mover(id, acc){
-  const { data, error } = await S.sb.rpc("cm_mover_tarea", { p_tarea:id, p_accion:acc });
+async function mover(id, acc, nota){
+  const { data, error } = await S.sb.rpc("cm_mover_tarea", { p_tarea:id, p_accion:acc, p_nota:nota || null });
   if (error) { const m = error.message || ""; toast(/permiso|responsable|no se puede|no existe/.test(m) ? m.charAt(0).toUpperCase() + m.slice(1) : errMsg(error)); load("tareas"); return; }
-  if (data?.estado === "completada" && acc !== "reabrir") { toast(`Tarea completada: +${data.xp} XP`); S.floaters.push({ x:P.x, y:P.y - 70, t:0, text:`+${data.xp} XP` }); G.celebrate = true; }
+  if (data?.estado === "completada" && acc !== "reabrir") { toast(`Tarea completada: +${data.xp} XP para ${nombreDe(dueno(data))}`); S.floaters.push({ x:P.x, y:P.y - 70, t:0, text:`+${data.xp} XP` }); G.celebrate = true; }
+  if (data?.estado === "en_revision") toast("Entregada: queda en revisión");
   load("tareas");
 }
+
+// ---------- ventanas: entregar con captura, revisar evidencia, pasar a otra persona ----------
+let MDL = null;
+function abrirMdl(html, estado){ MDL = estado || {}; $("#mdlIn").innerHTML = html; $("#mdl").hidden = false; $("#mdlIn").querySelector("button,input,select,textarea")?.focus(); }
+function cerrarMdl(){ if (MDL?.urls) MDL.urls.forEach(URL.revokeObjectURL); MDL = null; $("#mdl").hidden = true; $("#mdlIn").innerHTML = ""; }
+// la captura lleva una franja con quién, cuándo y qué tarea (se sube en JPG, máximo 2000 px de ancho)
+async function sellar(file, t){
+  if (!file.type.startsWith("image/")) return file;
+  const img = await createImageBitmap(file), k = Math.min(1, 2000 / img.width), w = Math.round(img.width * k), h = Math.round(img.height * k), band = Math.max(30, Math.round(w / 40));
+  const c = document.createElement("canvas"); c.width = w; c.height = h + band; const g = c.getContext("2d");
+  g.drawImage(img, 0, 0, w, h); g.fillStyle = "#111"; g.fillRect(0, h, w, band); g.fillStyle = "#fff"; g.textBaseline = "middle";
+  g.font = `600 ${Math.round(band * .45)}px Figtree, sans-serif`;
+  g.fillText(`${nombreDe(dueno(t))} · subida ${new Date().toLocaleString("es-MX", { dateStyle:"medium", timeStyle:"short" })} · ${t.titulo}`.slice(0, 170), 10, h + band / 2, w - 20);
+  return new Promise(r => c.toBlob(b => r(new File([b], "captura.jpg", { type:"image/jpeg" })), "image/jpeg", .86));
+}
+function entregar(t){
+  const ya = (S.evid[t.id] || []).length;
+  abrirMdl(`<h3>Entregar: ${esc(t.titulo)}</h3>
+    <p class="sub">Sube la captura de la entrega (el correo enviado, el archivo en la carpeta, el mensaje) donde se vean la fecha y la hora. Puedes pegarla con Ctrl+V. Elías la revisa y con eso se completa.${ya ? ` Ya hay ${ya} ${ya === 1 ? "captura" : "capturas"} de antes.` : ""}</p>
+    <label class="drop" id="evDrop"><input type="file" id="evFile" accept="image/png,image/jpeg,image/webp,application/pdf" multiple hidden>Arrastra, pega o haz clic para elegir la captura</label>
+    <div class="evs" id="evPrev"></div>
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="evEnviar"${ya ? "" : " disabled"}>Enviar a revisión</button></div>`, { t, files:[], urls:[], ya });
+}
+async function agregarEv(files){
+  if (!MDL?.t) return;
+  for (const f of files) {
+    if (!/^image\/(png|jpeg|webp)$|^application\/pdf$/.test(f.type)) { toast("Solo imágenes (PNG, JPG) o PDF"); continue; }
+    if (f.size > 8e6) { toast("La captura pesa más de 8 MB"); continue; }
+    const x = await sellar(f, MDL.t); if (!MDL) return;
+    MDL.files.push(x); const u = URL.createObjectURL(x); MDL.urls.push(u);
+    $("#evPrev").insertAdjacentHTML("beforeend", x.type === "application/pdf" ? `<figure><div class="pdf">PDF · ${esc(f.name)}</div></figure>` : `<figure><img src="${u}" alt="Captura"></figure>`);
+  }
+  $("#evEnviar").disabled = !MDL.files.length && !MDL.ya;
+}
+async function enviarEv(){
+  const { t, files } = MDL, btn = $("#evEnviar"); btn.disabled = true; btn.textContent = "Subiendo…";
+  for (const [i, f] of files.entries()) {
+    const ruta = `${S.uid}/${t.id}/${Date.now()}_${i}.${f.type === "application/pdf" ? "pdf" : "jpg"}`;
+    const up = await S.sb.storage.from("cm-evidencias").upload(ruta, f, { contentType:f.type });
+    if (up.error) { toast("No se pudo subir la captura. Intenta de nuevo."); btn.disabled = false; btn.textContent = "Enviar a revisión"; return; }
+    const { error } = await S.sb.from("cm_evidencias").insert({ tarea_id:t.id, ruta, nombre:f.name, tipo:f.type, bytes:f.size });
+    if (error) { toast(errMsg(error)); btn.disabled = false; btn.textContent = "Enviar a revisión"; return; }
+  }
+  cerrarMdl(); mover(t.id, "enviar");
+}
+async function revisar(t){
+  const evs = S.evid[t.id] || [], vivas = evs.filter(e => !e.archivada);
+  const urls = await Promise.all(vivas.map(e => S.sb.storage.from("cm-evidencias").createSignedUrl(e.ruta, 900).then(r => r.data?.signedUrl || "")));
+  const f = d => new Date(d).toLocaleString("es-MX", { dateStyle:"medium", timeStyle:"short" });
+  abrirMdl(`<h3>${esc(t.titulo)}</h3>
+    <p class="sub">${quien(t)} · entregó ${esc(f(t.enviada))} · límite ${esc(f(t.limite))}${t.enviada > t.limite ? ' · <span class="late">tarde</span>' : ""}${t.retrabajos ? ` · ${t.retrabajos} ${t.retrabajos === 1 ? "rechazo" : "rechazos"} antes` : ""}</p>
+    <div class="evs">${vivas.map((e, i) => `<figure>${e.tipo === "application/pdf" ? `<a class="pdf" href="${esc(urls[i])}" target="_blank" rel="noopener">Abrir PDF</a>` : `<a href="${esc(urls[i])}" target="_blank" rel="noopener"><img src="${esc(urls[i])}" alt="Captura de entrega"></a>`}
+      <figcaption><span>${esc(name(e.subida_por))}</span><span>${esc(f(e.subida))}</span></figcaption></figure>`).join("") || `<div class="empty">Sin capturas a la vista${evs.length ? ": ya están en el respaldo de OneDrive" : ""}.</div>`}</div>
+    <label class="f">Comentario (si la rechazas, di qué falta)<textarea id="revNota" maxlength="500"></textarea></label>
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cerrar</button><button class="ghost warn" type="button" data-rev="rechazar">Rechazar</button><button class="btn" type="button" data-rev="validar">Validar y completar</button></div>`, { rev:t });
+}
+function pasar(t, act){
+  const k = act ? (act.responsable || "n:" + act.responsable_nombre) : dueno(t);
+  abrirMdl(`<h3>${act ? "Cambiar responsable" : "Pasar a otra persona"}</h3>
+    <p class="sub">${esc((act || t).titulo)} · ahora: ${esc(nombreDe(k))}${act ? ". También se pasan sus tareas pendientes que aún no vencen." : ""}</p>
+    <label class="f">${act ? "Nuevo responsable" : "Quién la cubre o apoya"}<select id="paQuien">${opsGente(k)}</select></label>
+    ${act ? "" : `<label class="f">Motivo (opcional)<input id="paNota" maxlength="200" placeholder="Ej. la cubre por vacaciones"></label>`}
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" data-pasa>Pasar</button></div>`, { pasa:t, act });
+}
+$("#mdl").addEventListener("click", async e => {
+  if (e.target === $("#mdl") || e.target.closest("[data-cerrar]")) return cerrarMdl();
+  if (e.target.closest("#evEnviar")) return enviarEv();
+  const r = e.target.closest("button[data-rev]");
+  if (r && MDL?.rev) { const nota = $("#revNota").value.trim(), t = MDL.rev;
+    if (r.dataset.rev === "rechazar" && !nota) { toast("Escribe qué falta para que lo corrija"); $("#revNota").focus(); return; }
+    cerrarMdl(); return mover(t.id, r.dataset.rev, nota); }
+  if (e.target.closest("button[data-pasa]") && MDL) {
+    const v = $("#paQuien").value, quien = v.startsWith("n:") ? { p_responsable:null, p_nombre:v.slice(2) } : { p_responsable:v, p_nombre:null };
+    const { pasa:t, act } = MDL, nota = $("#paNota")?.value.trim() || null;
+    const { error } = act ? await S.sb.rpc("cm_reasignar_actividad", { p_actividad:act.id, ...quien }) : await S.sb.rpc("cm_reasignar_tarea", { p_tarea:t.id, ...quien, p_nota:nota });
+    if (error) { toast(/elige|cuenta|responsable|líder|completada/.test(error.message) ? error.message : errMsg(error)); return; }
+    cerrarMdl(); toast(`Ahora la tiene ${nombreDe(v)}`); load("acts"); load("tareas");
+  }
+});
+$("#mdl").addEventListener("change", e => { if (e.target.id === "evFile") agregarEv([...e.target.files]); });
+$("#mdl").addEventListener("dragover", e => { if (e.target.closest("#evDrop")) { e.preventDefault(); $("#evDrop").classList.add("on"); } });
+$("#mdl").addEventListener("drop", e => { if (e.target.closest("#evDrop")) { e.preventDefault(); $("#evDrop").classList.remove("on"); agregarEv([...e.dataTransfer.files]); } });
+addEventListener("paste", e => { if (MDL?.t && e.clipboardData?.files.length) { e.preventDefault(); agregarEv([...e.clipboardData.files]); } });
+
+// ---------- turno: checar entrada y salida ----------
+const miTurno = () => S.turnos.find(r => r.usuario === me() && !r.fin);
+const dur = ms => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+function pintarTurno(){
+  const b = $("#turnoBtn"), t = miTurno(); if (!b) return;
+  b.classList.toggle("on", !!t);
+  b.innerHTML = t ? `<i></i>En turno · ${dur(Date.now() - Date.parse(t.inicio))} · Cerrar` : `<i></i>Abrir turno`;
+  b.title = t ? `Entraste a las ${new Date(t.inicio).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" })}` : "Checa tu entrada";
+}
+$("#turnoBtn").onclick = async () => {
+  const b = $("#turnoBtn"), abierto = miTurno();
+  if (abierto && !b.dataset.armed) { b.dataset.armed = 1; b.innerHTML = "<i></i>¿Cerrar tu turno?"; setTimeout(() => { delete b.dataset.armed; pintarTurno(); }, 2500); return; }
+  delete b.dataset.armed;
+  const { error } = await S.sb.rpc("cm_turno", { p_accion:abierto ? "cerrar" : "abrir" });
+  if (error) { toast(/turno/.test(error.message) ? error.message : errMsg(error)); return; }
+  toast(abierto ? `Turno cerrado: ${dur(Date.now() - Date.parse(abierto.inicio))}` : "Turno abierto. ¡Buen día!"); load("turnos");
+};
 
 let profBusy = false;
 async function refreshProfiles(){
@@ -677,14 +837,11 @@ function toast(t){ const el = $("#toast"); el.textContent = t; el.hidden = false
 
 function renderData(){
   const ro = S.canWrite ? "" : " disabled";
-  // a quién se le puede asignar: quien ya juega, quien ya tiene tareas, y los nombres sin cuenta en RH
-  const ids = [...new Set([me(), ...Object.keys(S.players), ...S.tareas.map(t => t.responsable), ...S.acts.map(a => a.responsable)].filter(Boolean))];
-  const sinCuenta = [...new Set([...S.tareas, ...S.acts].filter(t => !t.responsable && t.responsable_nombre).map(t => "n:" + t.responsable_nombre))];
   for (const sel of ["#mOwner", "#rcOwner"]) {
-    const el = $(sel), keep = el.value || me(), ops = [...ids, ...sinCuenta];
-    el.innerHTML = ops.map(id => `<option value="${esc(id)}">${esc(id === me() ? "Yo" : nombreDe(id))}</option>`).join("");
-    el.value = ops.includes(keep) ? keep : me();
+    const el = $(sel), keep = el.value || me(), ops = gente();
+    el.innerHTML = opsGente(); el.value = ops.includes(keep) ? keep : me();
   }
+  if (!$("#mCat").options.length) $("#mCat").innerHTML = `<option value="">Elige o se sugiere sola</option>` + CATS.map(c => `<option>${esc(c)}</option>`).join("");
 
   // pendientes: sueltos por cuándo vencen, más las recurrentes de hoy y las atrasadas
   const mio = t => S.filter !== "mias" || t.responsable === me(), nada = `<div class="empty">Nada aquí</div>`;
@@ -710,8 +867,8 @@ function renderData(){
   $("#rcDias").innerHTML = DIAS.map((d, i) => `<button type="button" data-dia="${i + 1}" aria-pressed="${S.dia === i + 1}">${d.slice(0, 3)}${i + 1 === dayIdx() ? " · hoy" : ""}</button>`).join("");
   const fecha = new Date(lunes); fecha.setDate(fecha.getDate() + S.dia - 1);
   const delDia = semana.filter(t => diaDe(t) === ymd(fecha)).sort((a, b) => a.limite.localeCompare(b.limite));
-  const gente = [...new Set(semana.map(dueno))].sort((a, b) => nombreDe(a).localeCompare(nombreDe(b)));
-  $("#rcWeek").innerHTML = gente.length ? gente.map(k => {
+  const personas = [...new Set(semana.map(dueno))].sort((a, b) => nombreDe(a).localeCompare(nombreDe(b)));
+  $("#rcWeek").innerHTML = personas.length ? personas.map(k => {
     const suyas = delDia.filter(t => dueno(t) === k), sem = semana.filter(t => dueno(t) === k), ok = sem.filter(t => !abierta(t)).length;
     return `<div class="col" style="--c:var(--brand)"><h4>${k.startsWith("n:") || k === "-" ? esc(nombreDe(k)) : who(k)}<small>${suyas.filter(t => !abierta(t)).length}/${suyas.length} del día<br>semana ${sem.length ? Math.round(ok / sem.length * 100) : 0}%</small></h4>${suyas.map(tarjeta).join("") || `<div class="empty">Sin actividades este día</div>`}</div>`;
   }).join("") : `<div class="empty">No hay actividades esta semana. Agrégalas en el catálogo.</div>`;
@@ -720,7 +877,16 @@ function renderData(){
   $("#fRec").hidden = !esJefe();
   $("#rcList").innerHTML = S.acts.map(a => `<li class="item" style="--c:var(--line)"><span class="chip" style="--c:#8a8580">${esc(a.frecuencia.replace("_", " "))}</span><div><b>${esc(a.titulo)}</b>
     <small>${esc(a.responsable ? name(a.responsable) : nombreDe(a.responsable_nombre ? "n:" + a.responsable_nombre : "-"))} · ${a.dias.length ? a.dias.map(d => DC[d - 1]).join(" ") : "sin día"} · ${a.horas ? esc(a.horas.map(h => h.slice(0, 5)).join(", ")) : "sin horario"} · ${a.minutos_estimados} min</small></div>
-    ${esJefe() ? `<div class="acts"><button class="ghost warn" data-actdel="${esc(a.id)}">Quitar</button></div>` : ""}</li>`).join("");
+    ${esJefe() ? `<div class="acts"><button class="ghost" data-actpasa="${esc(a.id)}">Cambiar responsable</button><button class="ghost warn" data-actdel="${esc(a.id)}">Quitar</button></div>` : ""}</li>`).join("");
+
+  // sala de juntas: evidencias por revisar (líderes) y turnos de hoy
+  const rev = S.tareas.filter(t => t.estado === "en_revision").sort((a, b) => (a.enviada || "").localeCompare(b.enviada || ""));
+  $("#jRev").hidden = !esJefe(); $("#jRevN").textContent = rev.length;
+  $("#jRevL").innerHTML = rev.length ? rev.map(tarjeta).join("") : `<div class="empty">No hay entregas por revisar.</div>`;
+  const hoyT = S.turnos.filter(r => !r.fin || ymd(new Date(r.inicio)) === today()), hm = d => new Date(d).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" });
+  $("#jTurnos").innerHTML = hoyT.length ? hoyT.map(r => `<li class="item" style="--c:${r.fin ? "var(--line)" : "var(--ok)"}"><span class="chip" style="--c:${r.fin ? "#8a8580" : "#3fbf6a"}">${r.fin ? "Cerrado" : "En turno"}</span>
+    <div><b>${who(r.usuario)}</b><small>Entrada ${esc(hm(r.inicio))}${ymd(new Date(r.inicio)) !== today() ? " (ayer)" : ""} · ${r.fin ? `salida ${esc(hm(r.fin))}` : "sigue en turno"} · ${esc(dur((r.fin ? Date.parse(r.fin) : Date.now()) - Date.parse(r.inicio)))}</small></div></li>`).join("")
+    : `<li class="empty">Nadie ha abierto turno hoy.</li>`;
 
   // dashboards y herramientas
   const cards = (list, vacio) => list.length ? list.map(d => `<div class="card"><b>${esc(d.name)}</b>${d.desc ? `<p>${esc(d.desc)}</p>` : ""}
@@ -801,6 +967,11 @@ $("#panel").addEventListener("click", async e => {
 });
 $("#panel").addEventListener("click", e => {
   const m = e.target.closest("button[data-mv]"); if (m) { m.disabled = true; mover(m.dataset.id, m.dataset.mv); return; }
+  const tarea = id => S.tareas.find(t => t.id === id);
+  const en = e.target.closest("button[data-entregar]"); if (en) return entregar(tarea(en.dataset.entregar));
+  const rv = e.target.closest("button[data-revisar]"); if (rv) return revisar(tarea(rv.dataset.revisar));
+  const ps = e.target.closest("button[data-pasar]"); if (ps) return pasar(tarea(ps.dataset.pasar));
+  const pa = e.target.closest("button[data-actpasa]"); if (pa) return pasar(null, S.acts.find(a => a.id === pa.dataset.actpasa));
   const dia = e.target.closest("button[data-dia]"); if (dia) { S.dia = +dia.dataset.dia; renderData(); return; }
   const d = e.target.closest("button[data-tdel]");
   if (d) return confirmDel(d, async () => { const { error } = await S.sb.from("cm_tareas").delete().eq("id", d.dataset.tdel); if (error) toast(errMsg(error)); else load("tareas"); });
@@ -815,9 +986,20 @@ $("#panel").addEventListener("click", e => {
 const quienDb = v => v.startsWith("n:") ? { responsable_nombre:v.slice(2) } : { responsable:v };
 $("#fMis").onsubmit = async e => { e.preventDefault(); const t = $("#mTitle").value.trim(), d = $("#mDue").value; if (!t || !d) return;
   const limite = new Date(`${d}T${$("#mHora").value || "18:00"}:00`).toISOString();
-  const { error } = await S.sb.from("cm_tareas").insert({ titulo:t, prioridad:$("#mPri").value, limite, ...quienDb($("#mOwner").value) });
+  const { error } = await S.sb.from("cm_tareas").insert({ titulo:t, categoria:$("#mCat").value || sugerencia(t).cat, prioridad:$("#mPri").value, limite, ...quienDb($("#mOwner").value) });
   if (error) { toast(errMsg(error)); return; }
-  $("#mTitle").value = ""; load("tareas"); };
+  $("#mTitle").value = ""; $("#mSug").textContent = ""; delete $("#mCat").dataset.tocado; delete $("#mOwner").dataset.tocado; $("#mCat").value = ""; load("tareas"); };
+// al escribir el pendiente se sugieren categoría y responsable, mientras no se hayan elegido a mano
+function sugerirPendiente(){
+  const t = $("#mTitle").value.trim(); if (!t) { $("#mSug").textContent = ""; return; }
+  const s = sugerencia(t, $("#mCat").dataset.tocado ? $("#mCat").value : null);
+  if (s.cat && !$("#mCat").dataset.tocado) $("#mCat").value = s.cat;
+  if (s.quien && !$("#mOwner").dataset.tocado && gente().includes(s.quien)) $("#mOwner").value = s.quien;
+  $("#mSug").innerHTML = s.quien ? `Sugerido: <b>${esc(nombreDe(s.quien))}</b>${s.n ? ` · lleva ${s.n} ${s.n === 1 ? "actividad" : "actividades"} de ${esc(s.cat)}` : ""}` : "";
+}
+$("#mTitle").addEventListener("input", () => { clearTimeout(sugerirPendiente.h); sugerirPendiente.h = setTimeout(sugerirPendiente, 250); });
+$("#mCat").addEventListener("change", () => { $("#mCat").dataset.tocado = 1; sugerirPendiente(); });
+$("#mOwner").addEventListener("change", () => { $("#mOwner").dataset.tocado = 1; });
 $("#fRec").onsubmit = async e => { e.preventDefault(); const t = $("#rcTitle").value.trim(); if (!t) return;
   const dias = [...document.querySelectorAll("#rcDays input:checked")].map(x => +x.value);
   if (!dias.length) { toast("Elige al menos un día"); return; }
@@ -828,7 +1010,7 @@ $("#fRec").onsubmit = async e => { e.preventDefault(); const t = $("#rcTitle").v
   $("#rcTitle").value = ""; document.querySelectorAll("#rcDays input").forEach(x => x.checked = false);
   await S.sb.rpc("cm_generar_semana"); load("acts"); load("tareas"); };
 // el reloj de las tareas en proceso avanza solo mientras la sala está abierta
-setInterval(() => { if (S.panel === "pendientes" || S.panel === "recurrentes") renderData(); }, 30000);
+setInterval(() => { if (S.panel === "pendientes" || S.panel === "recurrentes" || S.panel === "juntas") renderData(); pintarTurno(); }, 30000);
 $("#fCam").onsubmit = e => { e.preventDefault(); const t = $("#cTitle").value.trim(); if (!t) return;
   addDoc("changes", { title:t, sys:$("#cSys").value.trim(), det:$("#cDet").value.trim(), status:"propuesto", by:me(), at:Date.now() });
   $("#cTitle").value = $("#cSys").value = $("#cDet").value = ""; };
@@ -1278,6 +1460,7 @@ const sb_tips = () => {
   const toca = ab.filter(t => t.actividad_id && t.responsable === me() && diaDe(t) === today()).length, lider = xpTable()[0];
   const t = [];
   if (S.uid && !S.players[S.uid]) t.push("Pasa al Armario a armar tu personaje");
+  if (S.uid && !miTurno()) t.push("No olvides abrir tu turno (botón arriba a la izquierda)");
   if (venc) t.push(`¡Ojo! Tienes ${venc} ${venc === 1 ? "tarea vencida" : "tareas vencidas"}`);
   t.push(mias ? `Tienes ${mias} ${mias === 1 ? "tarea abierta" : "tareas abiertas"}` : "No tienes tareas abiertas");
   if (toca) t.push(`Hoy tocan ${toca} ${toca === 1 ? "actividad" : "actividades"} de la semana`);
@@ -1567,7 +1750,7 @@ const typing = () => /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagNam
 addEventListener("keydown", e => {
   if (S.mode === "ready" && !typing()) { e.preventDefault(); startGame(); return; }
   if (S.mode !== "play") return;
-  if (e.key === "Escape") { if (!$("#msgs").hidden) closeMsgs(); else if (S.panel) closePanel(); else if (!$("#chat").hidden) closeChat(); else if (S.paused) closePause(); else openPause(); return; }
+  if (e.key === "Escape") { if (!$("#mdl").hidden) cerrarMdl(); else if (!$("#msgs").hidden) closeMsgs(); else if (S.panel) closePanel(); else if (!$("#chat").hidden) closeChat(); else if (S.paused) closePause(); else openPause(); return; }
   if (typing()) return;
   if (e.key === " ") { e.preventDefault(); if (S.paused) closePause(); else if (!S.panel && $("#msgs").hidden) openPause(); return; }
   if ((e.key === "c" || e.key === "C") && !S.panel) { e.preventDefault(); $("#msgs").hidden ? openMsgs() : closeMsgs(); return; }
@@ -1777,8 +1960,9 @@ async function entrar(){
   const { data:esMiembro } = await S.sb.rpc("cm_es_miembro");
   if (!esMiembro) { S.canWrite = false; toast("Tu usuario no tiene perfil en RH GB. Pide que lo activen."); }
   const { data:jf } = await S.sb.rpc("cm_jefes"); S.jefes = (jf || []).map(r => r.id);
+  await S.sb.rpc("cm_vincular_cuenta");    // si esta persona tenía tareas a su nombre "sin cuenta", pasan a su usuario
   await S.sb.rpc("cm_generar_semana");     // crea las tareas de la semana si aún no existen (no repite)
-  await Promise.all(["tareas","acts","changes","portals","players","sols","msgs"].map(load));
+  await Promise.all(["tareas","acts","turnos","changes","portals","players","sols","msgs"].map(load));
   await refreshProfiles();
   if (S.players[S.uid]) S.fig = S.players[S.uid].fig;
 
@@ -1786,7 +1970,7 @@ async function entrar(){
   const espera = {};
   const recargar = col => { clearTimeout(espera[col]); espera[col] = setTimeout(() => load(col), 250); };
   let datos = S.sb.channel("cm-datos");
-  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
+  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
     datos = datos.on("postgres_changes", { event:"*", schema:"public", table:t }, () => recargar(col));
   datos.subscribe();
   S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
@@ -1798,7 +1982,7 @@ async function entrar(){
   P.wave = 2.8; playG("saluda");
   G.tip = S.players[S.uid] ? `¡Hola${firstName(S.uid) ? ", " + firstName(S.uid) : ""}! Bienvenido a la oficina` : `¡Hola${firstName(S.uid) ? ", " + firstName(S.uid) : ""}! Pasa al Armario a armar tu personaje`;
   G.tipUntil = performance.now() + 5000; G.until = performance.now() + 6000;
-  $("#hint").hidden = false; $("#pauseBtn").hidden = false; $("#chatBtn").hidden = false; hintUntil = performance.now() + 9000;
+  $("#hint").hidden = false; $("#pauseBtn").hidden = false; $("#chatBtn").hidden = false; $("#turnoBtn").hidden = false; pintarTurno(); hintUntil = performance.now() + 9000;
   iris(1); IRIS.r = 0; IRIS.from = 0; IRIS.t0 = performance.now();
   cv.focus();
 }
