@@ -206,6 +206,11 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
 .link:hover{color:#1f1f1f}
 #armReset{right:22px}
 #armMis{left:22px}
+.giro{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
+.giro button{width:38px;height:38px;border-radius:50%;border:0;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);font-size:20px;line-height:1;cursor:pointer;color:#1f1f1f}
+.giro button:hover{background:#f4f2f0}
+#armFig{cursor:grab;touch-action:pan-y;user-select:none}
+#armFig img{pointer-events:none}
 .outfits{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .outfit{border:1.5px solid #e4e0dc;border-radius:6px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:8px;background:#fff}
 .outfit.on{border:2px solid var(--brand)}
@@ -402,6 +407,7 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
               <div class="fig" id="armFig" role="img" aria-label="Tu personaje"></div>
               <button class="link" id="armMis" type="button">Mis diseños</button>
               <button class="link" id="armReset" type="button">Restablecer</button>
+              <div class="giro"><button type="button" id="armIzq" aria-label="Girar a la izquierda">⟲</button><button type="button" id="armDer" aria-label="Girar a la derecha">⟳</button></div>
             </div>
           </div>
         </div>
@@ -770,12 +776,14 @@ $("#fDash").onsubmit = e => { e.preventDefault(); addLink("dashboard", "#dName",
 $("#fTool").onsubmit = e => { e.preventDefault(); addLink("herramienta", "#tName", "#tUrl", "#tDesc"); };
 
 // ---------- armario: catálogo a la izquierda, figura armada con capas a la derecha ----------
-const ARM = { tab:0, saved:null, visto:new Set([0]) };
-const legoSrc = id => `lego/${id}.webp`, miniSrc = id => `lego/${id}_m.webp`;
+const ARM = { tab:0, saved:null, visto:new Set([0]), vista:0 };
+// v = vista 0..7: la figura girada de 45 en 45 grados (0 de frente, 2 mirando a la derecha, 4 de espalda, 6 a la izquierda)
+const legoSrc = (id, v = 0) => `lego/${id}${v ? `_v${v}` : ""}.webp`, miniSrc = id => `lego/${id}_m.webp`;
+const NV = () => LEGO?.vistas || 1;
 const opciones = k => (LEGO && LEGO[k]) || [];
 // los nombres genéricos ("Peinado 3") no se muestran; los que dicen algo (tonos, uniformes, accesorios) sí
 const etiqueta = n => /^(Expresión|Rostro con detalle|Peinado|Torso|Piernas|Accesorio|Tono) \d+$/.test(n) ? "" : n;
-function pintarFig(el, f){ el.innerHTML = capas(f).map((id, i) => `<img src="${legoSrc(id)}" alt="" style="z-index:${i + 1}">`).join(""); }
+function pintarFig(el, f, v = 0){ el.innerHTML = capas(f).map((id, i) => `<img src="${legoSrc(id, v)}" alt="" style="z-index:${i + 1}">`).join(""); }
 function renderArm(){
   const f = S.fig, tab = ARM_TABS[ARM.tab];
   $("#armTabs").innerHTML = ARM_TABS.map((t, i) => { const v = f[t.k] || opciones(t.k)[0]?.id;
@@ -793,8 +801,16 @@ function renderArm(){
         return `<button type="button" class="tile" aria-pressed="${on}" data-k="${tab.k}" data-v="${esc(o.id)}" title="${esc(o.nombre)}"><img src="${miniSrc(o.id)}" alt="${esc(o.nombre)}" loading="lazy">${n ? `<span>${esc(n)}</span>` : ""}${on ? '<i class="chk">✓</i>' : ""}</button>`; }).join("")}</div>`;
     }).join("");
   }
-  pintarFig($("#armFig"), f);
+  pintarFig($("#armFig"), f, ARM.vista);
 }
+function girarArm(d){ ARM.vista = (ARM.vista + d + NV()) % NV(); pintarFig($("#armFig"), S.fig, ARM.vista); }
+$("#armIzq").onclick = () => girarArm(-1);
+$("#armDer").onclick = () => girarArm(1);
+// arrastrar la figura a los lados también la gira
+{ let x0 = null;
+  $("#armFig").addEventListener("pointerdown", e => { x0 = e.clientX; });
+  addEventListener("pointermove", e => { if (x0 === null) return; const d = Math.trunc((e.clientX - x0) / 40); if (d) { girarArm(-Math.sign(d)); x0 = e.clientX; } });
+  addEventListener("pointerup", () => { x0 = null; }); }
 function armView(v){ $("#armEd").hidden = v !== "ed"; $("#armCheck").hidden = v !== "check"; $("#armRes").hidden = v !== "res"; }
 $("#panel").addEventListener("click", async e => {
   if (!e.target.closest("[data-sec=armario]")) return;
@@ -838,18 +854,19 @@ function capas(f){
 }
 const IMG = new Map(), FIGC = new Map();
 let repinta = 0;
-function capaImg(id){
-  let im = IMG.get(id);
-  if (!im) { im = new Image(); im.src = legoSrc(id); IMG.set(id, im);
+function capaImg(id, v = 0){
+  const clave = id + "|" + v;
+  let im = IMG.get(clave);
+  if (!im) { im = new Image(); im.src = legoSrc(id, v); IMG.set(clave, im);
     im.onload = () => { clearTimeout(repinta); repinta = setTimeout(() => { if (S.uid) renderData(); }, 200); }; }
   return im;
 }
 // la figura armada a la mitad del tamaño del lienzo, en caché por combinación de piezas.
 // Se guarda también separada en piernas y el resto, para mover cada pierna al caminar.
-function figPartes(f){
+function figPartes(f, v = 0){
   if (!LEGO) return null;
-  const ids = capas(f), key = ids.join("|"); if (FIGC.has(key)) return FIGC.get(key);
-  const ims = ids.map(capaImg); if (!ims.every(i => i.complete && i.naturalWidth)) return null;
+  const ids = capas(f), key = ids.join("|") + "@" + v; if (FIGC.has(key)) return FIGC.get(key);
+  const ims = ids.map(id => capaImg(id, v)); if (!ims.every(i => i.complete && i.naturalWidth)) return null;
   const [w, h] = LEGO.lienzo, mk = () => { const c = document.createElement("canvas"); c.width = w / 2; c.height = h / 2; return c; };
   const p = { todo:mk(), sup:mk(), pie:mk() };
   ims.forEach((im, i) => { p.todo.getContext("2d").drawImage(im, 0, 0, w / 2, h / 2); (ids[i].startsWith("piernas") ? p.pie : p.sup).getContext("2d").drawImage(im, 0, 0, w / 2, h / 2); });
@@ -857,16 +874,16 @@ function figPartes(f){
 }
 const figCanvas = f => figPartes(f)?.todo || null;
 // (x,y) son los pies. Mismo alto que el GBSaurio (96 px a escala 1.25).
-// o.amp 0..1 = qué tan rápido camina (pasos y balanceo), o.phase = ciclo del paso, o.face -1..1 = hacia dónde mira (pasa por 0 al girar),
-// o.lean = inclinación hacia donde avanza, o.wave = brinco de saludo
+// o.amp 0..1 = qué tan rápido camina (pasos y balanceo), o.phase = ciclo del paso, o.ang = hacia dónde mira en grados
+// (0 hacia abajo del mapa, de frente; 90 a la derecha; 180 hacia arriba, de espalda), o.lean = inclinación, o.wave = brinco de saludo
 function drawFig(c, x, y, f, o = {}){
   const s = o.s || 1, amp = o.amp ?? (o.walking ? 1 : 0), ph = o.phase || 0;
   const bob = Math.abs(Math.sin(ph)) * 4 * s * amp + (o.wave ? Math.abs(Math.sin(o.wave * 6)) * 8 * s : 0);
   c.fillStyle = "rgba(0,0,0,.28)"; c.beginPath(); c.ellipse(x, y, (16 - bob * .4) * s, 5 * s, 0, 0, 7); c.fill();
-  const p = figPartes(f); if (!p) return;
+  const v = ((Math.round((o.ang || 0) / 360 * NV()) % NV()) + NV()) % NV();
+  const p = figPartes(f, v) || figPartes(f); if (!p) return;     // mientras baja la vista nueva, la de frente
   const { arriba, abajo, cx } = LEGO.figura, corte = (LEGO.corte_piernas ?? abajo) / 2, k = 77 * s * 2 / (abajo - arriba);
-  const face = o.face ?? (o.dir === 2 ? -1 : 1), giro = Math.sign(face || 1) * Math.max(.22, Math.abs(face));
-  c.save(); c.translate(x, y); c.rotate(o.lean || 0); c.scale(giro * k, k); c.translate(-cx / 2, -abajo / 2);
+  c.save(); c.translate(x, y); c.rotate(o.lean || 0); c.scale(k, k); c.translate(-cx / 2, -abajo / 2);
   const W = p.pie.width, Hp = p.pie.height, mitad = cx / 2, b = bob / k;
   // cadera fija; cada pierna se levanta y se acorta un poco al dar el paso (como en los juegos de LEGO)
   c.drawImage(p.pie, 0, 0, W, corte, 0, -b, W, corte);
@@ -1180,7 +1197,9 @@ function findPath(sx, sy, tx, ty){
 }
 
 // ============================================================ PERSONAJES
-const P = { x:SPAWN[0], y:SPAWN[1], dir:0, phase:0, walking:false, path:null, onArrive:null, wave:0, vx:0, vy:0, amp:0, face:1, faceT:1, lean:0 };
+const P = { x:SPAWN[0], y:SPAWN[1], dir:0, phase:0, walking:false, path:null, onArrive:null, wave:0, vx:0, vy:0, amp:0, ang:0, angT:0, lean:0 };
+// gira el ángulo hacia la meta por el lado corto, rápido pero sin brincar
+function girarHacia(a, meta, dt){ const d = ((meta - a) % 360 + 540) % 360 - 180; return a + d * Math.min(1, dt * 11); }
 const G = { x:SPAWN[0] + 110, y:SPAWN[1] - 10, path:null, frame:"frente", seq:null, until:0, talk:false, tipAt:0, tip:"", tipUntil:0, celebrate:false, lastStep:0, stepI:0 };
 const SEQ = {   // [cuadros, ms por cuadro, repeticiones], igual que el asistente de RH
   saluda:[["saluda","quieto","saluda","quieto","saluda","frente"], 260, 1], fiesta:[["fiesta1","fiesta2","fiesta3","fiesta4","fiesta5","fiesta6","fiesta7","fiesta8","fiesta9"], 95, 2],
@@ -1588,17 +1607,18 @@ function frame(now){
     const vel = Math.hypot(P.x - ox, P.y - oy) / Math.max(dt, .001);
     P.walking = vel > 18; P.amp += (Math.min(1, vel / VMAX) - P.amp) * Math.min(1, dt * 10);
     P.phase += dt * vel * .06;
-    if (Math.abs(P.vx) > 20) P.faceT = Math.sign(P.vx);
-    P.face += ((P.faceT || 1) - P.face) * Math.min(1, dt * 11);
+    if (Math.hypot(P.vx, P.vy) > 20) P.angT = Math.atan2(P.vx, P.vy) * 180 / Math.PI;
+    P.ang = girarHacia(P.ang, P.angT, dt);
     P.lean += ((P.vx / VMAX) * .08 - P.lean) * Math.min(1, dt * 8);
     if (P.walking) P.dir = Math.abs(P.vx) > Math.abs(P.vy) ? (P.vx < 0 ? 2 : 3) : (P.vy < 0 ? 1 : 0);
-    if (P.path && !P.path.length) { P.path = null; P.target = null; P.vx = P.vy = 0; const cb = P.onArrive; P.onArrive = null; P.dir = 0; if (cb) cb(); }
+    if (P.path && !P.path.length) { P.path = null; P.target = null; P.vx = P.vy = 0; const cb = P.onArrive; P.onArrive = null; P.dir = 0; P.angT = 0; if (cb) cb(); }
     if (P.wave > 0) P.wave = Math.max(0, P.wave - dt);
     for (const r of Object.values(S.remote)) {
-      const ox2 = r.x; r.x += (r.tx - r.x) * Math.min(1, dt * 8); r.y += (r.ty - r.y) * Math.min(1, dt * 8);
-      const v = (r.x - ox2) / Math.max(dt, .001);
+      const ox2 = r.x, oy2 = r.y; r.x += (r.tx - r.x) * Math.min(1, dt * 8); r.y += (r.ty - r.y) * Math.min(1, dt * 8);
+      const v = (r.x - ox2) / Math.max(dt, .001), vy = (r.y - oy2) / Math.max(dt, .001);
       r.amp = (r.amp || 0) + ((r.walking ? 1 : 0) - (r.amp || 0)) * Math.min(1, dt * 8); r.phase += dt * 14 * r.amp;
-      if (Math.abs(v) > 15) r.faceT = Math.sign(v); r.face = (r.face ?? 1) + ((r.faceT || 1) - (r.face ?? 1)) * Math.min(1, dt * 11);
+      if (Math.hypot(v, vy) > 15) r.angT = Math.atan2(v, vy) * 180 / Math.PI; else if (!r.walking) r.angT = 0;
+      r.ang = girarHacia(r.ang || 0, r.angT || 0, dt);
       r.lean = (r.lean || 0) + (Math.max(-1, Math.min(1, v / 235)) * .08 - (r.lean || 0)) * Math.min(1, dt * 8);
     }
     if (cam.follow) { cam.x += (P.x - cam.x) * Math.min(1, dt * 4); cam.y += (P.y - 60 - cam.y) * Math.min(1, dt * 4); clampCam(); }
@@ -1616,9 +1636,9 @@ function draw(t, dt){
   drawLive(ctx, t);
   if (P.target) { ctx.strokeStyle = "rgba(238,102,2,.9)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(P.target[0], P.target[1], 16 + Math.sin(t / 200) * 3, 7, 0, 0, 7); ctx.stroke(); }
   const ents = [
-    ...Object.values(S.remote).map(r => ({ y:r.y, f:() => drawFig(ctx, r.x, r.y, r.fig, { phase:r.phase, amp:r.amp || 0, face:r.face ?? 1, lean:r.lean || 0, s:1.25 }) })),
+    ...Object.values(S.remote).map(r => ({ y:r.y, f:() => drawFig(ctx, r.x, r.y, r.fig, { phase:r.phase, amp:r.amp || 0, ang:r.ang || 0, lean:r.lean || 0, s:1.25 }) })),
     { y:G.y, f:() => drawG(ctx) },
-    { y:P.y, f:() => drawFig(ctx, P.x, P.y, S.fig, { phase:P.phase, amp:P.amp, face:P.face, lean:P.lean, s:1.25, wave:P.wave }) },
+    { y:P.y, f:() => drawFig(ctx, P.x, P.y, S.fig, { phase:P.phase, amp:P.amp, ang:P.ang, lean:P.lean, s:1.25, wave:P.wave }) },
   ].sort((a, b) => a.y - b.y);
   ents.forEach(e => e.f());
   // capa de pantalla: nombres, globos, marcadores, XP y círculo
