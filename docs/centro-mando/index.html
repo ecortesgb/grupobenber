@@ -162,6 +162,19 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
 .turnobtn{position:fixed;top:max(12px,env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));z-index:6;border:1px solid #3a332e;background:rgba(18,16,15,.85);border-radius:999px;padding:9px 14px;font-weight:800;font-size:13px;color:#fff;display:flex;align-items:center;gap:8px}
 .turnobtn i{width:9px;height:9px;border-radius:50%;background:#8a8580;display:inline-block}
 .turnobtn.on{border-color:var(--ok)}.turnobtn.on i{background:var(--ok)}
+.tabla-w{max-height:62vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.tabla{width:100%;border-collapse:collapse;font-size:12.5px}
+.tabla th,.tabla td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.tabla th{position:sticky;top:0;background:var(--panel2);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cam-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.cam-bar input{flex:1;min-width:180px}
+.on-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:6px;vertical-align:middle}
+.lineabtn{top:calc(max(12px,env(safe-area-inset-top,0px)) + 46px)!important}
+.junta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--panel2);border-radius:8px;padding:12px;margin-bottom:16px}
+.junta b{flex:1;min-width:200px}
+.llam{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
+.llam label{display:flex;gap:8px;align-items:center;background:var(--panel2);border-radius:6px;padding:8px;font-size:13px;cursor:pointer}
+.llam input{width:auto;margin:0;flex:none}
 .cat{margin-top:14px}.cat summary{cursor:pointer;font-weight:700;color:var(--muted);margin-bottom:8px}
 .dias{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0}.dias label{font-size:12px;display:flex;gap:3px;align-items:center;text-transform:none;letter-spacing:0}
 .rank{display:grid;grid-template-columns:34px 52px minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--panel2);border-radius:8px;padding:8px 14px}
@@ -409,6 +422,18 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
       </section>
 
       <section data-sec="cambios">
+        <div class="seg" id="camTabs" style="margin-bottom:12px"><button type="button" data-cam="bit" aria-pressed="true">Bitácora de cambios</button><button type="button" data-cam="usr" aria-pressed="false">Usuarios y acceso</button><button type="button" data-cam="aud" aria-pressed="false">Auditoría</button></div>
+        <div id="camUsr" hidden>
+          <p class="sub">Todas las cuentas. Las del equipo entran con su usuario y contraseña al Centro de Mando y a los tableros que tengan marcados (en Pospago ven los DN completos). Aquí se reinician claves y se quita o devuelve el acceso; las cuentas nuevas se crean con <code>crear_usuario.py</code>.</p>
+          <div class="cam-bar"><input id="uBus" placeholder="Buscar nombre o usuario" aria-label="Buscar usuario"><div class="seg" id="uFil"><button type="button" data-ufil="equipo" aria-pressed="true">Equipo</button><button type="button" data-ufil="todos" aria-pressed="false">Todas las cuentas</button></div></div>
+          <ul class="list" id="uLista"></ul>
+        </div>
+        <div id="camAud" hidden>
+          <p class="sub" id="audSub"></p>
+          <div class="cam-bar"><input id="audBus" placeholder="Buscar quién, tabla, registro o cambio" aria-label="Buscar en auditoría"><div class="seg" id="audTipo"><button type="button" data-aud="cambios" aria-pressed="true">Cambios</button><button type="button" data-aud="lecturas" aria-pressed="false">Lecturas de datos sensibles</button></div><button type="button" class="ghost" id="audCsv">Exportar CSV</button></div>
+          <div class="tabla-w"><table class="tabla" id="audT"></table></div>
+        </div>
+        <div id="camBit">
         <p class="sub">Cambios a reportes, procesos o sistemas. Flujo: propuesto, aprobado, aplicado.</p>
         <div class="ro" hidden>Tienes acceso de solo lectura.</div>
         <form class="add" id="fCam">
@@ -418,6 +443,7 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
           <button class="btn">Registrar</button>
         </form>
         <ul class="list" id="cList"></ul>
+        </div>
       </section>
 
       <section data-sec="armario">
@@ -449,6 +475,7 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
       </section>
 
       <section data-sec="juntas">
+        <div class="junta"><b>Junta del equipo en Teams</b><a class="btn" href="https://teams.microsoft.com/meet/255701640950166?p=qQYRolecwRuRAHTTmw" target="_blank" rel="noopener" style="text-decoration:none">Entrar a la junta</a><button type="button" class="ghost" id="jLlamar">Llamar a la junta</button></div>
         <div id="jRev" hidden><h3 style="font-size:22px;margin-bottom:8px">Evidencias por revisar <span id="jRevN" class="chip" style="--c:#b48cf0"></span></h3><div class="kan gente" id="jRevL" style="margin-bottom:16px"></div></div>
         <h3 style="font-size:22px;margin-bottom:8px">Turnos de hoy</h3><ul class="list" id="jTurnos" style="margin-bottom:16px"></ul>
         <p class="sub">Pide una autorización, ayuda o resuelve una duda con dirección. Cada solicitud solo la ven quien la pide y a quien se le pide.</p>
@@ -463,16 +490,6 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
         </form>
         <h3 style="font-size:22px">Mis solicitudes</h3>
         <ul class="list" id="jMias"></ul>
-      </section>
-
-      <section data-sec="usuarios">
-        <p class="sub">Quién del equipo entra a qué. Con su usuario y contraseña abren el Centro de Mando y los tableros que tengan marcados; en Pospago ven los DN completos. Los cambios valen desde su siguiente entrada.</p>
-        <ul class="list" id="uLista"></ul>
-        <form class="add" id="fUsr" style="grid-template-columns:2fr auto;margin-top:14px">
-          <label class="f">Agregar al equipo (cuentas que ya existen)<select id="uNuevo"></select></label>
-          <button class="btn">Agregar</button>
-        </form>
-        <p class="sub" style="margin-top:14px">Contraseñas y activar o quitar cuentas se hacen en RH, porque ahí se pide la verificación en dos pasos: <a href="https://ecortesgb.github.io/grupobenber/rh/" target="_blank" rel="noopener" style="color:var(--brand-l)">abrir RH › Usuarios</a>. Una cuenta nueva se crea con <code>crear_usuario.py</code> y luego se agrega aquí.</p>
       </section>
 
       <section data-sec="fama">
@@ -501,6 +518,7 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
 <div class="toast" id="toast" hidden></div>
 <div class="mdl" id="mdl" hidden role="dialog" aria-modal="true"><div class="mdl-in" id="mdlIn"></div></div>
 <button class="turnobtn" id="turnoBtn" type="button" hidden></button>
+<button class="turnobtn lineabtn" id="lineaBtn" type="button" hidden title="Quién está en la oficina · abre el chat"></button>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>window.CM_CFG = {"url": "https://pzbesenfqcbfvmyuerfq.supabase.co", "key": "sb_publishable_TEbzoyAkjdJIRR91xjWMhA_tXBJWxKQ", "dominio": "@usuarios.rhgb.app"};</script>
@@ -542,7 +560,7 @@ const ARM_TABS = [
 const dayIdx = () => (new Date().getDay() + 6) % 7 + 1;   // 1 = lunes
 const S = {
   sb:null, ch:null, chReady:false, uid:null, canWrite:true, session:null,
-  tareas:[], acts:[], xpt:{}, evid:{}, turnos:[], changes:[], portals:[], players:{}, profiles:{},
+  tareas:[], acts:[], xpt:{}, evid:{}, turnos:[], acc:[], usr:null, aud:[], llVistas:null, changes:[], portals:[], players:{}, profiles:{},
   sols:[], solSeen:null, jefes:[], msgs:[], msgSeen:0, conv:"grupo",
   fig:{ ...GENERIC }, outfits:[], remote:{}, floaters:[], keys:{}, filter:"activas", dia:dayIdx(),
   mode:"boot", panel:null, paused:false, busy:false,
@@ -612,9 +630,12 @@ async function load(col){
     const { data, error } = await S.sb.from("cm_evidencias").select("*").order("subida"); if (error) return;
     S.evid = {}; data.forEach(e => (S.evid[e.tarea_id] ||= []).push(e)); renderData(); return;
   }
-  if (col === "usuarios") {
-    const { data, error } = await S.sb.rpc("cm_usuarios"); if (error) { toast("No se pudo leer el equipo"); return; }
-    S.usr = data; renderUsuarios(); return;
+  if (col === "llamadas") {
+    const desde = new Date(Date.now() - 10 * 60000).toISOString();
+    const { data, error } = await S.sb.from("cm_llamadas").select("*").gte("creado", desde).order("creado"); if (error) return;
+    const primera = !S.llVistas; S.llVistas ||= new Set();
+    for (const l of data) { if (S.llVistas.has(l.id)) continue; S.llVistas.add(l.id); if (!primera && l.de !== me() && l.para.includes(me())) teLlaman(l); }
+    return;
   }
   if (col === "turnos") {
     const desde = new Date(); desde.setDate(desde.getDate() - 1); desde.setHours(0, 0, 0, 0);
@@ -714,7 +735,7 @@ async function mover(id, acc, nota){
 // ---------- ventanas: entregar con captura, revisar evidencia, pasar a otra persona ----------
 let MDL = null;
 function abrirMdl(html, estado){ MDL = estado || {}; $("#mdlIn").innerHTML = html; $("#mdl").hidden = false; $("#mdlIn").querySelector("button,input,select,textarea")?.focus(); }
-function cerrarMdl(){ if (MDL?.urls) MDL.urls.forEach(URL.revokeObjectURL); MDL = null; $("#mdl").hidden = true; $("#mdlIn").innerHTML = ""; }
+function cerrarMdl(){ if (MDL?.urls) MDL.urls.forEach(URL.revokeObjectURL); if (MDL?.mfa) MDL.mfa(false); MDL = null; $("#mdl").hidden = true; $("#mdlIn").innerHTML = ""; }
 // la captura lleva una franja con quién, cuándo y qué tarea (se sube en JPG, máximo 2000 px de ancho)
 async function sellar(file, t){
   if (!file.type.startsWith("image/")) return file;
@@ -777,6 +798,14 @@ function pasar(t, act){
 $("#mdl").addEventListener("click", async e => {
   if (e.target === $("#mdl") || e.target.closest("[data-cerrar]")) return cerrarMdl();
   if (e.target.closest("#evEnviar")) return enviarEv();
+  if (e.target.closest("#llOk")) return enviarLlamada();
+  if (e.target.closest("#rtCopiar")) { try { await navigator.clipboard.writeText($("#rtC").value); toast("Copiada"); } catch { $("#rtC").select(); } return; }
+  if (e.target.closest("#mfaOk") && MDL?.mfa) {
+    const c = $("#mfaC").value.trim(); if (!/^\d{6}$/.test(c)) { toast("Escribe los 6 dígitos"); return; }
+    const { error } = await S.sb.auth.mfa.challengeAndVerify({ factorId:MDL.factor, code:c });
+    if (error) { toast("Código incorrecto o vencido"); $("#mfaC").value = ""; $("#mfaC").focus(); return; }
+    const res = MDL.mfa; MDL.mfa = null; cerrarMdl(); res(true); return;
+  }
   const r = e.target.closest("button[data-rev]");
   if (r && MDL?.rev) { const nota = $("#revNota").value.trim(), t = MDL.rev;
     if (r.dataset.rev === "rechazar" && !nota) { toast("Escribe qué falta para que lo corrija"); $("#revNota").focus(); return; }
@@ -794,44 +823,151 @@ $("#mdl").addEventListener("dragover", e => { if (e.target.closest("#evDrop")) {
 $("#mdl").addEventListener("drop", e => { if (e.target.closest("#evDrop")) { e.preventDefault(); $("#evDrop").classList.remove("on"); agregarEv([...e.dataTransfer.files]); } });
 addEventListener("paste", e => { if (MDL?.t && e.clipboardData?.files.length) { e.preventDefault(); agregarEv([...e.clipboardData.files]); } });
 
-// ---------- usuarios y acceso (solo líderes): quién del equipo entra a qué tablero ----------
-const TABS = [["centro", "Centro de Mando"], ["pospago", "Pospago"], ["elektra", "Elektra"], ["avance", "Avance GB"]];
-function renderUsuarios(){
-  const u = S.usr; if (!u) return;
-  const f = d => d ? new Date(d).toLocaleString("es-MX", { dateStyle:"medium", timeStyle:"short" }) : "nunca ha entrado";
-  $("#uLista").innerHTML = u.equipo.map(x => {
-    const st = !x.id ? ["Sin cuenta", "#ff6b5e"] : !x.activo ? ["Sin acceso", "#ff6b5e"] : x.debe_cambiar_clave ? ["Clave temporal", "#ffcc33"] : ["Activo", "#3fbf6a"];
-    const yo = x.id === me();
-    return `<li class="item" style="--c:${st[1]}"><span class="chip" style="--c:${st[1]}">${st[0]}</span>
-      <div><b>${x.id ? who(x.id) : esc(x.nombre)}</b><small>${esc(x.usuario)} · ${esc(x.rol || "sin rol")} · último ingreso: ${esc(f(x.ultimo))}</small></div>
-      <div class="acts seg">${TABS.map(([k, l]) => `<button type="button" aria-pressed="${x.tableros.includes(k)}" data-uacc="${esc(x.usuario)}" data-tab="${k}"${yo && k === "centro" ? ' disabled title="No puedes quitarte el Centro de Mando"' : ""}>${l}</button>`).join("")}
-      ${yo ? "" : `<button class="ghost warn" type="button" data-uquitar="${esc(x.usuario)}">Quitar del equipo</button>`}</div></li>`;
-  }).join("");
-  $("#uNuevo").innerHTML = u.otros.length ? u.otros.map(o => `<option value="${esc(o.usuario)}">${esc(o.nombre)} · ${esc(o.usuario)} · ${esc(o.rol)}</option>`).join("") : `<option value="">No hay más cuentas activas</option>`;
+// ---------- accesos: Control de Cambios es solo para quien lo tenga (hoy Elías y Oscar) ----------
+const tengo = a => S.acc.includes(a);
+const SIN_ACCESO = { cambios:"Control de Cambios es solo para Elías y Oscar." };
+
+// ---------- verificación en dos pasos (la misma de RH) para usuarios y auditoría ----------
+async function dosPasos(){
+  const m = S.sb.auth.mfa, { data:a } = await m.getAuthenticatorAssuranceLevel();
+  if (a?.currentLevel === "aal2") return true;
+  const { data:f } = await m.listFactors(), ver = (f?.totp || []).find(x => x.status === "verified");
+  if (!ver) { toast("Primero activa la verificación en dos pasos: entra una vez a RH y sigue los pasos."); return false; }
+  return new Promise(res => abrirMdl(`<h3>Verificación en dos pasos</h3><p class="sub">Escribe el código de 6 dígitos de tu app (Google o Microsoft Authenticator).</p>
+    <label class="f">Código<input id="mfaC" inputmode="numeric" maxlength="6" autocomplete="one-time-code" pattern="[0-9]*"></label>
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="mfaOk">Verificar</button></div>`, { mfa:res, factor:ver.id }));
 }
+
+// ---------- Control de Cambios: bitácora, usuarios y acceso, auditoría ----------
+const CAM = { tab:"bit", ufil:"equipo", aud:"cambios" };
+const ACCESOS = [["centro", "Centro de Mando"], ["pospago", "Pospago"], ["elektra", "Elektra"], ["avance", "Avance GB"], ["cambios", "Control de Cambios"]];
+async function camTab(t){
+  if (t !== "bit" && !(await dosPasos())) t = "bit";
+  CAM.tab = t;
+  $("#camTabs").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.cam === t));
+  $("#camBit").hidden = t !== "bit"; $("#camUsr").hidden = t !== "usr"; $("#camAud").hidden = t !== "aud";
+  if (t === "usr") cargarUsuarios(); if (t === "aud") cargarAuditoria();
+}
+$("#camTabs").onclick = e => { const b = e.target.closest("button[data-cam]"); if (b) camTab(b.dataset.cam); };
+async function cargarUsuarios(){
+  const [l, q] = await Promise.all([S.sb.rpc("usuarios_lista"), S.sb.rpc("cm_usuarios")]);
+  if (l.error || q.error) { toast((l.error || q.error).message || "No se pudo leer los usuarios"); return; }
+  const eq = Object.fromEntries(q.data.equipo.map(x => [x.usuario, x]));
+  S.usr = l.data.map(u => ({ ...u, equipo:eq[u.usuario] || null }));
+  renderUsuarios();
+}
+function renderUsuarios(){
+  if (!S.usr) return;
+  const t = $("#uBus").value.trim().toLowerCase(), f = d => d ? new Date(d).toLocaleString("es-MX", { dateStyle:"medium", timeStyle:"short" }) : "nunca ha entrado";
+  const lst = S.usr.filter(u => (CAM.ufil === "todos" || u.equipo) && (!t || (u.nombre + " " + u.usuario).toLowerCase().includes(t)))
+    .sort((a, b) => (!!b.equipo - !!a.equipo) || a.nombre.localeCompare(b.nombre));
+  $("#uLista").innerHTML = lst.length ? lst.map(u => {
+    const st = !u.activo ? ["Sin acceso", "#ff6b5e"] : u.debe_cambiar_clave ? ["Clave temporal", "#ffcc33"] : ["Activo", "#3fbf6a"], yo = u.id === me(), id = esc(u.id);
+    const acc = u.equipo ? ACCESOS.map(([k, l]) => `<button type="button" aria-pressed="${u.equipo.tableros.includes(k)}" data-uacc="${esc(u.usuario)}" data-tab="${k}"${yo && (k === "centro" || k === "cambios") ? " disabled" : ""}>${l}</button>`).join("") : "";
+    return `<li class="item" style="--c:${st[1]}"><span class="chip" style="--c:${st[1]}">${st[0]}</span>
+      <div><b>${esc(u.nombre)}${u.equipo ? ' <span class="chip" style="--c:#EE6602;color:#fff">equipo</span>' : ""}</b><small>${esc(u.usuario)} · ${esc(u.rol)} · último ingreso: ${esc(f(u.ultimo_acceso))}</small>
+      ${acc ? `<div class="acts seg" style="justify-content:flex-start;margin-top:6px">${acc}</div>` : ""}</div>
+      <div class="acts">${yo ? "" : `${u.equipo ? `<button class="ghost" type="button" data-uquitar="${esc(u.usuario)}">Quitar del equipo</button>` : u.activo ? `<button class="ghost ok" type="button" data-uagregar="${esc(u.usuario)}">Agregar al equipo</button>` : ""}
+        <button class="ghost" type="button" data-urein="${id}" data-unom="${esc(u.nombre)}">🔑 Reiniciar clave</button>
+        <button class="ghost ${u.activo ? "warn" : "ok"}" type="button" data-uact="${id}" data-uval="${!u.activo}">${u.activo ? "Quitar acceso" : "Devolver acceso"}</button>`}</div></li>`;
+  }).join("") : `<li class="empty">Nadie coincide con la búsqueda.</li>`;
+}
+// clave temporal como la de RH: GB- y 9 caracteres sin confusiones (0/O, 1/l); al entrar, la persona elige la suya
+const claveTemporal = () => { const A = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(9)); return "GB-" + [...r].map(x => A[x % A.length]).join(""); };
+const errTxt = e => (e?.message || "").length < 160 ? e.message : "No se pudo completar. Intenta de nuevo.";
+$("#uBus").oninput = renderUsuarios;
+$("#uFil").onclick = e => { const b = e.target.closest("button[data-ufil]"); if (!b) return; CAM.ufil = b.dataset.ufil; $("#uFil").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderUsuarios(); };
 $("#uLista").addEventListener("click", async e => {
   const t = e.target.closest("button[data-uacc]");
   if (t) {
-    const x = S.usr.equipo.find(r => r.usuario === t.dataset.uacc), set = new Set(x.tableros);
-    set.has(t.dataset.tab) ? set.delete(t.dataset.tab) : set.add(t.dataset.tab);
-    t.disabled = true;
-    const { error } = await S.sb.rpc("cm_equipo_guardar", { p_usuario:x.usuario, p_tableros:TABS.map(([k]) => k).filter(k => set.has(k)) });
-    if (error) toast(/líder|quitarte|existe|inválido/.test(error.message) ? error.message : errMsg(error)); else toast("Acceso actualizado");
-    return load("usuarios");
+    const u = S.usr.find(r => r.usuario === t.dataset.uacc), set = new Set(u.equipo.tableros);
+    set.has(t.dataset.tab) ? set.delete(t.dataset.tab) : set.add(t.dataset.tab); t.disabled = true;
+    const { error } = await S.sb.rpc("cm_equipo_guardar", { p_usuario:u.usuario, p_tableros:ACCESOS.map(([k]) => k).filter(k => set.has(k)) });
+    toast(error ? errTxt(error) : "Acceso actualizado"); return cargarUsuarios();
   }
+  const ag = e.target.closest("button[data-uagregar]");
+  if (ag) { const { error } = await S.sb.rpc("cm_equipo_guardar", { p_usuario:ag.dataset.uagregar, p_tableros:["centro", "pospago", "elektra", "avance"] });
+    toast(error ? errTxt(error) : "Agregado al equipo: Centro de Mando y los tres tableros"); return cargarUsuarios(); }
   const q = e.target.closest("button[data-uquitar]");
-  if (q) return confirmDel(q, async () => {
-    const { error } = await S.sb.rpc("cm_equipo_quitar", { p_usuario:q.dataset.uquitar });
-    if (error) toast(/líder|quitarte/.test(error.message) ? error.message : errMsg(error)); else toast("Quitado del equipo: ya no entra al Centro de Mando ni a los tableros con su usuario");
-    load("usuarios");
+  if (q) return confirmDel(q, async () => { const { error } = await S.sb.rpc("cm_equipo_quitar", { p_usuario:q.dataset.uquitar });
+    toast(error ? errTxt(error) : "Quitado del equipo"); cargarUsuarios(); });
+  const a = e.target.closest("button[data-uact]");
+  if (a) return confirmDel(a, async () => { const { error } = await S.sb.rpc("usuario_activar", { p_id:a.dataset.uact, p_activo:a.dataset.uval === "true" });
+    toast(error ? errTxt(error) : a.dataset.uval === "true" ? "Acceso devuelto" : "Acceso quitado: se cerró su sesión"); cargarUsuarios(); });
+  const r = e.target.closest("button[data-urein]");
+  if (r) return confirmDel(r, async () => {
+    const c = claveTemporal(), { error } = await S.sb.rpc("usuario_reiniciar_clave", { p_id:r.dataset.urein, p_clave:c });
+    if (error) { toast(errTxt(error)); return; }
+    abrirMdl(`<h3>Clave temporal</h3><p class="sub">${esc(r.dataset.unom)} · entrégala por un medio seguro. Se muestra solo ahora; al entrar, la persona elige la suya.</p>
+      <input id="rtC" readonly value="${esc(c)}" style="font:700 20px monospace;width:100%">
+      <div class="row"><button class="ghost" type="button" id="rtCopiar">Copiar</button><button class="btn" type="button" data-cerrar>Listo</button></div>`);
+    cargarUsuarios();
   });
 });
-$("#fUsr").onsubmit = async e => {
-  e.preventDefault(); const v = $("#uNuevo").value; if (!v) return;
-  const { error } = await S.sb.rpc("cm_equipo_guardar", { p_usuario:v, p_tableros:TABS.map(([k]) => k) });
-  if (error) { toast(/líder|existe/.test(error.message) ? error.message : errMsg(error)); return; }
-  toast("Agregado al equipo con todos los tableros"); load("usuarios");
+async function cargarAuditoria(){
+  $("#audSub").textContent = CAM.aud === "lecturas" ? "Últimas 500 veces que alguien abrió datos personales, bancarios o sueldos en RH." : "Últimos 500 cambios en colaboradores, bajas, usuarios, permisos, sueldos y datos sensibles. En datos bancarios y personales solo se guarda qué campo cambió, nunca su valor.";
+  let q = S.sb.from("auditoria").select("id,tabla,registro,accion,cambios,usuario,en");
+  q = CAM.aud === "lecturas" ? q.eq("accion", "LECTURA") : q.neq("accion", "LECTURA");
+  const [{ data, error }, { data:ps }] = await Promise.all([q.order("en", { ascending:false }).limit(500), S.sb.from("perfiles").select("id,nombre")]);
+  if (error) { toast(errTxt(error)); return; }
+  const nom = Object.fromEntries((ps || []).map(p => [p.id, p.nombre]));
+  const resumen = c => !c ? "" : Object.entries(c).map(([k, v]) => v && typeof v === "object" && "antes" in v ? `${k}: ${v.antes} → ${v.despues}` : typeof v === "string" ? `${k} (${v})` : k).join(" · ");
+  S.aud = (data || []).map(r => ({ en:r.en, quien:r.usuario ? (nom[r.usuario] || "usuario") : "sistema", tabla:r.tabla, registro:String(r.registro ?? ""), accion:r.accion, cambios:resumen(r.cambios) }));
+  pintarAuditoria();
+}
+function pintarAuditoria(){
+  const t = $("#audBus").value.trim().toLowerCase(), f = d => new Date(d).toLocaleString("es-MX", { dateStyle:"short", timeStyle:"short" });
+  const lst = S.aud.filter(r => !t || Object.values(r).join(" ").toLowerCase().includes(t));
+  $("#audT").innerHTML = `<thead><tr><th>Fecha y hora</th><th>Quién</th><th>Tabla</th><th>Registro</th><th>Acción</th><th>Cambios</th></tr></thead><tbody>${lst.map(r =>
+    `<tr><td style="white-space:nowrap">${esc(f(r.en))}</td><td>${esc(r.quien)}</td><td>${esc(r.tabla)}</td><td>${esc(r.registro)}</td><td>${esc(r.accion)}</td><td><small>${esc(r.cambios)}</small></td></tr>`).join("") || `<tr><td colspan="6">Sin registros.</td></tr>`}</tbody>`;
+}
+$("#audBus").oninput = pintarAuditoria;
+$("#audTipo").onclick = e => { const b = e.target.closest("button[data-aud]"); if (!b) return; CAM.aud = b.dataset.aud; $("#audTipo").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); cargarAuditoria(); };
+$("#audCsv").onclick = () => {
+  const q = v => `"${String(v).replace(/"/g, '""')}"`, filas = [["Fecha y hora", "Quién", "Tabla", "Registro", "Acción", "Cambios"], ...S.aud.map(r => [r.en, r.quien, r.tabla, r.registro, r.accion, r.cambios])];
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + filas.map(x => x.map(q).join(",")).join("\r\n")], { type:"text/csv" }));
+  a.download = `auditoria_${CAM.aud}_${today()}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
+
+// ---------- Sala de Juntas: Teams y llamar a la junta (aviso en vivo a quien se llama) ----------
+const TEAMS = "https://teams.microsoft.com/meet/255701640950166?p=qQYRolecwRuRAHTTmw";
+function llamarJunta(){
+  pedirAvisos();
+  const en = enLinea(), ids = Object.keys(S.profiles).filter(id => id !== me() && S.profiles[id].name).sort((a, b) => en.has(b) - en.has(a) || name(a).localeCompare(name(b)));
+  abrirMdl(`<h3>Llamar a la junta</h3><p class="sub">A quien elijas le sale el aviso en el Centro de Mando (y en su computadora si lo permitió) con el botón para entrar a Teams.</p>
+    <div class="llam">${ids.map(id => `<label><input type="checkbox" value="${esc(id)}"${en.has(id) ? " checked" : ""}><img src="${avatarOf(id)}" alt="" style="width:24px;height:24px;border-radius:50%">${esc(name(id))}${en.has(id) ? '<span class="on-dot" title="En línea"></span>' : ""}</label>`).join("") || '<p class="sub">No hay nadie más en el equipo.</p>'}</div>
+    <label class="f">Mensaje (opcional)<input id="llNota" maxlength="200" placeholder="Ej. Revisión de avance, 10 minutos"></label>
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="llOk">Llamar</button></div>`, { llamar:true });
+}
+$("#jLlamar").onclick = llamarJunta;
+async function enviarLlamada(){
+  const para = [...document.querySelectorAll(".llam input:checked")].map(x => x.value);
+  if (!para.length) { toast("Elige al menos a una persona"); return; }
+  const { error } = await S.sb.from("cm_llamadas").insert({ para, nota:$("#llNota").value.trim() || null });
+  if (error) { toast(errMsg(error)); return; }
+  cerrarMdl(); toast(`Llamaste a ${para.length === 1 ? name(para[0]) : para.length + " personas"} a la junta`); window.open(TEAMS, "_blank", "noopener");
+}
+// avisos del sistema operativo: se piden con un clic (los navegadores no dejan pedirlos solos)
+function pedirAvisos(){ try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch {} }
+addEventListener("pointerdown", pedirAvisos, { once:true });
+function timbre(){ try { const c = new AudioContext(), o = c.createOscillator(), g = c.createGain(); o.frequency.value = 880; o.connect(g); g.connect(c.destination);
+  g.gain.setValueAtTime(.001, c.currentTime); g.gain.exponentialRampToValueAtTime(.25, c.currentTime + .05); g.gain.exponentialRampToValueAtTime(.001, c.currentTime + .8); o.start(); o.stop(c.currentTime + .85); } catch {} }
+function teLlaman(l){
+  const quien = name(l.de), txt = `${quien} te llama a la junta${l.nota ? ": " + l.nota : ""}`;
+  timbre(); toast(txt); G.tip = txt; G.tipUntil = performance.now() + 8000;
+  try { if ("Notification" in window && Notification.permission === "granted") { const n = new Notification("Junta del equipo", { body:txt, tag:"junta-" + l.id }); n.onclick = () => { window.focus(); window.open(TEAMS, "_blank", "noopener"); n.close(); }; } } catch {}
+  if (!$("#mdl").hidden) return;           // si hay otra ventana abierta, queda el aviso y el toast
+  abrirMdl(`<h3>📞 ${esc(quien)} te llama a la junta</h3>${l.nota ? `<p class="sub">${esc(l.nota)}</p>` : ""}
+    <div class="row"><button class="ghost" type="button" data-cerrar>Ahora no</button><a class="btn" href="${TEAMS}" target="_blank" rel="noopener" data-cerrar style="text-decoration:none">Unirme a Teams</a></div>`);
+}
+
+// ---------- en línea: quién está en la oficina (presencia en vivo) ----------
+const enLinea = () => new Set([me(), ...Object.values(S.remote).map(r => r.uid).filter(Boolean)]);
+function pintarLinea(){
+  const n = enLinea().size, b = $("#lineaBtn"); if (!b) return;
+  b.classList.toggle("on", n > 1); b.innerHTML = `<i></i>${n} en línea`;
+}
+$("#lineaBtn").onclick = () => openMsgs();
 
 // ---------- turno: checar entrada y salida ----------
 const miTurno = () => S.turnos.find(r => r.usuario === me() && !r.fin);
@@ -1653,17 +1789,18 @@ function drawIris(now){
   ctx.fillStyle = "#000"; ctx.beginPath(); ctx.rect(0, 0, vw, vh); ctx.arc(cx, cy, Math.max(0, IRIS.r * maxR), 0, Math.PI * 2, true); ctx.fill("evenodd");
 }
 function enterRoom(r){
+  if (SIN_ACCESO[r.id] && !tengo(r.id)) { toast(SIN_ACCESO[r.id]); return; }
   S.busy = true; P.path = null; P.dir = 1;
   iris(0, () => openPanel(r));
 }
 function openPanel(r){
   S.panel = r.id;
-  $("#pTitle").innerHTML = `${esc(r.name)}<small>${{ pendientes:"Tareas del equipo con responsable y fecha", recurrentes:"Lo que toca cada semana", dashboards:"Tableros del grupo", herramientas:"Archivos, calculadoras y formatos", cambios:"Bitácora de cambios", usuarios:"Equipo, accesos y tableros", armario:"Arma tu minifigura paso a paso", fama:"Ranking por XP", juntas:"Autorizaciones, ayuda y dudas con dirección" }[r.id]}</small>`;
+  $("#pTitle").innerHTML = `${esc(r.name)}<small>${{ pendientes:"Tareas del equipo con responsable y fecha", recurrentes:"Lo que toca cada semana", dashboards:"Tableros del grupo", herramientas:"Archivos, calculadoras y formatos", cambios:"Bitácora de cambios, usuarios y acceso, auditoría", armario:"Arma tu minifigura paso a paso", fama:"Ranking por XP", juntas:"Autorizaciones, ayuda y dudas con dirección" }[r.id]}</small>`;
   document.querySelectorAll("[data-sec]").forEach(s => s.hidden = s.dataset.sec !== r.id);
   $(".panel-in").classList.toggle("claro", r.id === "armario");
   if (r.id === "armario") { ARM.saved = { ...S.fig }; armView("ed"); renderArm(); }
   if (r.id === "juntas") load("sols");
-  if (r.id === "usuarios") load("usuarios");
+  if (r.id === "cambios") camTab(CAM.tab);
   if (r.id === "recurrentes") { S.dia = dayIdx(); renderData(); }
   $("#panel").hidden = false; $("#pClose").focus();
 }
@@ -1684,7 +1821,7 @@ function renderPause(){
     <div class="bar"><i style="width:${lvlPct(mine.xp)}%"></i></div>
     <div class="stats"><div><b>${act}</b><span>tareas abiertas</span></div><div><b>${toca}</b><span>tocan hoy</span></div><div><b>${mine.n}</b><span>completadas</span></div></div>`;
   const sinLeer = convKeys().reduce((a, k) => a + unread(k), 0), teNec = badgeOf("juntas");
-  const items = [["reanudar","Reanudar",""], ["mensajes","Mensajes", sinLeer ? `${sinLeer} sin leer` : ""], ...ROOMS.map(r => [r.id, r.name, { pendientes:`${S.tareas.filter(t => !t.actividad_id && abierta(t)).length} activos`, recurrentes:`${toca} hoy`, dashboards:`${S.portals.filter(p => p.tipo !== "herramienta").length}`, herramientas:`${S.portals.filter(p => p.tipo === "herramienta").length}`, cambios:`${S.changes.filter(c => c.status !== "aplicado").length} abiertos`, juntas:teNec ? `${teNec} te necesitan` : "" }[r.id] || ""]), ...(esJefe() ? [["usuarios","Usuarios y acceso",""]] : []), ["salir","Cerrar sesión",""]];
+  const items = [["reanudar","Reanudar",""], ["mensajes","Mensajes", sinLeer ? `${sinLeer} sin leer` : ""], ...ROOMS.filter(r => !SIN_ACCESO[r.id] || tengo(r.id)).map(r => [r.id, r.name, { pendientes:`${S.tareas.filter(t => !t.actividad_id && abierta(t)).length} activos`, recurrentes:`${toca} hoy`, dashboards:`${S.portals.filter(p => p.tipo !== "herramienta").length}`, herramientas:`${S.portals.filter(p => p.tipo === "herramienta").length}`, cambios:`${S.changes.filter(c => c.status !== "aplicado").length} abiertos`, juntas:teNec ? `${teNec} te necesitan` : "" }[r.id] || ""]), ["salir","Cerrar sesión",""]];
   const sel = document.activeElement?.dataset?.go;
   $("#pMenu").innerHTML = items.map(([k, l, n]) => `<button type="button" data-go="${k}">${esc(l)}<small>${esc(n)}</small></button>`).join("");
   ($(`#pMenu [data-go="${sel}"]`) || $("#pMenu button")).focus();
@@ -1696,12 +1833,12 @@ $("#pMenu").onclick = async e => {
   closePause();
   if (k === "salir") { await S.sb.auth.signOut(); location.reload(); return; }
   if (k === "mensajes") { openMsgs(); return; }
-  if (k === "usuarios") { if (S.busy) return; S.busy = true; openPanel({ id:"usuarios", name:"Usuarios y acceso" }); return; }
   const r = ROOMS.find(x => x.id === k); if (r) atajo(r);
 };
 // desde la pausa no se camina: el personaje aparece en la puerta y la sala se abre ya (al cerrarla, el círculo se abre ahí)
 function atajo(r){
   if (S.busy) return;
+  if (SIN_ACCESO[r.id] && !tengo(r.id)) { toast(SIN_ACCESO[r.id]); return; }
   Object.assign(P, { x:r.spot[0], y:r.spot[1], path:null, target:null, onArrive:null, vx:0, vy:0, amp:0 });
   cam.x = P.x; cam.y = P.y - 60; clampCam();
   S.busy = true; P.dir = 1; Object.assign(IRIS, { r:0, from:0, target:0, cb:null });
@@ -1768,7 +1905,7 @@ function renderMsgs(){
   const rows = keys.map(k => ({ k, last:lastOf(k) })).sort((a, b) => a.k === "grupo" ? -1 : b.k === "grupo" ? 1 : (b.last ? Date.parse(b.last.creado) : 0) - (a.last ? Date.parse(a.last.creado) : 0) || name(convOther(a.k)).localeCompare(name(convOther(b.k))));
   $("#convs").innerHTML = rows.map(({ k, last }) => { const o = convOther(k), u = unread(k);
     return `<button type="button" class="conv" data-conv="${esc(k)}" aria-current="${k === S.conv}">${o ? `<img src="${avatarOf(o)}" alt="">` : `<span class="grupo-ic">GB</span>`}
-      <span style="min-width:0"><b>${esc(o ? name(o) : "Equipo GB")}</b><small>${last ? esc((last.de === me() ? "Tú: " : o ? "" : (firstName(last.de) || "") + ": ") + last.texto) : (o ? "Sin mensajes" : "Grupo de todo el equipo")}</small></span>${u ? "<i></i>" : ""}</button>`; }).join("");
+      <span style="min-width:0"><b>${esc(o ? name(o) : "Equipo GB")}${o && enLinea().has(o) ? '<span class="on-dot" title="En línea"></span>' : ""}</b><small>${last ? esc((last.de === me() ? "Tú: " : o ? "" : (firstName(last.de) || "") + ": ") + last.texto) : (o ? "Sin mensajes" : "Grupo de todo el equipo")}</small></span>${u ? "<i></i>" : ""}</button>`; }).join("");
   const o = convOther(S.conv);
   $("#convH").innerHTML = `<button type="button" data-back aria-label="Volver" style="${innerWidth > 640 ? "display:none" : ""}">‹</button>${o ? `<img src="${avatarOf(o)}" alt="">` : `<span class="grupo-ic">GB</span>`}<b>${esc(o ? name(o) : "Equipo GB")}</b><button type="button" id="msgsX2" aria-label="Cerrar mensajes">×</button>`;
   const lst = S.msgs.filter(m => m.conversacion === S.conv);
@@ -1876,6 +2013,10 @@ function syncPeers(){
     Object.assign(r, { tx:clamp(pr.x,0,W), ty:clamp(pr.y,0,H), dir:[0,1,2,3].includes(pr.d) ? pr.d : 0, walking:!!pr.w, fig:sanitizeFig(pr.fig), uid:typeof pr.uid === "string" ? pr.uid : null });
   }
   for (const k of Object.keys(S.remote)) if (!seen.has(k)) delete S.remote[k];
+  // aviso cuando alguien entra (la primera sincronización solo toma lista)
+  const ahora = new Set(Object.values(S.remote).map(r => r.uid).filter(Boolean));
+  if (S.presentes) for (const id of ahora) if (!S.presentes.has(id) && id !== me()) { const t = `${firstName(id) || name(id)} entró a la oficina`; toast(t); G.tip = t; G.tipUntil = performance.now() + 5000; }
+  S.presentes = ahora; pintarLinea(); if (!$("#msgs").hidden) renderMsgs();
   refreshProfiles();
 }
 
@@ -2018,7 +2159,8 @@ async function entrar(){
   const { data:jf } = await S.sb.rpc("cm_jefes"); S.jefes = (jf || []).map(r => r.id);
   await S.sb.rpc("cm_vincular_cuenta");    // si esta persona tenía tareas a su nombre "sin cuenta", pasan a su usuario
   await S.sb.rpc("cm_generar_semana");     // crea las tareas de la semana si aún no existen (no repite)
-  await Promise.all(["tareas","acts","turnos","changes","portals","players","sols","msgs"].map(load));
+  S.acc = (await S.sb.rpc("cm_mis_accesos")).data || [];
+  await Promise.all(["tareas","acts","turnos",...(tengo("cambios") ? ["changes"] : []),"portals","players","sols","msgs","llamadas"].map(load));
   await refreshProfiles();
   if (S.players[S.uid]) S.fig = S.players[S.uid].fig;
 
@@ -2026,7 +2168,7 @@ async function entrar(){
   const espera = {};
   const recargar = col => { clearTimeout(espera[col]); espera[col] = setTimeout(() => load(col), 250); };
   let datos = S.sb.channel("cm-datos");
-  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
+  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["llamadas","cm_llamadas"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
     datos = datos.on("postgres_changes", { event:"*", schema:"public", table:t }, () => recargar(col));
   datos.subscribe();
   S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
@@ -2038,7 +2180,7 @@ async function entrar(){
   P.wave = 2.8; playG("saluda");
   G.tip = S.players[S.uid] ? `¡Hola${firstName(S.uid) ? ", " + firstName(S.uid) : ""}! Bienvenido a la oficina` : `¡Hola${firstName(S.uid) ? ", " + firstName(S.uid) : ""}! Pasa al Armario a armar tu personaje`;
   G.tipUntil = performance.now() + 5000; G.until = performance.now() + 6000;
-  $("#hint").hidden = false; $("#pauseBtn").hidden = false; $("#chatBtn").hidden = false; $("#turnoBtn").hidden = false; pintarTurno(); hintUntil = performance.now() + 9000;
+  $("#hint").hidden = false; $("#pauseBtn").hidden = false; $("#chatBtn").hidden = false; $("#turnoBtn").hidden = false; $("#lineaBtn").hidden = false; pintarTurno(); pintarLinea(); hintUntil = performance.now() + 9000;
   iris(1); IRIS.r = 0; IRIS.from = 0; IRIS.t0 = performance.now();
   cv.focus();
 }
