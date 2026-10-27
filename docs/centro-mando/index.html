@@ -844,26 +844,37 @@ function capaImg(id){
     im.onload = () => { clearTimeout(repinta); repinta = setTimeout(() => { if (S.uid) renderData(); }, 200); }; }
   return im;
 }
-// la figura armada a la mitad del tamaño del lienzo, en caché por combinación de piezas
-function figCanvas(f){
+// la figura armada a la mitad del tamaño del lienzo, en caché por combinación de piezas.
+// Se guarda también separada en piernas y el resto, para mover cada pierna al caminar.
+function figPartes(f){
   if (!LEGO) return null;
   const ids = capas(f), key = ids.join("|"); if (FIGC.has(key)) return FIGC.get(key);
   const ims = ids.map(capaImg); if (!ims.every(i => i.complete && i.naturalWidth)) return null;
-  const [w, h] = LEGO.lienzo, c = document.createElement("canvas"); c.width = w / 2; c.height = h / 2;
-  const x = c.getContext("2d"); ims.forEach(i => x.drawImage(i, 0, 0, w / 2, h / 2));
-  FIGC.set(key, c); return c;
+  const [w, h] = LEGO.lienzo, mk = () => { const c = document.createElement("canvas"); c.width = w / 2; c.height = h / 2; return c; };
+  const p = { todo:mk(), sup:mk(), pie:mk() };
+  ims.forEach((im, i) => { p.todo.getContext("2d").drawImage(im, 0, 0, w / 2, h / 2); (ids[i].startsWith("piernas") ? p.pie : p.sup).getContext("2d").drawImage(im, 0, 0, w / 2, h / 2); });
+  FIGC.set(key, p); return p;
 }
-// (x,y) son los pies. o.s escala, o.walking/o.phase balancean al caminar, o.wave da un brinco de saludo, o.dir 2 = mirando a la izquierda
+const figCanvas = f => figPartes(f)?.todo || null;
+// (x,y) son los pies. Mismo alto que el GBSaurio (96 px a escala 1.25).
+// o.amp 0..1 = qué tan rápido camina (pasos y balanceo), o.phase = ciclo del paso, o.face -1..1 = hacia dónde mira (pasa por 0 al girar),
+// o.lean = inclinación hacia donde avanza, o.wave = brinco de saludo
 function drawFig(c, x, y, f, o = {}){
-  const s = o.s || 1;
-  c.fillStyle = "rgba(0,0,0,.28)"; c.beginPath(); c.ellipse(x, y, 15 * s, 5 * s, 0, 0, 7); c.fill();
-  const fc = figCanvas(f); if (!fc) return;
-  const { arriba, abajo, cx } = LEGO.figura, k = 66 * s * 2 / (abajo - arriba);
-  const bob = o.walking ? Math.abs(Math.sin(o.phase || 0)) * 3 * s : 0, hop = o.wave ? Math.abs(Math.sin(o.wave * 6)) * 7 * s : 0;
-  c.save(); c.translate(x, y - bob - hop);
-  if (o.walking) c.rotate(Math.sin(o.phase || 0) * .05);
-  if (o.dir === 2) c.scale(-1, 1);
-  c.drawImage(fc, -cx / 2 * k, -abajo / 2 * k, fc.width * k, fc.height * k);
+  const s = o.s || 1, amp = o.amp ?? (o.walking ? 1 : 0), ph = o.phase || 0;
+  const bob = Math.abs(Math.sin(ph)) * 4 * s * amp + (o.wave ? Math.abs(Math.sin(o.wave * 6)) * 8 * s : 0);
+  c.fillStyle = "rgba(0,0,0,.28)"; c.beginPath(); c.ellipse(x, y, (16 - bob * .4) * s, 5 * s, 0, 0, 7); c.fill();
+  const p = figPartes(f); if (!p) return;
+  const { arriba, abajo, cx } = LEGO.figura, corte = (LEGO.corte_piernas ?? abajo) / 2, k = 77 * s * 2 / (abajo - arriba);
+  const face = o.face ?? (o.dir === 2 ? -1 : 1), giro = Math.sign(face || 1) * Math.max(.22, Math.abs(face));
+  c.save(); c.translate(x, y); c.rotate(o.lean || 0); c.scale(giro * k, k); c.translate(-cx / 2, -abajo / 2);
+  const W = p.pie.width, Hp = p.pie.height, mitad = cx / 2, b = bob / k;
+  // cadera fija; cada pierna se levanta y se acorta un poco al dar el paso (como en los juegos de LEGO)
+  c.drawImage(p.pie, 0, 0, W, corte, 0, -b, W, corte);
+  for (const [sx, signo] of [[0, 1], [mitad, -1]]) {
+    const sube = Math.max(0, Math.sin(ph) * signo) * 10 * amp, alto = Hp - corte;
+    c.drawImage(p.pie, sx, corte, mitad, alto, sx, corte - b - sube, mitad, alto - sube * .35);
+  }
+  c.drawImage(p.sup, 0, -b);
   c.restore();
 }
 // valida lo que llega de la base o de otros jugadores contra el catálogo; lo de versiones anteriores vuelve a la figura genérica
@@ -1169,7 +1180,7 @@ function findPath(sx, sy, tx, ty){
 }
 
 // ============================================================ PERSONAJES
-const P = { x:SPAWN[0], y:SPAWN[1], dir:0, phase:0, walking:false, path:null, onArrive:null, wave:0 };
+const P = { x:SPAWN[0], y:SPAWN[1], dir:0, phase:0, walking:false, path:null, onArrive:null, wave:0, vx:0, vy:0, amp:0, face:1, faceT:1, lean:0 };
 const G = { x:SPAWN[0] + 110, y:SPAWN[1] - 10, path:null, frame:"frente", seq:null, until:0, talk:false, tipAt:0, tip:"", tipUntil:0, celebrate:false, lastStep:0, stepI:0 };
 const SEQ = {   // [cuadros, ms por cuadro, repeticiones], igual que el asistente de RH
   saluda:[["saluda","quieto","saluda","quieto","saluda","frente"], 260, 1], fiesta:[["fiesta1","fiesta2","fiesta3","fiesta4","fiesta5","fiesta6","fiesta7","fiesta8","fiesta9"], 95, 2],
@@ -1561,20 +1572,35 @@ let last = performance.now(), hintUntil = 0;
 function frame(now){
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (S.mode === "play" && !S.paused && !S.busy) {
+    // movimiento con inercia: acelera, frena suave, se inclina hacia donde va y gira poco a poco al cambiar de lado
     let dx = (S.keys.right ? 1 : 0) - (S.keys.left ? 1 : 0), dy = (S.keys.down ? 1 : 0) - (S.keys.up ? 1 : 0);
-    if (!dx && !dy && P.path && P.path.length) { const [tx, ty] = P.path[0], vx = tx - P.x, vy = ty - P.y, d = Math.hypot(vx, vy); if (d < 5) { P.path.shift(); } else { dx = vx / d; dy = vy / d; } }
-    const len = Math.hypot(dx, dy); P.walking = false;
-    if (len) {
-      dx /= len; dy /= len; const sp = 210 * dt, ox = P.x, oy = P.y;
-      if (P.path) { P.x += dx * sp; P.y += dy * sp; }
-      else { if (free(P.x + dx * sp, P.y)) P.x += dx * sp; if (free(P.x, P.y + dy * sp)) P.y += dy * sp; }
-      P.walking = Math.hypot(P.x - ox, P.y - oy) > .1;
-      P.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : (dy < 0 ? 1 : 0);
+    if (!dx && !dy && P.path && P.path.length) {
+      const [tx, ty] = P.path[0], vx = tx - P.x, vy = ty - P.y, d = Math.hypot(vx, vy);
+      if (d < (P.path.length > 1 ? 14 : 4)) P.path.shift(); else { dx = vx / d; dy = vy / d; }
+      if (P.path.length === 1 && d < 40) { dx *= Math.max(.25, d / 40); dy *= Math.max(.25, d / 40); }   // llega frenando
     }
-    if (P.path && !P.path.length) { P.path = null; P.target = null; const cb = P.onArrive; P.onArrive = null; P.dir = 0; if (cb) cb(); }
-    if (P.walking) P.phase += dt * 12;
+    const VMAX = 235, len = Math.hypot(dx, dy);
+    const ux = len > 1 ? dx / len : dx, uy = len > 1 ? dy / len : dy, ac = Math.min(1, dt * (len ? 9 : 12));
+    P.vx += (ux * VMAX - P.vx) * ac; P.vy += (uy * VMAX - P.vy) * ac;
+    const ox = P.x, oy = P.y;
+    if (P.path) { P.x += P.vx * dt; P.y += P.vy * dt; }
+    else { if (free(P.x + P.vx * dt, P.y)) P.x += P.vx * dt; else P.vx = 0; if (free(P.x, P.y + P.vy * dt)) P.y += P.vy * dt; else P.vy = 0; }
+    const vel = Math.hypot(P.x - ox, P.y - oy) / Math.max(dt, .001);
+    P.walking = vel > 18; P.amp += (Math.min(1, vel / VMAX) - P.amp) * Math.min(1, dt * 10);
+    P.phase += dt * vel * .06;
+    if (Math.abs(P.vx) > 20) P.faceT = Math.sign(P.vx);
+    P.face += ((P.faceT || 1) - P.face) * Math.min(1, dt * 11);
+    P.lean += ((P.vx / VMAX) * .08 - P.lean) * Math.min(1, dt * 8);
+    if (P.walking) P.dir = Math.abs(P.vx) > Math.abs(P.vy) ? (P.vx < 0 ? 2 : 3) : (P.vy < 0 ? 1 : 0);
+    if (P.path && !P.path.length) { P.path = null; P.target = null; P.vx = P.vy = 0; const cb = P.onArrive; P.onArrive = null; P.dir = 0; if (cb) cb(); }
     if (P.wave > 0) P.wave = Math.max(0, P.wave - dt);
-    for (const r of Object.values(S.remote)) { r.x += (r.tx - r.x) * Math.min(1, dt * 10); r.y += (r.ty - r.y) * Math.min(1, dt * 10); if (r.walking) r.phase += dt * 12; }
+    for (const r of Object.values(S.remote)) {
+      const ox2 = r.x; r.x += (r.tx - r.x) * Math.min(1, dt * 8); r.y += (r.ty - r.y) * Math.min(1, dt * 8);
+      const v = (r.x - ox2) / Math.max(dt, .001);
+      r.amp = (r.amp || 0) + ((r.walking ? 1 : 0) - (r.amp || 0)) * Math.min(1, dt * 8); r.phase += dt * 14 * r.amp;
+      if (Math.abs(v) > 15) r.faceT = Math.sign(v); r.face = (r.face ?? 1) + ((r.faceT || 1) - (r.face ?? 1)) * Math.min(1, dt * 11);
+      r.lean = (r.lean || 0) + (Math.max(-1, Math.min(1, v / 235)) * .08 - (r.lean || 0)) * Math.min(1, dt * 8);
+    }
     if (cam.follow) { cam.x += (P.x - cam.x) * Math.min(1, dt * 4); cam.y += (P.y - 60 - cam.y) * Math.min(1, dt * 4); clampCam(); }
   }
   if (S.mode === "play") { updateG(dt, now); sendPresence(now); draw(now, dt); }
@@ -1590,17 +1616,17 @@ function draw(t, dt){
   drawLive(ctx, t);
   if (P.target) { ctx.strokeStyle = "rgba(238,102,2,.9)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(P.target[0], P.target[1], 16 + Math.sin(t / 200) * 3, 7, 0, 0, 7); ctx.stroke(); }
   const ents = [
-    ...Object.values(S.remote).map(r => ({ y:r.y, f:() => drawFig(ctx, r.x, r.y, r.fig, { dir:r.dir, phase:r.phase, walking:r.walking, s:1.25 }) })),
+    ...Object.values(S.remote).map(r => ({ y:r.y, f:() => drawFig(ctx, r.x, r.y, r.fig, { phase:r.phase, amp:r.amp || 0, face:r.face ?? 1, lean:r.lean || 0, s:1.25 }) })),
     { y:G.y, f:() => drawG(ctx) },
-    { y:P.y, f:() => drawFig(ctx, P.x, P.y, S.fig, { dir:P.dir, phase:P.phase, walking:P.walking, s:1.25, wave:P.wave }) },
+    { y:P.y, f:() => drawFig(ctx, P.x, P.y, S.fig, { phase:P.phase, amp:P.amp, face:P.face, lean:P.lean, s:1.25, wave:P.wave }) },
   ].sort((a, b) => a.y - b.y);
   ents.forEach(e => e.f());
   // capa de pantalla: nombres, globos, marcadores, XP y círculo
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const tag = (wx, wy, txt, mine) => { const [x, y] = toScreen(wx, wy); ctx.font = "700 12px Figtree, sans-serif"; const w = ctx.measureText(txt).width + 14;
     ctx.fillStyle = mine ? "rgba(238,102,2,.95)" : "rgba(18,16,15,.82)"; rr(ctx, x - w / 2, y - 18, w, 18, 9); ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y - 9); };
-  for (const r of Object.values(S.remote)) tag(r.x, r.y - 72, firstName(r.uid) || name(r.uid), false);
-  tag(P.x, P.y - 72, firstName(S.uid) || "Tú", true);
+  for (const r of Object.values(S.remote)) tag(r.x, r.y - 104, firstName(r.uid) || name(r.uid), false);
+  tag(P.x, P.y - 104, firstName(S.uid) || "Tú", true);
   if (t < G.tipUntil && G.tip && !G.talk) {
     const [x, y] = toScreen(G.x, G.y - 104); ctx.font = "700 13px Figtree, sans-serif"; const w = Math.min(280, ctx.measureText(G.tip).width + 24);
     ctx.fillStyle = "#fff"; rr(ctx, x - w / 2, y - 40, w, 30, 10); ctx.beginPath(); ctx.moveTo(x - 7, y - 11); ctx.lineTo(x + 7, y - 11); ctx.lineTo(x, y - 2); ctx.closePath(); ctx.fill();
