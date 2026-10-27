@@ -1,0 +1,6 @@
+# Repo PUBLICO: solo paginas ya generadas (docs/). El codigo vive en el repo privado grupobenber-src (C:\Users\ecort\gb-src).
+# Lista blanca: todo lo demas se ignora, asi un "git add ." nunca sube codigo ni claves.
+/*
+!/docs/
+!/.gitignore
+!/README.md
