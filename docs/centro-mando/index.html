@@ -1394,8 +1394,16 @@ $("#pMenu").onclick = async e => {
   closePause();
   if (k === "salir") { await S.sb.auth.signOut(); location.reload(); return; }
   if (k === "mensajes") { openMsgs(); return; }
-  const r = ROOMS.find(x => x.id === k); if (r) goRoom(r);
+  const r = ROOMS.find(x => x.id === k); if (r) atajo(r);
 };
+// desde la pausa no se camina: el personaje aparece en la puerta y la sala se abre ya (al cerrarla, el círculo se abre ahí)
+function atajo(r){
+  if (S.busy) return;
+  Object.assign(P, { x:r.spot[0], y:r.spot[1], path:null, target:null, onArrive:null, vx:0, vy:0, amp:0 });
+  cam.x = P.x; cam.y = P.y - 60; clampCam();
+  S.busy = true; P.dir = 1; Object.assign(IRIS, { r:0, from:0, target:0, cb:null });
+  openPanel(r);
+}
 $("#pMenu").addEventListener("keydown", e => {
   const bs = [...$("#pMenu").querySelectorAll("button")], i = bs.indexOf(document.activeElement);
   if (e.key === "ArrowDown") { e.preventDefault(); bs[(i + 1) % bs.length].focus(); }
