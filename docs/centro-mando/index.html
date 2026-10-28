@@ -2608,12 +2608,23 @@ function clickAt(sx, sy){
 
 // presencia de los demás
 let lastSent = 0, sentKey = "";
-// ponytail: presencia de Supabase cada 150 ms (≈7/s por persona); si el canal se satura, mandar el movimiento por broadcast
+// presencia de Supabase como mucho cada 1 s: más seguido, Supabase corta al cliente por exceso (ClientPresenceRateLimitReached) y deja de verse
 const MI_LLAVE = rid();
+function unirOficina(){
+  if (S.ch) S.sb.removeChannel(S.ch);
+  const ch = S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
+  ch.on("presence", { event:"sync" }, syncPeers).subscribe(st => {
+    if (ch !== S.ch) return;     // aviso del canal viejo que se acaba de quitar
+    S.chReady = st === "SUBSCRIBED";
+    if (S.chReady) { sentKey = ""; lastSent = 0; sendPresence(performance.now()); }
+    // si el canal se cae (red, límite, sesión renovada), se vuelve a unir solo
+    else if (st !== "CLOSED" || S.uid) { clearTimeout(unirOficina.t); unirOficina.t = setTimeout(unirOficina, 4000); }
+  });
+}
 function sendPresence(now){
   if (!S.chReady) return;
   const key = `${Math.round(P.x)},${Math.round(P.y)},${P.dir},${P.walking},${P.ver || ""},${JSON.stringify(S.fig)}`;
-  if (key === sentKey || now - lastSent < 150) return;
+  if (key === sentKey || now - lastSent < 1000) return;
   sentKey = key; lastSent = now;
   S.ch.track({ x:Math.round(P.x), y:Math.round(P.y), d:P.dir, w:P.walking, fig:S.fig, uid:S.uid, ver:P.ver || null }).catch(() => {});
 }
@@ -2681,7 +2692,7 @@ function frame(now){
     if (P.path && !P.path.length) { P.path = null; P.target = null; P.vx = P.vy = 0; const cb = P.onArrive; P.onArrive = null; P.dir = 0; P.angT = 0; if (cb) cb(); }
     if (P.wave > 0) P.wave = Math.max(0, P.wave - dt);
     for (const r of Object.values(S.remote)) {
-      const ox2 = r.x, oy2 = r.y; r.x += (r.tx - r.x) * Math.min(1, dt * 8); r.y += (r.ty - r.y) * Math.min(1, dt * 8);
+      const ox2 = r.x, oy2 = r.y; r.x += (r.tx - r.x) * Math.min(1, dt * 2.5); r.y += (r.ty - r.y) * Math.min(1, dt * 2.5);   // llega una posición por segundo: se camina suave entre una y otra
       const v = (r.x - ox2) / Math.max(dt, .001), vy = (r.y - oy2) / Math.max(dt, .001);
       r.amp = (r.amp || 0) + ((r.walking ? 1 : 0) - (r.amp || 0)) * Math.min(1, dt * 8); r.phase += dt * 14 * r.amp;
       if (Math.hypot(v, vy) > 15) r.angT = Math.atan2(v, vy) * 180 / Math.PI; else if (!r.walking) r.angT = 0;
@@ -2788,8 +2799,7 @@ async function entrar(){
   for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["turnos","cm_pausas"], ["vistos","cm_vistos"], ["llamadas","cm_llamadas"], ["notas","cm_notas"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
     datos = datos.on("postgres_changes", { event:"*", schema:"public", table:t }, () => recargar(col));
   datos.subscribe();
-  S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
-  S.ch.on("presence", { event:"sync" }, syncPeers).subscribe(st => { S.chReady = st === "SUBSCRIBED"; if (S.chReady) { sentKey = ""; lastSent = 0; sendPresence(performance.now()); } });
+  unirOficina();
   // también con la pestaña en segundo plano (ahí el navegador detiene el dibujo, pero no este reloj): así siempre se ve quién está
   setInterval(() => { if (S.mode === "play" && S.chReady) { sentKey = ""; sendPresence(performance.now()); } }, 20000);
 
