@@ -799,6 +799,9 @@ $("#mdl").addEventListener("click", async e => {
   if (e.target === $("#mdl") || e.target.closest("[data-cerrar]")) return cerrarMdl();
   if (e.target.closest("#evEnviar")) return enviarEv();
   if (e.target.closest("#llOk")) return enviarLlamada();
+  const vp = e.target.closest("button[data-verpos]");
+  if (vp) { const r = Object.values(S.remote).find(q => q.uid === vp.dataset.verpos); cerrarMdl(); if (r) { cam.follow = false; cam.x = r.x; cam.y = r.y - 60; cam.z = Math.max(cam.z, 1); clampCam(); } return; }
+  const es = e.target.closest("button[data-escribir]"); if (es) { cerrarMdl(); return openMsgs(dmKey(es.dataset.escribir)); }
   if (e.target.closest("#rtCopiar")) { try { await navigator.clipboard.writeText($("#rtC").value); toast("Copiada"); } catch { $("#rtC").select(); } return; }
   if (e.target.closest("#mfaOk") && MDL?.mfa) {
     const c = $("#mfaC").value.trim(); if (!/^\d{6}$/.test(c)) { toast("Escribe los 6 dígitos"); return; }
@@ -967,7 +970,16 @@ function pintarLinea(){
   const n = enLinea().size, b = $("#lineaBtn"); if (!b) return;
   b.classList.toggle("on", n > 1); b.innerHTML = `<i></i>${n} en línea`;
 }
-$("#lineaBtn").onclick = () => openMsgs();
+// quién está conectado: ir a su lugar en el mapa o escribirle
+$("#lineaBtn").onclick = () => {
+  const otros = Object.values(S.remote).filter(r => r.uid && r.uid !== me());
+  abrirMdl(`<h3>En línea</h3>${otros.length ? `<ul class="list">${otros.map(r => `<li class="item" style="--c:var(--ok)"><span class="chip" style="--c:#3fbf6a">En línea</span>
+    <div><b>${who(r.uid)}</b><small>${esc(lugarDe(r.x, r.y))}</small></div>
+    <div class="acts"><button class="ghost" type="button" data-verpos="${esc(r.uid)}">Ver en el mapa</button><button class="ghost ok" type="button" data-escribir="${esc(r.uid)}">Escribirle</button></div></li>`).join("")}</ul>`
+    : `<p class="sub">Solo estás tú en la oficina.</p>`}<div class="row"><button class="btn" type="button" data-cerrar>Cerrar</button></div>`);
+};
+// en qué sala o zona está un punto del mapa
+const lugarDe = (x, y) => { const r = ROOMS.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); return r ? r.name : "En el pasillo o el vestíbulo"; };
 
 // ---------- turno: checar entrada y salida ----------
 const miTurno = () => S.turnos.find(r => r.usuario === me() && !r.fin);
@@ -2093,7 +2105,8 @@ function draw(t, dt){
     { y:G.y, f:() => drawG(ctx) },
     { y:P.y, f:() => drawFig(ctx, P.x, P.y, S.fig, { phase:P.phase, amp:P.amp, ang:P.ang, lean:P.lean, s:1.25, wave:P.wave }) },
   ].sort((a, b) => a.y - b.y);
-  ents.forEach(e => e.f());
+  // cada personaje por separado: si uno falla, los demás y las etiquetas se siguen dibujando (y queda el aviso una vez)
+  ents.forEach(e => { try { e.f(); } catch (err) { if (!draw.aviso) { draw.aviso = 1; toast("Error al dibujar un personaje: " + String(err && err.message || err).slice(0, 90)); console.error(err); } } });
   // capa de pantalla: nombres, globos, marcadores, XP y círculo
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const tag = (wx, wy, txt, mine) => { const [x, y] = toScreen(wx, wy); ctx.font = "700 12px Figtree, sans-serif"; const w = ctx.measureText(txt).width + 14;
