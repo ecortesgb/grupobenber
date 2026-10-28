@@ -175,6 +175,29 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
 .llam{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
 .llam label{display:flex;gap:8px;align-items:center;background:var(--panel2);border-radius:6px;padding:8px;font-size:13px;cursor:pointer}
 .llam input{width:auto;margin:0;flex:none}
+.corcho{background:#c9a27a radial-gradient(rgba(60,35,15,.18) 1px,transparent 1.4px) 0 0/13px 13px;border:10px solid #5c4033;border-radius:10px;
+  box-shadow:inset 0 0 34px rgba(0,0,0,.38),0 8px 24px rgba(0,0,0,.4);padding:14px 12px;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(230px,1fr);gap:12px;overflow-x:auto;min-height:240px;margin-top:8px}
+.pz-col{background:rgba(255,255,255,.07);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:14px;min-height:200px;min-width:0}
+.pz-col.sobre{outline:3px dashed rgba(255,255,255,.7);background:rgba(255,255,255,.2)}
+.pz-h{display:flex;align-items:center;gap:8px;background:rgba(40,26,18,.88);color:#fde9c9;border-radius:8px;padding:6px 8px;border:0;width:100%;text-align:left;font:inherit}
+.pz-h img{width:44px;height:44px;border-radius:50%;border:2px solid #fde9c9;flex:none}
+.pz-h b{font-size:13px;display:block}.pz-h small{opacity:.75;font-size:11px}
+button.pz-h{cursor:pointer}button.pz-h:hover{background:rgba(60,40,26,.95)}
+.pz-h .cuadro{width:14px;height:14px;border-radius:3px;background:var(--bg);flex:none}
+.pi{background:var(--bg);color:#1d1a16;border-radius:2px;padding:13px 10px 8px;box-shadow:0 6px 12px rgba(0,0,0,.35);transform:rotate(var(--rot));position:relative;font-size:12.5px;display:flex;flex-direction:column;gap:5px;cursor:grab;transition:transform .12s}
+.pi:hover{transform:rotate(0) translateY(-2px)}.pi.hecha{opacity:.65}.pi.hecha .pi-t{text-decoration:line-through}
+.pi .chin{position:absolute;top:-7px;left:50%;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:#d23a2a;box-shadow:0 2px 3px rgba(0,0,0,.4),inset -2px -2px 0 rgba(0,0,0,.25)}
+.pi-who{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800}.pi-who img{width:28px;height:28px;border-radius:50%;border:2px solid #1d1a16;flex:none}
+.pi-t{font-size:13.5px;line-height:1.25;overflow-wrap:anywhere}
+.pi small{display:flex;flex-wrap:wrap;gap:4px;color:#3b342c;font-size:11px;align-items:center}
+.pi .tg{background:rgba(0,0,0,.1);border-radius:3px;padding:1px 5px;font-weight:700}.pi .late{color:#b3261e!important;font-weight:800}
+.pi .acts{justify-content:flex-start}.pi .acts button,.pi .acts .chip{font-size:10.5px}
+.pi .acts button{background:rgba(255,255,255,.55);color:#1d1a16;border-color:rgba(0,0,0,.25);padding:3px 7px}
+.pi .x{position:absolute;top:1px;right:4px;background:none;border:0;color:#5a4a3a;font-size:15px;cursor:pointer;padding:2px}
+.pz-bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:12px 0 4px}
+.pz-bar span{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pz-vacio{border:2px dashed rgba(255,255,255,.35);border-radius:6px;padding:14px;text-align:center;color:rgba(40,26,18,.75);font-size:12px;font-weight:700}
+.asis-det td{background:var(--panel2)}
 .cat{margin-top:14px}.cat summary{cursor:pointer;font-weight:700;color:var(--muted);margin-bottom:8px}
 .dias{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0}.dias label{font-size:12px;display:flex;gap:3px;align-items:center;text-transform:none;letter-spacing:0}
 .rank{display:grid;grid-template-columns:34px 52px minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--panel2);border-radius:8px;padding:8px 14px}
@@ -366,9 +389,10 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
       <section data-sec="pendientes">
         <p class="sub">Ordenados por cuándo vencen. Una tarea completada a tiempo da 10 XP por hora estimada; un pendiente suelto da según prioridad (baja 10, media 25, alta 50, crítica 80). Tarde da la mitad, y con más de un día de atraso, la cuarta parte.</p>
         <div class="ro" hidden>Tienes acceso de solo lectura.</div>
-        <form class="add" id="fMis" style="grid-template-columns:2fr 1.3fr 1.1fr .9fr 1fr .8fr auto">
+        <form class="add" id="fMis" style="grid-template-columns:2fr 1.2fr 1fr 1.1fr .9fr 1fr .8fr auto">
           <label class="f">Pendiente<input id="mTitle" required maxlength="140" placeholder="Ej. Calcular incentivo Motorola de octubre"></label>
           <label class="f">Categoría<select id="mCat"></select></label>
+          <label class="f">Tipo<select id="mTipo"></select></label>
           <label class="f">Responsable<select id="mOwner"></select></label>
           <label class="f">Prioridad<select id="mPri"><option value="baja">Baja</option><option value="media" selected>Media</option><option value="alta">Alta</option><option value="critica">Crítica</option></select></label>
           <label class="f">Fecha límite<input id="mDue" type="date" required></label>
@@ -376,14 +400,27 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
           <button class="btn">Agregar</button>
           <p class="sug" id="mSug"></p>
         </form>
+        <div class="pz-bar" id="pBar"></div>
         <div class="seg" id="mFilter"><button type="button" aria-pressed="true" data-f="activas">Todos</button><button type="button" aria-pressed="false" data-f="mias">Míos</button><button type="button" aria-pressed="false" data-f="cumplidas">Completados</button></div>
         <div class="kan" id="mCols"></div>
+        <div class="corcho" id="pTablero"></div>
+        <h3 style="font-size:22px;margin:22px 0 6px">Notas del pintarrón</h3>
+        <form class="add" id="fNota" style="grid-template-columns:3fr 1fr 1fr auto">
+          <label class="f">Nota<input id="nTexto" required maxlength="300" placeholder="Ej. Pedir a Telefónica el corte de pospago antes del viernes"></label>
+          <label class="f">Prioridad<select id="nPri"></select></label>
+          <label class="f">Tipo<select id="nTipo"></select></label>
+          <button class="btn">Pegar nota</button>
+        </form>
+        <div class="pz-bar" id="nBar"></div>
+        <div class="corcho" id="nTablero"></div>
       </section>
 
       <section data-sec="recurrentes">
         <p class="sub" id="rcSemana"></p>
-        <div class="seg" id="rcDias"></div>
-        <div class="kan gente" id="rcWeek"></div>
+        <div class="pz-bar" id="aBar"></div>
+        <div class="corcho" id="aTablero"></div>
+        <div id="aSemana" hidden><div class="seg" id="rcDias"></div>
+        <div class="kan gente" id="rcWeek"></div></div>
         <details class="cat"><summary id="rcCatN">Catálogo de actividades</summary>
           <form class="add" id="fRec" style="grid-template-columns:2fr 1fr 2fr .8fr .7fr auto">
             <label class="f">Actividad<input id="rcTitle" required maxlength="140" placeholder="Ej. Enviar reporte semanal de ventas"></label>
@@ -422,7 +459,12 @@ ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;ga
       </section>
 
       <section data-sec="cambios">
-        <div class="seg" id="camTabs" style="margin-bottom:12px"><button type="button" data-cam="bit" aria-pressed="true">Bitácora de cambios</button><button type="button" data-cam="usr" aria-pressed="false">Usuarios y acceso</button><button type="button" data-cam="aud" aria-pressed="false">Auditoría</button></div>
+        <div class="seg" id="camTabs" style="margin-bottom:12px"><button type="button" data-cam="bit" aria-pressed="true">Bitácora de cambios</button><button type="button" data-cam="asis" aria-pressed="false">Asistencia</button><button type="button" data-cam="usr" aria-pressed="false">Usuarios y acceso</button><button type="button" data-cam="aud" aria-pressed="false">Auditoría</button></div>
+        <div id="camAsis" hidden>
+          <p class="sub">Entrada, salida a comer, regreso y salida de cada día, con las horas trabajadas y a qué hora terminó cada pendiente o actividad. Toca una fila para ver el detalle de lo que terminó.</p>
+          <div class="cam-bar"><label class="f">Desde<input id="asDesde" type="date"></label><label class="f">Hasta<input id="asHasta" type="date"></label><label class="f">Persona<select id="asQuien"></select></label><button type="button" class="ghost" id="asCsv">Exportar CSV</button></div>
+          <div class="tabla-w"><table class="tabla" id="asT"></table></div>
+        </div>
         <div id="camUsr" hidden>
           <p class="sub">Todas las cuentas. Las del equipo entran con su usuario y contraseña al Centro de Mando y a los tableros que tengan marcados (en Pospago ven los DN completos). Aquí se reinician claves y se quita o devuelve el acceso; las cuentas nuevas se crean con <code>crear_usuario.py</code>.</p>
           <div class="cam-bar"><input id="uBus" placeholder="Buscar nombre o usuario" aria-label="Buscar usuario"><div class="seg" id="uFil"><button type="button" data-ufil="equipo" aria-pressed="true">Equipo</button><button type="button" data-ufil="todos" aria-pressed="false">Todas las cuentas</button></div></div>
@@ -560,7 +602,7 @@ const ARM_TABS = [
 const dayIdx = () => (new Date().getDay() + 6) % 7 + 1;   // 1 = lunes
 const S = {
   sb:null, ch:null, chReady:false, uid:null, canWrite:true, session:null,
-  tareas:[], acts:[], xpt:{}, evid:{}, turnos:[], acc:[], usr:null, aud:[], llVistas:null, changes:[], portals:[], players:{}, profiles:{},
+  tareas:[], acts:[], xpt:{}, evid:{}, turnos:[], acc:[], usr:null, aud:[], llVistas:null, notas:[], asis:null, changes:[], portals:[], players:{}, profiles:{},
   sols:[], solSeen:null, jefes:[], msgs:[], msgSeen:0, conv:"grupo",
   fig:{ ...GENERIC }, outfits:[], remote:{}, floaters:[], keys:{}, filter:"activas", dia:dayIdx(),
   mode:"boot", panel:null, paused:false, busy:false,
@@ -629,6 +671,10 @@ async function load(col){
   if (col === "evid") {
     const { data, error } = await S.sb.from("cm_evidencias").select("*").order("subida"); if (error) return;
     S.evid = {}; data.forEach(e => (S.evid[e.tarea_id] ||= []).push(e)); renderData(); return;
+  }
+  if (col === "notas") {
+    const { data, error } = await S.sb.from("cm_notas").select("*").order("creado"); if (error) return;
+    S.notas = data; renderNotas(); return;
   }
   if (col === "llamadas") {
     const desde = new Date(Date.now() - 10 * 60000).toISOString();
@@ -707,9 +753,9 @@ function sugerencia(titulo, cat){
   const best = Object.entries(sc).sort((a, b) => b[1] - a[1])[0];
   return { cat, quien: best ? best[0] : null, n: best ? S.acts.filter(a => (a.responsable || "n:" + a.responsable_nombre) === best[0] && a.categoria === cat).length : 0 };
 }
-// tarjeta de tarea: solo muestra los botones que esa persona puede usar en ese estado
-function tarjeta(t){
-  const [el, ec] = TST[t.estado], p = PRI[t.prioridad] || PRI.media, ok = S.canWrite && puedeMover(t), id = esc(t.id), min = minutosDe(t), late = vencida(t);
+// botones de una tarea según su estado y quién la ve (tarjeta y post-it)
+function accionesDe(t){
+  const ok = S.canWrite && puedeMover(t), id = esc(t.id);
   const b = (acc, txt, cls = "") => ok ? `<button class="ghost ${cls}" data-mv="${acc}" data-id="${id}">${txt}</button>` : "";
   const fin = t.requiere_evidencia ? (ok ? `<button class="ghost ok" data-entregar="${id}">Entregar ✓</button>` : "") : b("enviar", "Terminar ✓", "ok");
   const pasa = ok && t.estado !== "completada" && t.estado !== "en_revision" && (esJefe() || t.responsable === me()) ? `<button class="ghost" data-pasar="${id}" title="Pasar a quien la cubre o apoya">Pasar</button>` : "";
@@ -717,12 +763,17 @@ function tarjeta(t){
     : t.estado === "en_proceso" ? (t.en_marcha_desde ? b("pausar", "Pausar") : b("reanudar", "Reanudar")) + fin + pasa
     : t.estado === "en_revision" ? (esJefe() ? `<button class="ghost ok" data-revisar="${id}">Revisar evidencia</button>` : "")
     : `<span class="chip" style="--c:#3fbf6a">+${t.xp} XP</span>` + b("reabrir", "Reabrir");
-  const nev = (S.evid[t.id] || []).length;
   const quitar = !t.actividad_id && S.canWrite && (esJefe() || (t.asignada_por === me() && t.estado === "asignada")) ? `<button class="ghost warn" data-tdel="${id}">Quitar</button>` : "";
+  return acts + quitar;
+}
+// tarjeta de tarea: solo muestra los botones que esa persona puede usar en ese estado
+function tarjeta(t){
+  const [el, ec] = TST[t.estado], p = PRI[t.prioridad] || PRI.media, ok = S.canWrite && puedeMover(t), id = esc(t.id), min = minutosDe(t), late = vencida(t);
+  const nev = (S.evid[t.id] || []).length, ac = accionesDe(t);
   return `<div class="tk${t.estado === "completada" ? " hecha" : ""}" style="--c:${late ? "var(--bad)" : ec}"><b>${esc(t.titulo)}</b>
     <small>${quien(t)}<span class="${late ? "late" : ""}">${esc(cuando(t))}</span>${t.estado === "en_proceso" || t.estado === "en_revision" ? `<span class="chip" style="--c:${ec}">${el}</span>` : ""}${t.actividad_id ? "" : `<span class="chip" style="--c:${p.c}">${p.l}</span>`}${min ? `<span>${t.en_marcha_desde ? "⏱ " : ""}${min} min</span>` : ""}${nev ? `<span title="Capturas de entrega">📎 ${nev}</span>` : ""}</small>
     ${t.nota_revision && t.estado === "en_proceso" ? `<span class="nota-rev">Rechazada: ${esc(t.nota_revision)}</span>` : ""}
-    ${acts || quitar ? `<div class="acts">${acts}${quitar}</div>` : ""}</div>`;
+    ${ac ? `<div class="acts">${ac}</div>` : ""}</div>`;
 }
 async function mover(id, acc, nota){
   const { data, error } = await S.sb.rpc("cm_mover_tarea", { p_tarea:id, p_accion:acc, p_nota:nota || null });
@@ -799,6 +850,9 @@ $("#mdl").addEventListener("click", async e => {
   if (e.target === $("#mdl") || e.target.closest("[data-cerrar]")) return cerrarMdl();
   if (e.target.closest("#evEnviar")) return enviarEv();
   if (e.target.closest("#llOk")) return enviarLlamada();
+  const tu = e.target.closest("button[data-tur]"); if (tu) { cerrarMdl(); return turno(tu.dataset.tur); }
+  if (e.target.closest("#edGuardar") && MDL?.edt) return guardarTarea();
+  if (e.target.closest("#eaGuardar") && MDL?.eda) return guardarActMdl();
   const vp = e.target.closest("button[data-verpos]");
   if (vp) { const r = Object.values(S.remote).find(q => q.uid === vp.dataset.verpos); cerrarMdl(); if (r) { cam.follow = false; cam.x = r.x; cam.y = r.y - 60; cam.z = Math.max(cam.z, 1); clampCam(); } return; }
   const es = e.target.closest("button[data-escribir]"); if (es) { cerrarMdl(); return openMsgs(dmKey(es.dataset.escribir)); }
@@ -845,11 +899,11 @@ async function dosPasos(){
 const CAM = { tab:"bit", ufil:"equipo", aud:"cambios" };
 const ACCESOS = [["centro", "Centro de Mando"], ["pospago", "Pospago"], ["elektra", "Elektra"], ["avance", "Avance GB"], ["cambios", "Control de Cambios"]];
 async function camTab(t){
-  if (t !== "bit" && !(await dosPasos())) t = "bit";
+  if ((t === "usr" || t === "aud") && !(await dosPasos())) t = "bit";
   CAM.tab = t;
   $("#camTabs").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.cam === t));
-  $("#camBit").hidden = t !== "bit"; $("#camUsr").hidden = t !== "usr"; $("#camAud").hidden = t !== "aud";
-  if (t === "usr") cargarUsuarios(); if (t === "aud") cargarAuditoria();
+  $("#camBit").hidden = t !== "bit"; $("#camUsr").hidden = t !== "usr"; $("#camAud").hidden = t !== "aud"; $("#camAsis").hidden = t !== "asis";
+  if (t === "usr") cargarUsuarios(); if (t === "aud") cargarAuditoria(); if (t === "asis") cargarAsistencia();
 }
 $("#camTabs").onclick = e => { const b = e.target.closest("button[data-cam]"); if (b) camTab(b.dataset.cam); };
 async function cargarUsuarios(){
@@ -981,22 +1035,276 @@ $("#lineaBtn").onclick = () => {
 // en qué sala o zona está un punto del mapa
 const lugarDe = (x, y) => { const r = ROOMS.find(q => x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); return r ? r.name : "En el pasillo o el vestíbulo"; };
 
+// ---------- pintarrón: post-its por persona, prioridad o tipo (pendientes, actividades fijas y notas) ----------
+const TIPOS = ["Cálculo", "Envío", "Revisión", "Reporte", "Atención", "Reunión", "Otro"];
+const PRIS = ["critica", "alta", "media", "baja"];
+const CPRI = { critica:"#ffb3ad", alta:"#ffd0c2", media:"#fcf3a8", baja:"#cdeec9" };
+const CTIPO = { "Cálculo":"#e3d3ff", "Envío":"#cfe2ff", "Revisión":"#d5daff", "Reporte":"#c4ede5", "Atención":"#ffdcbc", "Reunión":"#f7d2e9", "Otro":"#ebe7e0" };
+// tipo de actividad por palabras del título (el mismo criterio que la base)
+function tipoDe(t){
+  t = (t || "").toLowerCase();
+  if (/reuni|teams/.test(t)) return "Reunión";
+  if (/calcul|cálcul|cuota|comisi|incentiv/.test(t) && !/envi|enví/.test(t)) return "Cálculo";
+  if (/envi|enví|mandar|compartir/.test(t)) return "Envío";
+  if (/revis|aclaraci|autoriz|seguimiento|validar/.test(t)) return "Revisión";
+  if (/archivo|reporte|avance|layout|inventario|cierre|líneas|lineas|cartas|actualizar/.test(t)) return "Reporte";
+  if (/atenci|guardia|correo|usuarios|reset|ajuste|estructura|incidente|solicitar|registro/.test(t)) return "Atención";
+  return "Otro";
+}
+const giro = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) | 0; return ((h % 7) - 3) * .45; };   // cada post-it un poco chueco, siempre igual
+const priL = p => (PRI[p] || PRI.media).l;
+const opts = (lst, sel, lbl = x => x) => lst.map(x => `<option value="${esc(x)}"${x === sel ? " selected" : ""}>${esc(lbl(x))}</option>`).join("");
+const fotoDe = k => k && !k.startsWith("n:") && k !== "-" ? avatarOf(k) : LOGO.src;
+// estado de cada pintarrón: vista (persona, prioridad, tipo y la vista vieja), color, persona abierta y columnas al abrirla
+const PZ = { p:{ vista:"persona", color:"prioridad", persona:null, cols:"prioridad" }, a:{ vista:"persona", color:"tipo", persona:null, cols:"tipo" }, n:{ cols:"prioridad", color:"prioridad" } };
+function barra(id, st, vieja){
+  const sg = (k, lst) => `<div class="seg">${lst.map(([v, l]) => `<button type="button" data-pz="${id}" data-k="${k}" data-v="${v}" aria-pressed="${st[k] === v}">${l}</button>`).join("")}</div>`;
+  const vistas = [["persona", "Por persona"], ["prioridad", "Por prioridad"], ["tipo", "Por tipo"], ...(vieja ? [vieja] : [])];
+  return `<span>Vista</span>${sg("vista", vistas)}${st.persona && st.vista === "persona" ? `<span>Columnas</span>${sg("cols", [["prioridad", "Prioridad"], ["tipo", "Tipo"]])}` : ""}<span>Color</span>${sg("color", [["prioridad", "Prioridad"], ["tipo", "Tipo"]])}`;
+}
+const ordenPz = (a, b) => (PRIS.indexOf(a.prioridad) - PRIS.indexOf(b.prioridad)) || TIPOS.indexOf(a.tipo) - TIPOS.indexOf(b.tipo);
+// columnas: personas (con su foto) o valores de prioridad / tipo; cada columna recibe post-its arrastrados
+function tableroHTML(items, st, kind, postit){
+  const enPersona = st.vista === "persona" && st.persona, campo = enPersona ? st.cols : st.vista;
+  let cols;
+  if (st.vista === "persona" && !st.persona) {
+    const ks = [...new Set([...gente(), ...items.map(kind === "a" ? duenoAct : dueno)])].filter(k => k !== "-");
+    cols = ks.map(k => ({ drop:`persona:${k}`, head:`<button type="button" class="pz-h" data-pzper="${kind}" data-k="${esc(k)}" title="Ver sus notas por ${st.cols}"><img src="${fotoDe(k)}" alt=""><span><b>${esc(nombreDe(k))}</b><small>${items.filter(i => (kind === "a" ? duenoAct(i) : dueno(i)) === k).length} notas · entrar ›</small></span></button>`,
+      items:items.filter(i => (kind === "a" ? duenoAct(i) : dueno(i)) === k) }));
+  } else {
+    const base = enPersona ? items.filter(i => (kind === "a" ? duenoAct(i) : dueno(i)) === st.persona) : items;
+    const vals = campo === "tipo" ? TIPOS : PRIS;
+    cols = vals.map(v => ({ drop:`${campo}:${v}`, head:`<div class="pz-h"><i class="cuadro" style="--bg:${campo === "tipo" ? CTIPO[v] : CPRI[v]}"></i><span><b>${esc(campo === "tipo" ? v : priL(v))}</b><small>${base.filter(i => i[campo] === v).length} notas</small></span></div>`,
+      items:base.filter(i => i[campo] === v) }));
+  }
+  const top = enPersona ? `<div style="grid-column:1/-1;display:flex;gap:10px;align-items:center"><button type="button" class="ghost" data-pzper="${kind}" data-k="" style="background:#fff8;color:#1d1a16">‹ Todo el equipo</button><span class="pz-h" style="width:auto"><img src="${fotoDe(st.persona)}" alt=""><b>${esc(nombreDe(st.persona))}</b></span></div>` : "";
+  return top + cols.map(c => `<div class="pz-col" data-drop="${kind}:${esc(c.drop)}">${c.head}${c.items.sort(ordenPz).map(i => postit(i, st.color)).join("") || `<div class="pz-vacio">Suelta aquí una nota</div>`}</div>`).join("");
+}
+const duenoAct = a => a.responsable || (a.responsable_nombre ? "n:" + a.responsable_nombre : "-");
+const color = (i, por) => por === "tipo" ? CTIPO[i.tipo] || CTIPO.Otro : CPRI[i.prioridad] || CPRI.media;
+function postitTarea(t, por){
+  const k = dueno(t), late = vencida(t), min = minutosDe(t), ed = S.canWrite && t.estado !== "completada" && (esJefe() || t.responsable === me() || t.asignada_por === me());
+  const ac = accionesDe(t);
+  return `<div class="pi${t.estado === "completada" ? " hecha" : ""}" draggable="${ed}" data-drag="p:${esc(t.id)}" style="--bg:${color(t, por)};--rot:${giro(t.id)}deg"><i class="chin"></i>
+    ${ed ? `<button type="button" class="x" data-edt="${esc(t.id)}" title="Editar" aria-label="Editar">✎</button>` : ""}
+    <div class="pi-who"><img src="${fotoDe(k)}" alt="">${esc(nombreDe(k))}</div><b class="pi-t">${esc(t.titulo)}</b>
+    <small><span class="tg">${esc(t.tipo)}</span><span class="tg">${esc(priL(t.prioridad))}</span><span class="${late ? "late" : ""}">${esc(cuando(t))}</span>${t.minutos_estimados ? `<span>${t.minutos_estimados} min</span>` : ""}${min ? `<span>⏱ ${min} min</span>` : ""}${t.estado === "en_proceso" || t.estado === "en_revision" ? `<span class="tg">${esc(TST[t.estado][0])}</span>` : ""}</small>
+    ${t.nota_revision && t.estado === "en_proceso" ? `<small style="color:#8a5a00"><b>Rechazada:</b> ${esc(t.nota_revision)}</small>` : ""}
+    ${ac ? `<div class="acts">${ac}</div>` : ""}</div>`;
+}
+function postitAct(a, por){
+  const k = duenoAct(a), ed = esJefe(), DC = ["L", "M", "Mi", "J", "V", "S", "D"];
+  const hoy = S.tareas.filter(t => t.actividad_id === a.id && diaDe(t) === today()), hechas = hoy.filter(t => !abierta(t)).length;
+  return `<div class="pi" draggable="${ed}" data-drag="a:${esc(a.id)}" style="--bg:${color(a, por)};--rot:${giro(a.id)}deg"><i class="chin"></i>
+    ${ed ? `<button type="button" class="x" data-eda="${esc(a.id)}" title="Editar" aria-label="Editar">✎</button>` : ""}
+    <div class="pi-who"><img src="${fotoDe(k)}" alt="">${esc(nombreDe(k))}</div><b class="pi-t">${esc(a.titulo)}</b>
+    <small><span class="tg">${esc(a.tipo)}</span><span class="tg">${esc(priL(a.prioridad))}</span><span>${a.dias.length ? a.dias.map(d => DC[d - 1]).join(" ") : "sin día"}</span><span>${a.horas ? esc(a.horas.map(h => h.slice(0, 5)).join(", ")) : "sin horario"}</span><span>${a.minutos_estimados} min</span></small>
+    ${hoy.length ? `<small><b>Hoy:</b> ${hechas} de ${hoy.length} hechas</small>` : ""}</div>`;
+}
+function renderTableros(){
+  // pendientes sueltos (los de la exhibición): la vista vieja por vencimiento sigue en "Por fecha"
+  const p = PZ.p, mio = t => S.filter !== "mias" || t.responsable === me();
+  $("#pBar").innerHTML = barra("p", p, ["fecha", "Por fecha"]);
+  const sueltas = S.tareas.filter(t => !t.actividad_id && mio(t) && (S.filter === "cumplidas" ? !abierta(t) : abierta(t)));
+  $("#mCols").hidden = p.vista !== "fecha"; $("#pTablero").hidden = p.vista === "fecha";
+  if (p.vista !== "fecha") $("#pTablero").innerHTML = tableroHTML(sueltas, p, "p", postitTarea);
+  // actividades fijas del catálogo; "Semana" deja la vista por día
+  const a = PZ.a;
+  $("#aBar").innerHTML = barra("a", a, ["semana", "Semana por día"]);
+  $("#aSemana").hidden = a.vista !== "semana"; $("#aTablero").hidden = a.vista === "semana";
+  if (a.vista !== "semana") $("#aTablero").innerHTML = tableroHTML(S.acts, a, "a", postitAct);
+}
+// notas libres: cualquiera del equipo pega una; se mueven entre columnas de prioridad o de tipo
+function renderNotas(){
+  const n = PZ.n;
+  if (!$("#nPri").options.length) { $("#nPri").innerHTML = opts(PRIS, "media", priL); $("#nTipo").innerHTML = opts(TIPOS, "Otro"); }
+  $("#nBar").innerHTML = `<span>Columnas</span><div class="seg">${[["prioridad", "Prioridad"], ["tipo", "Tipo"]].map(([v, l]) => `<button type="button" data-pz="n" data-k="cols" data-v="${v}" aria-pressed="${n.cols === v}">${l}</button>`).join("")}</div>
+    <span>Color</span><div class="seg">${[["prioridad", "Prioridad"], ["tipo", "Tipo"]].map(([v, l]) => `<button type="button" data-pz="n" data-k="color" data-v="${v}" aria-pressed="${n.color === v}">${l}</button>`).join("")}</div>`;
+  const vals = n.cols === "tipo" ? TIPOS : PRIS;
+  $("#nTablero").innerHTML = vals.map(v => {
+    const lst = S.notas.filter(x => x[n.cols] === v);
+    return `<div class="pz-col" data-drop="n:${n.cols}:${esc(v)}"><div class="pz-h"><i class="cuadro" style="--bg:${n.cols === "tipo" ? CTIPO[v] : CPRI[v]}"></i><span><b>${esc(n.cols === "tipo" ? v : priL(v))}</b><small>${lst.length} notas</small></span></div>
+      ${lst.map(x => `<div class="pi" draggable="${S.canWrite}" data-drag="n:${esc(x.id)}" style="--bg:${color(x, n.color)};--rot:${giro(x.id)}deg"><i class="chin"></i>
+        ${x.autor === me() || esJefe() ? `<button type="button" class="x" data-ndel="${esc(x.id)}" title="Quitar nota" aria-label="Quitar nota">✕</button>` : ""}
+        <div class="pi-who"><img src="${avatarOf(x.autor)}" alt="">${esc(firstName(x.autor) || name(x.autor))}</div><span class="pi-t" style="font-weight:600">${esc(x.texto)}</span>
+        <small><span class="tg">${esc(x.tipo)}</span><span class="tg">${esc(priL(x.prioridad))}</span><span>${esc(ago(Date.parse(x.creado)))}</span></small></div>`).join("") || `<div class="pz-vacio">Suelta aquí una nota</div>`}</div>`;
+  }).join("");
+}
+$("#fNota").onsubmit = async e => {
+  e.preventDefault(); const texto = $("#nTexto").value.trim(); if (!texto) return;
+  const { error } = await S.sb.from("cm_notas").insert({ texto, prioridad:$("#nPri").value, tipo:$("#nTipo").value });
+  if (error) { toast(errMsg(error)); return; }
+  $("#nTexto").value = ""; load("notas");
+};
+$("#nTexto").addEventListener("input", () => { if (!$("#nTipo").dataset.tocado) $("#nTipo").value = tipoDe($("#nTexto").value); });
+$("#nTipo").addEventListener("change", () => { $("#nTipo").dataset.tocado = 1; });
+// barras de vista y personas
+$("#panel").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-pz]");
+  if (b) { const st = PZ[b.dataset.pz]; st[b.dataset.k] = b.dataset.v; if (b.dataset.k === "vista") st.persona = null; b.dataset.pz === "n" ? renderNotas() : renderTableros(); return; }
+  const pe = e.target.closest("[data-pzper]");
+  if (pe) { PZ[pe.dataset.pzper].persona = pe.dataset.k || null; renderTableros(); return; }
+  const nd = e.target.closest("button[data-ndel]");
+  if (nd) return confirmDel(nd, async () => { const { error } = await S.sb.from("cm_notas").delete().eq("id", nd.dataset.ndel); if (error) toast(errMsg(error)); else load("notas"); });
+  const et = e.target.closest("button[data-edt]"); if (et) return editarTarea(S.tareas.find(t => t.id === et.dataset.edt));
+  const ea = e.target.closest("button[data-eda]"); if (ea) return editarAct(S.acts.find(a => a.id === ea.dataset.eda));
+});
+// arrastrar y soltar post-its entre columnas (persona = reasignar; prioridad o tipo = cambiarlo)
+let ARR = null;
+$("#panel").addEventListener("dragstart", e => { const d = e.target.closest?.("[data-drag]"); if (!d) return; ARR = d.dataset.drag; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ARR); } catch {} });
+$("#panel").addEventListener("dragover", e => { const c = e.target.closest?.("[data-drop]"); if (!c || !ARR || c.dataset.drop[0] !== ARR[0]) return; e.preventDefault(); c.classList.add("sobre"); });
+$("#panel").addEventListener("dragleave", e => { const c = e.target.closest?.("[data-drop]"); if (c && !c.contains(e.relatedTarget)) c.classList.remove("sobre"); });
+$("#panel").addEventListener("drop", async e => {
+  const c = e.target.closest?.("[data-drop]"); if (!c || !ARR) return; e.preventDefault(); c.classList.remove("sobre");
+  const [kind, id] = [ARR[0], ARR.slice(2)], [, campo, ...v] = c.dataset.drop.split(":"), val = v.join(":"); ARR = null;
+  if (kind !== c.dataset.drop[0]) return;
+  if (kind === "n") { const { error } = await S.sb.from("cm_notas").update({ [campo]:val, movida:new Date().toISOString() }).eq("id", id); if (error) toast(errMsg(error)); return load("notas"); }
+  if (kind === "p") {
+    const t = S.tareas.find(x => x.id === id); if (!t) return;
+    const r = campo === "persona" ? await S.sb.rpc("cm_reasignar_tarea", { p_tarea:id, ...(val.startsWith("n:") ? { p_responsable:null, p_nombre:val.slice(2) } : { p_responsable:val, p_nombre:null }), p_nota:"movida en el pintarrón" })
+      : await S.sb.rpc("cm_editar_tarea", { p_tarea:id, p_titulo:t.titulo, p_prioridad:campo === "prioridad" ? val : null, p_tipo:campo === "tipo" ? val : null, p_limite:null, p_minutos:null });
+    if (r.error) toast(errTxt(r.error)); else if (campo === "persona") toast(`Ahora la tiene ${nombreDe(val)}`);
+    return load("tareas");
+  }
+  if (kind === "a") {
+    const r = campo === "persona" ? await S.sb.rpc("cm_reasignar_actividad", { p_actividad:id, ...(val.startsWith("n:") ? { p_responsable:null, p_nombre:val.slice(2) } : { p_responsable:val, p_nombre:null }) })
+      : await guardarAct(S.acts.find(x => x.id === id), { [campo]:val });
+    if (r?.error) toast(errTxt(r.error)); else if (campo === "persona") toast(`Ahora la lleva ${nombreDe(val)}`);
+    load("acts"); load("tareas");
+  }
+});
+// editar un pendiente: actividad, responsable, prioridad, tipo, fecha y hora de entrega, tiempo
+function editarTarea(t){
+  if (!t) return;
+  const d = new Date(t.limite), k = dueno(t);
+  abrirMdl(`<h3>Editar pendiente</h3>
+    <label class="f">Actividad<input id="edTit" maxlength="140" value="${esc(t.titulo)}"></label>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+      <label class="f">Responsable<select id="edResp">${opsGente(k)}</select></label>
+      <label class="f">Prioridad<select id="edPri">${opts(PRIS, t.prioridad, priL)}</select></label>
+      <label class="f">Tipo<select id="edTipo">${opts(TIPOS, t.tipo)}</select></label>
+      <label class="f">Fecha de entrega<input id="edFecha" type="date" value="${ymd(d)}"></label>
+      <label class="f">Hora<input id="edHora" type="time" value="${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}"></label>
+      <label class="f">Tiempo (minutos)<input id="edMin" type="number" min="5" max="1440" step="5" value="${t.minutos_estimados || ""}" placeholder="sin estimar"></label>
+    </div>
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="edGuardar">Guardar</button></div>`, { edt:t });
+}
+async function guardarTarea(){
+  const t = MDL.edt, f = $("#edFecha").value, h = $("#edHora").value || "18:00", nuevo = $("#edResp").value;
+  const r = await S.sb.rpc("cm_editar_tarea", { p_tarea:t.id, p_titulo:$("#edTit").value, p_prioridad:$("#edPri").value, p_tipo:$("#edTipo").value,
+    p_limite:f ? new Date(`${f}T${h}:00`).toISOString() : null, p_minutos:+$("#edMin").value || null });
+  if (r.error) { toast(errTxt(r.error)); return; }
+  if (nuevo !== dueno(t)) { const q = await S.sb.rpc("cm_reasignar_tarea", { p_tarea:t.id, ...(nuevo.startsWith("n:") ? { p_responsable:null, p_nombre:nuevo.slice(2) } : { p_responsable:nuevo, p_nombre:null }), p_nota:"editada en el pintarrón" }); if (q.error) { toast(errTxt(q.error)); return; } }
+  cerrarMdl(); toast("Pendiente actualizado"); load("tareas");
+}
+// editar una actividad fija (líderes): sus tareas que aún no empiezan toman los cambios
+function editarAct(a){
+  if (!a) return;
+  const DL = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"], k = duenoAct(a);
+  abrirMdl(`<h3>Editar actividad fija</h3>
+    <label class="f">Actividad<input id="eaTit" maxlength="140" value="${esc(a.titulo)}"></label>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+      <label class="f">Responsable<select id="eaResp">${opsGente(k)}</select></label>
+      <label class="f">Prioridad<select id="eaPri">${opts(PRIS, a.prioridad, priL)}</select></label>
+      <label class="f">Tipo<select id="eaTipo">${opts(TIPOS, a.tipo)}</select></label>
+      <label class="f">Hora (bloque)<input id="eaHora" type="time" value="${a.horas && a.horas.length === 1 ? a.horas[0].slice(0, 5) : ""}"${a.horas && a.horas.length > 1 ? ` disabled title="Tiene varias horas: ${esc(a.horas.map(x => x.slice(0, 5)).join(", "))}"` : ""}></label>
+      <label class="f">Tiempo (minutos)<input id="eaMin" type="number" min="5" max="1440" step="5" value="${a.minutos_estimados}"></label>
+    </div>
+    <div class="f"><span>Días</span><div class="dias" id="eaDias">${DL.map((d, i) => `<label><input type="checkbox" value="${i + 1}"${a.dias.includes(i + 1) ? " checked" : ""}>${d}</label>`).join("")}</div></div>
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="eaGuardar">Guardar</button></div>`, { eda:a });
+}
+async function guardarAct(a, cambios){
+  const nuevosDias = cambios.dias && cambios.dias.join() !== a.dias.join(), nuevaHora = "horas" in cambios && String(cambios.horas) !== String(a.horas);
+  const r = await S.sb.from("cm_actividades").update(cambios).eq("id", a.id);
+  if (r.error) return r;
+  const ahora = new Date().toISOString();
+  if (nuevosDias || nuevaHora) {        // otro día u hora: se rehacen sus tareas futuras que nadie ha empezado
+    await S.sb.from("cm_tareas").delete().eq("actividad_id", a.id).eq("estado", "asignada").gt("limite", ahora);
+    await S.sb.rpc("cm_generar_semana", { p_desde:today() });
+  } else {
+    const t = {}; for (const c of ["titulo", "prioridad", "tipo", "minutos_estimados"]) if (c in cambios) t[c] = cambios[c];
+    if (Object.keys(t).length) await S.sb.from("cm_tareas").update(t).eq("actividad_id", a.id).eq("estado", "asignada").gt("limite", ahora);
+  }
+  return r;
+}
+async function guardarActMdl(){
+  const a = MDL.eda, dias = [...document.querySelectorAll("#eaDias input:checked")].map(x => +x.value), h = $("#eaHora").value, nuevo = $("#eaResp").value;
+  if (!dias.length) { toast("Elige al menos un día"); return; }
+  const cambios = { titulo:$("#eaTit").value.trim() || a.titulo, prioridad:$("#eaPri").value, tipo:$("#eaTipo").value, minutos_estimados:Math.max(5, +$("#eaMin").value || 60), dias,
+    frecuencia:dias.length >= 5 ? "diaria" : "semanal", ...($("#eaHora").disabled ? {} : { horas:h ? [h + ":00"] : null }) };
+  const r = await guardarAct(a, cambios); if (r.error) { toast(errTxt(r.error)); return; }
+  if (nuevo !== duenoAct(a)) { const q = await S.sb.rpc("cm_reasignar_actividad", { p_actividad:a.id, ...(nuevo.startsWith("n:") ? { p_responsable:null, p_nombre:nuevo.slice(2) } : { p_responsable:nuevo, p_nombre:null }) }); if (q.error) { toast(errTxt(q.error)); return; } }
+  cerrarMdl(); toast("Actividad actualizada"); load("acts"); load("tareas");
+}
+
+// ---------- asistencia (Control de Cambios): entrada, comida, regreso, salida y lo que terminó cada día ----------
+async function cargarAsistencia(){
+  if (!$("#asDesde").value) { const d = new Date(); d.setDate(d.getDate() - 6); $("#asDesde").value = ymd(d); $("#asHasta").value = today(); }
+  if (!$("#asQuien").options.length) $("#asQuien").innerHTML = `<option value="">Todo el equipo</option>` + Object.keys(S.profiles).filter(id => S.profiles[id].name).sort((a, b) => name(a).localeCompare(name(b))).map(id => `<option value="${esc(id)}">${esc(name(id))}</option>`).join("");
+  const desde = new Date($("#asDesde").value + "T00:00:00"), hasta = new Date($("#asHasta").value + "T00:00:00"); hasta.setDate(hasta.getDate() + 1);
+  const [t, k] = await Promise.all([
+    S.sb.from("cm_turnos").select("*").gte("inicio", desde.toISOString()).lt("inicio", hasta.toISOString()).order("inicio"),
+    S.sb.from("cm_tareas").select("id,titulo,responsable,completada,limite,minutos_efectivos,minutos_estimados,tipo,actividad_id").eq("estado", "completada").gte("completada", desde.toISOString()).lt("completada", hasta.toISOString()).order("completada")]);
+  if (t.error || k.error) { toast(errTxt(t.error || k.error)); return; }
+  const dias = {};       // persona|día -> fila
+  const fila = (u, d) => dias[u + "|" + d] ||= { u, d, turnos:[], hechas:[] };
+  for (const r of t.data) fila(r.usuario, ymd(new Date(r.inicio))).turnos.push(r);
+  for (const r of k.data) if (r.responsable) fila(r.responsable, ymd(new Date(r.completada))).hechas.push(r);
+  S.asis = Object.values(dias).sort((a, b) => b.d.localeCompare(a.d) || name(a.u).localeCompare(name(b.u)));
+  pintarAsistencia();
+}
+const hm = d => d ? new Date(d).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" }) : "—";
+function calcAsis(r){
+  const tr = r.turnos, ent = tr[0]?.inicio, sal = tr.at(-1)?.fin, abierto = tr.some(x => !x.fin), c = tr.find(x => x.comida_inicio);
+  const comida = tr.reduce((s, x) => s + (x.comida_inicio ? (Date.parse(x.comida_fin || x.fin || new Date()) - Date.parse(x.comida_inicio)) : 0), 0);
+  const total = tr.reduce((s, x) => s + (Date.parse(x.fin || new Date()) - Date.parse(x.inicio)), 0) - comida;
+  return { ent, sal:abierto ? null : sal, abierto, comIni:c?.comida_inicio, comFin:c?.comida_fin, comida, total };
+}
+function pintarAsistencia(){
+  if (!S.asis) return;
+  const q = $("#asQuien").value, lst = S.asis.filter(r => !q || r.u === q), fd = d => new Date(d + "T12:00:00").toLocaleDateString("es-MX", { weekday:"short", day:"numeric", month:"short" });
+  $("#asT").innerHTML = `<thead><tr><th>Persona</th><th>Día</th><th>Entrada</th><th>Sale a comer</th><th>Regresa</th><th>Salida</th><th>Comida</th><th>Horas trabajadas</th><th>Terminó</th><th>Última terminada</th></tr></thead><tbody>${lst.map((r, i) => {
+    const a = calcAsis(r), ult = r.hechas.at(-1);
+    return `<tr data-asis="${i}" style="cursor:pointer"><td>${who(r.u)}</td><td style="white-space:nowrap">${esc(fd(r.d))}</td><td>${esc(hm(a.ent))}</td><td>${esc(hm(a.comIni))}</td><td>${a.comIni && !a.comFin ? "en comida" : esc(hm(a.comFin))}</td>
+      <td>${a.abierto ? '<span class="chip" style="--c:#3fbf6a">en turno</span>' : esc(hm(a.sal))}</td><td>${a.comida ? esc(dur(a.comida)) : "—"}</td><td><b>${r.turnos.length ? esc(dur(a.total)) : "sin turno"}</b></td>
+      <td>${r.hechas.length}</td><td>${ult ? esc(hm(ult.completada)) : "—"}</td></tr>
+      <tr class="asis-det" data-asisdet="${i}" hidden><td colspan="10">${r.hechas.length ? r.hechas.map(h => `${esc(hm(h.completada))} · <b>${esc(h.titulo)}</b> · ${esc(h.tipo)}${h.minutos_efectivos > 0 ? ` · ${Math.round(h.minutos_efectivos)} min trabajados` : ""}${h.completada > h.limite ? ' · <span class="late">tarde</span>' : ""}`).join("<br>") : "No terminó pendientes ni actividades este día."}</td></tr>`;
+  }).join("") || `<tr><td colspan="10">Sin registros en esas fechas.</td></tr>`}</tbody>`;
+}
+$("#asT").addEventListener("click", e => { const r = e.target.closest("tr[data-asis]"); if (!r) return; const d = $(`tr[data-asisdet="${r.dataset.asis}"]`); d.hidden = !d.hidden; });
+for (const id of ["#asDesde", "#asHasta"]) $(id).addEventListener("change", cargarAsistencia);
+$("#asQuien").addEventListener("change", pintarAsistencia);
+$("#asCsv").onclick = () => {
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`, sel = $("#asQuien").value;
+  const filas = [["Persona", "Día", "Entrada", "Sale a comer", "Regresa", "Salida", "Comida (min)", "Horas trabajadas", "Pendientes y actividades terminadas", "Última terminada"],
+    ...S.asis.filter(r => !sel || r.u === sel).map(r => { const a = calcAsis(r); return [name(r.u), r.d, hm(a.ent), hm(a.comIni), hm(a.comFin), a.abierto ? "en turno" : hm(a.sal), Math.round(a.comida / 60000), (a.total / 36e5).toFixed(2), r.hechas.length, r.hechas.at(-1) ? hm(r.hechas.at(-1).completada) : ""]; })];
+  const el = document.createElement("a"); el.href = URL.createObjectURL(new Blob(["\ufeff" + filas.map(x => x.map(q).join(",")).join("\r\n")], { type:"text/csv" }));
+  el.download = `asistencia_${$("#asDesde").value}_${$("#asHasta").value}.csv`; el.click(); setTimeout(() => URL.revokeObjectURL(el.href), 5000);
+};
+
 // ---------- turno: checar entrada y salida ----------
 const miTurno = () => S.turnos.find(r => r.usuario === me() && !r.fin);
 const dur = ms => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+const enComida = t => t && t.comida_inicio && !t.comida_fin;
 function pintarTurno(){
   const b = $("#turnoBtn"), t = miTurno(); if (!b) return;
-  b.classList.toggle("on", !!t);
-  b.innerHTML = t ? `<i></i>En turno · ${dur(Date.now() - Date.parse(t.inicio))} · Cerrar` : `<i></i>Abrir turno`;
-  b.title = t ? `Entraste a las ${new Date(t.inicio).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" })}` : "Checa tu entrada";
+  b.classList.toggle("on", !!t && !enComida(t));
+  b.innerHTML = !t ? `<i></i>Abrir turno` : enComida(t) ? `<i style="background:var(--warn)"></i>En comida · ${dur(Date.now() - Date.parse(t.comida_inicio))} · Regresar` : `<i></i>En turno · ${dur(Date.now() - Date.parse(t.inicio))} ▾`;
+  b.title = t ? `Entraste a las ${hm(t.inicio)}` : "Checa tu entrada";
 }
-$("#turnoBtn").onclick = async () => {
-  const b = $("#turnoBtn"), abierto = miTurno();
-  if (abierto && !b.dataset.armed) { b.dataset.armed = 1; b.innerHTML = "<i></i>¿Cerrar tu turno?"; setTimeout(() => { delete b.dataset.armed; pintarTurno(); }, 2500); return; }
-  delete b.dataset.armed;
-  const { error } = await S.sb.rpc("cm_turno", { p_accion:abierto ? "cerrar" : "abrir" });
-  if (error) { toast(/turno/.test(error.message) ? error.message : errMsg(error)); return; }
-  toast(abierto ? `Turno cerrado: ${dur(Date.now() - Date.parse(abierto.inicio))}` : "Turno abierto. ¡Buen día!"); load("turnos");
+async function turno(acc){
+  const t = miTurno(), { error } = await S.sb.rpc("cm_turno", { p_accion:acc });
+  if (error) { toast(/turno|comida/.test(error.message) ? error.message : errMsg(error)); return; }
+  toast({ abrir:"Turno abierto. ¡Buen día!", comer:"Buen provecho: tu comida quedó registrada", regresar:"De vuelta: se registró tu regreso", cerrar:`Turno cerrado: ${t ? dur(Date.now() - Date.parse(t.inicio)) : ""}` }[acc]);
+  load("turnos");
+}
+// sin turno: abrir · en comida: regresar · en turno: menú con salir a comer y cerrar
+$("#turnoBtn").onclick = () => {
+  const t = miTurno();
+  if (!t) return turno("abrir");
+  if (enComida(t)) return turno("regresar");
+  abrirMdl(`<h3>Tu turno</h3><p class="sub">Entraste a las ${esc(hm(t.inicio))}${t.comida_inicio ? ` · comida de ${esc(hm(t.comida_inicio))} a ${esc(hm(t.comida_fin))}` : ""} · llevas ${esc(dur(Date.now() - Date.parse(t.inicio)))}.</p>
+    <div class="row">${t.comida_inicio ? "" : `<button class="ghost" type="button" data-tur="comer">Salir a comer</button>`}<button class="btn" type="button" data-tur="cerrar">Cerrar turno</button></div>`);
 };
 
 let profBusy = false;
@@ -1042,6 +1350,7 @@ function renderData(){
     const el = $(sel), keep = el.value || me(), ops = gente();
     el.innerHTML = opsGente(); el.value = ops.includes(keep) ? keep : me();
   }
+  if (!$("#mTipo").options.length) $("#mTipo").innerHTML = `<option value="">Se sugiere solo</option>` + opts(TIPOS, "");
   if (!$("#mCat").options.length) $("#mCat").innerHTML = `<option value="">Elige o se sugiere sola</option>` + CATS.map(c => `<option>${esc(c)}</option>`).join("");
 
   // pendientes: sueltos por cuándo vencen, más las recurrentes de hoy y las atrasadas
@@ -1080,13 +1389,15 @@ function renderData(){
     <small>${esc(a.responsable ? name(a.responsable) : nombreDe(a.responsable_nombre ? "n:" + a.responsable_nombre : "-"))} · ${a.dias.length ? a.dias.map(d => DC[d - 1]).join(" ") : "sin día"} · ${a.horas ? esc(a.horas.map(h => h.slice(0, 5)).join(", ")) : "sin horario"} · ${a.minutos_estimados} min</small></div>
     ${esJefe() ? `<div class="acts"><button class="ghost" data-actpasa="${esc(a.id)}">Cambiar responsable</button><button class="ghost warn" data-actdel="${esc(a.id)}">Quitar</button></div>` : ""}</li>`).join("");
 
+  renderTableros();
+
   // sala de juntas: evidencias por revisar (líderes) y turnos de hoy
   const rev = S.tareas.filter(t => t.estado === "en_revision").sort((a, b) => (a.enviada || "").localeCompare(b.enviada || ""));
   $("#jRev").hidden = !esJefe(); $("#jRevN").textContent = rev.length;
   $("#jRevL").innerHTML = rev.length ? rev.map(tarjeta).join("") : `<div class="empty">No hay entregas por revisar.</div>`;
   const hoyT = S.turnos.filter(r => !r.fin || ymd(new Date(r.inicio)) === today()), hm = d => new Date(d).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" });
   $("#jTurnos").innerHTML = hoyT.length ? hoyT.map(r => `<li class="item" style="--c:${r.fin ? "var(--line)" : "var(--ok)"}"><span class="chip" style="--c:${r.fin ? "#8a8580" : "#3fbf6a"}">${r.fin ? "Cerrado" : "En turno"}</span>
-    <div><b>${who(r.usuario)}</b><small>Entrada ${esc(hm(r.inicio))}${ymd(new Date(r.inicio)) !== today() ? " (ayer)" : ""} · ${r.fin ? `salida ${esc(hm(r.fin))}` : "sigue en turno"} · ${esc(dur((r.fin ? Date.parse(r.fin) : Date.now()) - Date.parse(r.inicio)))}</small></div></li>`).join("")
+    <div><b>${who(r.usuario)}</b><small>Entrada ${esc(hm(r.inicio))}${ymd(new Date(r.inicio)) !== today() ? " (ayer)" : ""} · ${r.fin ? `salida ${esc(hm(r.fin))}` : "sigue en turno"}${r.comida_inicio ? ` · comida ${esc(hm(r.comida_inicio))}${r.comida_fin ? "–" + esc(hm(r.comida_fin)) : " (en comida)"}` : ""} · ${esc(dur((r.fin ? Date.parse(r.fin) : Date.now()) - Date.parse(r.inicio)))}</small></div></li>`).join("")
     : `<li class="empty">Nadie ha abierto turno hoy.</li>`;
 
   // dashboards y herramientas
@@ -1187,19 +1498,21 @@ $("#panel").addEventListener("click", e => {
 const quienDb = v => v.startsWith("n:") ? { responsable_nombre:v.slice(2) } : { responsable:v };
 $("#fMis").onsubmit = async e => { e.preventDefault(); const t = $("#mTitle").value.trim(), d = $("#mDue").value; if (!t || !d) return;
   const limite = new Date(`${d}T${$("#mHora").value || "18:00"}:00`).toISOString();
-  const { error } = await S.sb.from("cm_tareas").insert({ titulo:t, categoria:$("#mCat").value || sugerencia(t).cat, prioridad:$("#mPri").value, limite, ...quienDb($("#mOwner").value) });
+  const { error } = await S.sb.from("cm_tareas").insert({ titulo:t, categoria:$("#mCat").value || sugerencia(t).cat, tipo:$("#mTipo").value || tipoDe(t), prioridad:$("#mPri").value, limite, ...quienDb($("#mOwner").value) });
   if (error) { toast(errMsg(error)); return; }
-  $("#mTitle").value = ""; $("#mSug").textContent = ""; delete $("#mCat").dataset.tocado; delete $("#mOwner").dataset.tocado; $("#mCat").value = ""; load("tareas"); };
+  $("#mTitle").value = ""; $("#mSug").textContent = ""; delete $("#mCat").dataset.tocado; delete $("#mTipo").dataset.tocado; $("#mTipo").value = ""; delete $("#mOwner").dataset.tocado; $("#mCat").value = ""; load("tareas"); };
 // al escribir el pendiente se sugieren categoría y responsable, mientras no se hayan elegido a mano
 function sugerirPendiente(){
   const t = $("#mTitle").value.trim(); if (!t) { $("#mSug").textContent = ""; return; }
   const s = sugerencia(t, $("#mCat").dataset.tocado ? $("#mCat").value : null);
   if (s.cat && !$("#mCat").dataset.tocado) $("#mCat").value = s.cat;
+  if (!$("#mTipo").dataset.tocado) $("#mTipo").value = tipoDe(t);
   if (s.quien && !$("#mOwner").dataset.tocado && gente().includes(s.quien)) $("#mOwner").value = s.quien;
   $("#mSug").innerHTML = s.quien ? `Sugerido: <b>${esc(nombreDe(s.quien))}</b>${s.n ? ` · lleva ${s.n} ${s.n === 1 ? "actividad" : "actividades"} de ${esc(s.cat)}` : ""}` : "";
 }
 $("#mTitle").addEventListener("input", () => { clearTimeout(sugerirPendiente.h); sugerirPendiente.h = setTimeout(sugerirPendiente, 250); });
 $("#mCat").addEventListener("change", () => { $("#mCat").dataset.tocado = 1; sugerirPendiente(); });
+$("#mTipo").addEventListener("change", () => { $("#mTipo").dataset.tocado = 1; });
 $("#mOwner").addEventListener("change", () => { $("#mOwner").dataset.tocado = 1; });
 $("#fRec").onsubmit = async e => { e.preventDefault(); const t = $("#rcTitle").value.trim(); if (!t) return;
   const dias = [...document.querySelectorAll("#rcDays input:checked")].map(x => +x.value);
@@ -2173,7 +2486,7 @@ async function entrar(){
   await S.sb.rpc("cm_vincular_cuenta");    // si esta persona tenía tareas a su nombre "sin cuenta", pasan a su usuario
   await S.sb.rpc("cm_generar_semana");     // crea las tareas de la semana si aún no existen (no repite)
   S.acc = (await S.sb.rpc("cm_mis_accesos")).data || [];
-  await Promise.all(["tareas","acts","turnos",...(tengo("cambios") ? ["changes"] : []),"portals","players","sols","msgs","llamadas"].map(load));
+  await Promise.all(["tareas","acts","turnos",...(tengo("cambios") ? ["changes"] : []),"portals","players","sols","msgs","llamadas","notas"].map(load));
   await refreshProfiles();
   if (S.players[S.uid]) S.fig = S.players[S.uid].fig;
 
@@ -2181,7 +2494,7 @@ async function entrar(){
   const espera = {};
   const recargar = col => { clearTimeout(espera[col]); espera[col] = setTimeout(() => load(col), 250); };
   let datos = S.sb.channel("cm-datos");
-  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["llamadas","cm_llamadas"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
+  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["llamadas","cm_llamadas"], ["notas","cm_notas"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
     datos = datos.on("postgres_changes", { event:"*", schema:"public", table:t }, () => recargar(col));
   datos.subscribe();
   S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
