@@ -198,6 +198,22 @@ button.pz-h{cursor:pointer}button.pz-h:hover{background:rgba(60,40,26,.95)}
 .pz-bar span{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .pz-vacio{border:2px dashed rgba(255,255,255,.35);border-radius:6px;padding:14px;text-align:center;color:rgba(40,26,18,.75);font-size:12px;font-weight:700}
 .asis-det td{background:var(--panel2)}
+.rec-est{display:flex;align-items:center;gap:12px;background:var(--panel2);border-radius:10px;padding:14px;margin-bottom:12px}
+.rec-est b{font-size:18px}.rec-btns{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:16px}
+.rec-btns button{padding:16px 10px;font-size:15px;font-weight:800;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
+.rec-btns button:hover{border-color:var(--brand)}.rec-btns button.prin{background:var(--brand);border-color:var(--brand);color:#fff}
+.grab{display:inline-flex;align-items:center;gap:6px}.grab.on{color:#ff6b5e;border-color:#ff6b5e!important}
+.adj{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.adj a,.adj button{font-size:11px}
+.msg .bub img{max-width:240px;max-height:200px;border-radius:8px;display:block;margin-top:4px;cursor:zoom-in}
+.msg .bub audio{max-width:240px;display:block;margin-top:4px}.msg .bub .tr{display:block;font-size:12px;opacity:.85;margin-top:3px;font-style:italic}
+.visto{font-size:11px;color:var(--muted);text-align:right;margin:-2px 4px 4px 0}
+.enl{font-size:12px;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--line)}.enl b{color:var(--ok)}
+.msgs-f .ghost{padding:0 10px;font-size:16px}
+.fama-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:10px 0 18px}
+.fama-c{background:var(--panel2);border-radius:10px;padding:12px}.fama-c h4{margin:0 0 8px;font-size:15px}.fama-c small{color:var(--muted)}
+.fama-c ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px}.fama-c li span{color:var(--muted)}
+.graf{background:var(--panel2);border-radius:10px;padding:12px;margin-top:8px}.graf svg{width:100%;max-width:760px;height:auto;display:block}
+.graf svg text{fill:var(--ink);font:12px Figtree,sans-serif}.graf svg .q{fill:var(--muted)}
 .cat{margin-top:14px}.cat summary{cursor:pointer;font-weight:700;color:var(--muted);margin-bottom:8px}
 .dias{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0}.dias label{font-size:12px;display:flex;gap:3px;align-items:center;text-transform:none;letter-spacing:0}
 .rank{display:grid;grid-template-columns:34px 52px minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--panel2);border-radius:8px;padding:8px 14px}
@@ -398,17 +414,20 @@ button.pz-h{cursor:pointer}button.pz-h:hover{background:rgba(60,40,26,.95)}
           <label class="f">Fecha límite<input id="mDue" type="date" required></label>
           <label class="f">Hora<input id="mHora" type="time" value="18:00"></label>
           <button class="btn">Agregar</button>
+          <label class="f" style="grid-column:span 4">Archivos o imágenes para la tarea (opcional)<input id="mArch" type="file" multiple></label>
+          <div class="f" style="grid-column:span 4"><span>Instrucciones de voz (opcional)</span><button type="button" class="ghost grab" id="mMic">🎙 Grabar</button><small id="mMicTx" style="color:var(--muted);text-transform:none;letter-spacing:0"></small></div>
           <p class="sug" id="mSug"></p>
         </form>
         <div class="pz-bar" id="pBar"></div>
-        <div class="seg" id="mFilter"><button type="button" aria-pressed="true" data-f="activas">Todos</button><button type="button" aria-pressed="false" data-f="mias">Míos</button><button type="button" aria-pressed="false" data-f="cumplidas">Completados</button></div>
+        <div class="seg" id="mFilter"><button type="button" aria-pressed="true" data-f="activas">Todos</button><button type="button" aria-pressed="false" data-f="mias">Míos</button><button type="button" aria-pressed="false" data-f="cumplidas">Completados</button><button type="button" aria-pressed="false" data-f="revision" id="fRevision" hidden>Por revisar</button></div>
         <div class="kan" id="mCols"></div>
         <div class="corcho" id="pTablero"></div>
         <h3 style="font-size:22px;margin:22px 0 6px">Notas del pintarrón</h3>
-        <form class="add" id="fNota" style="grid-template-columns:3fr 1fr 1fr auto">
+        <form class="add" id="fNota" style="grid-template-columns:3fr 1fr 1fr auto auto">
           <label class="f">Nota<input id="nTexto" required maxlength="300" placeholder="Ej. Pedir a Telefónica el corte de pospago antes del viernes"></label>
           <label class="f">Prioridad<select id="nPri"></select></label>
           <label class="f">Tipo<select id="nTipo"></select></label>
+          <button type="button" class="ghost grab" id="nMic" title="Dictar la nota (se guarda el audio y el texto)">🎙</button>
           <button class="btn">Pegar nota</button>
         </form>
         <div class="pz-bar" id="nBar"></div>
@@ -518,13 +537,13 @@ button.pz-h{cursor:pointer}button.pz-h:hover{background:rgba(60,40,26,.95)}
 
       <section data-sec="juntas">
         <div class="junta"><b>Junta del equipo en Teams</b><a class="btn" href="https://teams.microsoft.com/meet/255701640950166?p=qQYRolecwRuRAHTTmw" target="_blank" rel="noopener" style="text-decoration:none">Entrar a la junta</a><button type="button" class="ghost" id="jLlamar">Llamar a la junta</button></div>
-        <div id="jRev" hidden><h3 style="font-size:22px;margin-bottom:8px">Evidencias por revisar <span id="jRevN" class="chip" style="--c:#b48cf0"></span></h3><div class="kan gente" id="jRevL" style="margin-bottom:16px"></div></div>
+        <div id="jRev" hidden><h3 style="font-size:22px;margin-bottom:8px">Entregas por revisar y calificar <span id="jRevN" class="chip" style="--c:#b48cf0"></span></h3><div class="kan gente" id="jRevL" style="margin-bottom:16px"></div></div>
         <h3 style="font-size:22px;margin-bottom:8px">Turnos de hoy</h3><ul class="list" id="jTurnos" style="margin-bottom:16px"></ul>
-        <p class="sub">Pide una autorización, ayuda o resuelve una duda con dirección. Cada solicitud solo la ven quien la pide y a quien se le pide.</p>
+        <p class="sub">Pide una autorización a dirección, o apoyo, una respuesta o una reunión a un compañero para trabajar en equipo. Cada solicitud solo la ven quien la pide y a quien se le pide.</p>
         <div id="jJefe" hidden><h3 style="font-size:22px;margin-bottom:8px">Te necesitan <span id="jN" class="chip" style="--c:#ff6b5e;color:#fff"></span></h3><ul class="list" id="jTeNec"></ul></div>
         <div class="ro" hidden>Tienes acceso de solo lectura.</div>
         <form class="add" id="fSol">
-          <label class="f">Qué necesitas<select id="sTipo"><option value="autorizacion">Autorización</option><option value="ayuda">Ayuda</option><option value="duda">Duda</option></select></label>
+          <label class="f">Qué necesitas<select id="sTipo"><option value="autorizacion">Autorización</option><option value="ayuda">Ayuda</option><option value="duda">Duda</option><option value="apoyo">Apoyo en un trabajo</option><option value="reunion">Reunión</option></select></label>
           <label class="f">Para<select id="sPara"></select></label>
           <label class="f wide">Asunto<input id="sTitulo" required maxlength="140" placeholder="Ej. Autorizar bono extra a tienda 214"></label>
           <button class="btn">Enviar</button>
@@ -534,8 +553,23 @@ button.pz-h{cursor:pointer}button.pz-h:hover{background:rgba(60,40,26,.95)}
         <ul class="list" id="jMias"></ul>
       </section>
 
+      <section data-sec="recepcion">
+        <div class="rec-est" id="recEst"></div>
+        <label class="f" style="margin-bottom:10px">Nota (opcional; para permiso, el motivo)<input id="recNota" maxlength="300" placeholder="Ej. cita médica, banco, junta con cliente"></label>
+        <div class="rec-btns" id="recBtns"></div>
+        <h3 style="font-size:20px;margin-bottom:8px">Hoy en la oficina</h3>
+        <ul class="list" id="recHoy"></ul>
+      </section>
+
       <section data-sec="fama">
-        <p class="sub">XP por tareas completadas. Nivel 2 en 250 XP, nivel 5 en 2,500 y nivel 10 en 11,250.</p>
+        <div class="pz-bar"><span>Periodo</span><div class="seg" id="famaPer"><button type="button" data-fper="7" aria-pressed="true">7 días</button><button type="button" data-fper="30" aria-pressed="false">30 días</button><button type="button" data-fper="0" aria-pressed="false">Todo</button></div></div>
+        <div class="fama-cats" id="famaCats"></div>
+        <h3 style="font-size:20px">Gráficas</h3>
+        <div class="pz-bar"><span>Ver</span><div class="seg" id="famaGraf"><button type="button" data-fg="persona" aria-pressed="true">Por persona</button><button type="button" data-fg="tipo" aria-pressed="false">Por tipo</button><button type="button" data-fg="prioridad" aria-pressed="false">Por prioridad</button><button type="button" data-fg="entrega" aria-pressed="false">Por tiempo de entrega</button><button type="button" data-fg="dia" aria-pressed="false">Completadas por día</button></div>
+          <label class="f" style="flex-direction:row;align-items:center;gap:6px">Persona<select id="famaQuien"></select></label></div>
+        <div class="graf" id="famaG"></div>
+        <h3 style="font-size:20px;margin-top:18px">Nivel por XP acumulado</h3>
+        <p class="sub">Nivel 2 en 250 XP, nivel 5 en 2,500 y nivel 10 en 11,250.</p>
         <div class="list" id="rList" style="display:flex;flex-direction:column;gap:8px"></div>
       </section>
 
@@ -554,7 +588,7 @@ button.pz-h{cursor:pointer}button.pz-h:hover{background:rgba(60,40,26,.95)}
 <div class="msgs" id="msgs" hidden role="dialog" aria-label="Mensajes">
   <div class="msgs-l"><div class="msgs-h"><b>Mensajes</b><button id="msgsX" type="button" aria-label="Cerrar mensajes">×</button></div><div class="convs" id="convs"></div></div>
   <div class="msgs-r"><div class="msgs-h" id="convH"></div><div class="msgs-m" id="convM" aria-live="polite"></div>
-    <form class="msgs-f" id="msgF"><input id="msgIn" placeholder="Escribe un mensaje…" maxlength="2000" autocomplete="off" aria-label="Mensaje"><button>Enviar</button></form></div>
+    <form class="msgs-f" id="msgF"><button type="button" class="ghost" id="msgArch" title="Enviar archivo o imagen" aria-label="Enviar archivo o imagen">📎</button><input type="file" id="msgFile" hidden><button type="button" class="ghost grab" id="msgMic" title="Nota de voz (se pasa a texto)" aria-label="Grabar nota de voz">🎙</button><input id="msgIn" placeholder="Escribe un mensaje…" maxlength="2000" autocomplete="off" aria-label="Mensaje"><button>Enviar</button></form></div>
 </div>
 
 <div class="toast" id="toast" hidden></div>
@@ -602,7 +636,7 @@ const ARM_TABS = [
 const dayIdx = () => (new Date().getDay() + 6) % 7 + 1;   // 1 = lunes
 const S = {
   sb:null, ch:null, chReady:false, uid:null, canWrite:true, session:null,
-  tareas:[], acts:[], xpt:{}, evid:{}, turnos:[], acc:[], usr:null, aud:[], llVistas:null, notas:[], asis:null, changes:[], portals:[], players:{}, profiles:{},
+  tareas:[], acts:[], xpt:{}, evid:{}, turnos:[], acc:[], usr:null, aud:[], llVistas:null, notas:[], asis:null, pausas:[], vistos:[], fama:null, changes:[], portals:[], players:{}, profiles:{},
   sols:[], solSeen:null, jefes:[], msgs:[], msgSeen:0, conv:"grupo",
   fig:{ ...GENERIC }, outfits:[], remote:{}, floaters:[], keys:{}, filter:"activas", dia:dayIdx(),
   mode:"boot", panel:null, paused:false, busy:false,
@@ -650,6 +684,10 @@ async function load(col){
     if (nuevas.length) { toast(`Nueva solicitud en la Sala de Juntas: ${nuevas[0].titulo}`); G.tip = `${firstName(nuevas[0].solicitante) || "Alguien"} te busca en la Sala de Juntas`; G.tipUntil = performance.now() + 6000; }
     S.solSeen = new Set(data.map(s => s.id)); S.sols = data; renderData(); return;
   }
+  if (col === "vistos") {
+    const { data, error } = await S.sb.from("cm_vistos").select("*"); if (error) return;
+    S.vistos = data; renderMsgs(); return;
+  }
   if (col === "msgs") {
     const { data, error } = await S.sb.from("cm_mensajes").select("*").order("creado", { ascending:false }).limit(800); if (error) return;
     S.msgs = data.reverse();
@@ -686,7 +724,8 @@ async function load(col){
   if (col === "turnos") {
     const desde = new Date(); desde.setDate(desde.getDate() - 1); desde.setHours(0, 0, 0, 0);
     const { data, error } = await S.sb.from("cm_turnos").select("*").or(`fin.is.null,inicio.gte.${desde.toISOString()}`).order("inicio"); if (error) return;
-    S.turnos = data; renderData(); pintarTurno(); return;
+    const { data:pz } = data.length ? await S.sb.from("cm_pausas").select("*").in("turno_id", data.map(r => r.id)).order("inicio") : { data:[] };
+    S.turnos = data; S.pausas = pz || []; renderData(); pintarTurno(); if (S.panel === "recepcion") renderRecepcion(); return;
   }
   if (col === "acts") {
     const { data, error } = await S.sb.from("cm_actividades").select("*").eq("activa", true).order("titulo"); if (error) return;
@@ -775,8 +814,8 @@ function tarjeta(t){
     ${t.nota_revision && t.estado === "en_proceso" ? `<span class="nota-rev">Rechazada: ${esc(t.nota_revision)}</span>` : ""}
     ${ac ? `<div class="acts">${ac}</div>` : ""}</div>`;
 }
-async function mover(id, acc, nota){
-  const { data, error } = await S.sb.rpc("cm_mover_tarea", { p_tarea:id, p_accion:acc, p_nota:nota || null });
+async function mover(id, acc, nota, cal = {}){
+  const { data, error } = await S.sb.rpc("cm_mover_tarea", { p_tarea:id, p_accion:acc, p_nota:nota || null, p_calidad:cal.calidad ?? null, p_orden:cal.orden ?? null, p_xp:cal.xp ?? null });
   if (error) { const m = error.message || ""; toast(/permiso|responsable|no se puede|no existe/.test(m) ? m.charAt(0).toUpperCase() + m.slice(1) : errMsg(error)); load("tareas"); return; }
   if (data?.estado === "completada" && acc !== "reabrir") { toast(`Tarea completada: +${data.xp} XP para ${nombreDe(dueno(data))}`); S.floaters.push({ x:P.x, y:P.y - 70, t:0, text:`+${data.xp} XP` }); G.celebrate = true; }
   if (data?.estado === "en_revision") toast("Entregada: queda en revisión");
@@ -800,10 +839,10 @@ async function sellar(file, t){
 function entregar(t){
   const ya = (S.evid[t.id] || []).length;
   abrirMdl(`<h3>Entregar: ${esc(t.titulo)}</h3>
-    <p class="sub">Sube la captura de la entrega (el correo enviado, el archivo en la carpeta, el mensaje) donde se vean la fecha y la hora. Puedes pegarla con Ctrl+V. Elías la revisa y con eso se completa.${ya ? ` Ya hay ${ya} ${ya === 1 ? "captura" : "capturas"} de antes.` : ""}</p>
+    <p class="sub">Sube la captura de la entrega (el correo enviado, el archivo en la carpeta, el mensaje) donde se vean la fecha y la hora. Puedes pegarla con Ctrl+V. Es opcional: si no hay captura, envíala igual. Elías la revisa, la califica y con eso se completa.${ya ? ` Ya hay ${ya} ${ya === 1 ? "captura" : "capturas"} de antes.` : ""}</p>
     <label class="drop" id="evDrop"><input type="file" id="evFile" accept="image/png,image/jpeg,image/webp,application/pdf" multiple hidden>Arrastra, pega o haz clic para elegir la captura</label>
     <div class="evs" id="evPrev"></div>
-    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="evEnviar"${ya ? "" : " disabled"}>Enviar a revisión</button></div>`, { t, files:[], urls:[], ya });
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="evEnviar">Enviar a revisión</button></div>`, { t, files:[], urls:[], ya });
 }
 async function agregarEv(files){
   if (!MDL?.t) return;
@@ -814,7 +853,6 @@ async function agregarEv(files){
     MDL.files.push(x); const u = URL.createObjectURL(x); MDL.urls.push(u);
     $("#evPrev").insertAdjacentHTML("beforeend", x.type === "application/pdf" ? `<figure><div class="pdf">PDF · ${esc(f.name)}</div></figure>` : `<figure><img src="${u}" alt="Captura"></figure>`);
   }
-  $("#evEnviar").disabled = !MDL.files.length && !MDL.ya;
 }
 async function enviarEv(){
   const { t, files } = MDL, btn = $("#evEnviar"); btn.disabled = true; btn.textContent = "Subiendo…";
@@ -822,21 +860,43 @@ async function enviarEv(){
     const ruta = `${S.uid}/${t.id}/${Date.now()}_${i}.${f.type === "application/pdf" ? "pdf" : "jpg"}`;
     const up = await S.sb.storage.from("cm-evidencias").upload(ruta, f, { contentType:f.type });
     if (up.error) { toast("No se pudo subir la captura. Intenta de nuevo."); btn.disabled = false; btn.textContent = "Enviar a revisión"; return; }
-    const { error } = await S.sb.from("cm_evidencias").insert({ tarea_id:t.id, ruta, nombre:f.name, tipo:f.type, bytes:f.size });
+    const { error } = await S.sb.from("cm_evidencias").insert({ tarea_id:t.id, ruta, nombre:f.name, tipo:f.type, bytes:f.size, uso:"evidencia" });
     if (error) { toast(errMsg(error)); btn.disabled = false; btn.textContent = "Enviar a revisión"; return; }
   }
   cerrarMdl(); mover(t.id, "enviar");
 }
+// XP sugerido: horas estimadas (o prioridad) × puntualidad × rapidez × calidad × orden × evidencia, menos 5 por cada rechazo
+const ESTRELLA = [0, .6, .8, 1, 1.1, 1.2];
+function xpSugerido(t, cal, ord){
+  const base = t.minutos_estimados ? t.minutos_estimados / 6 : (PRI[t.prioridad]?.xp || 25), env = Date.parse(t.enviada || new Date()), lim = Date.parse(t.limite);
+  const punt = env <= lim ? 1 : env <= lim + 864e5 ? .5 : .25, ef = +t.minutos_efectivos;
+  const vel = t.minutos_estimados && ef > 0 ? (ef <= t.minutos_estimados ? 1.1 : ef <= 1.5 * t.minutos_estimados ? 1 : .9) : 1;
+  const ev = (S.evid[t.id] || []).some(e => e.uso === "evidencia") ? 1.1 : 1;
+  return { xp:Math.max(1, Math.round(base * punt * vel * ESTRELLA[cal] * ESTRELLA[ord] * ev) - 5 * (t.retrabajos || 0)), punt, vel, ev, base:Math.round(base) };
+}
+function sugerirXp(){
+  const t = MDL?.rev; if (!t) return;
+  const s = xpSugerido(t, +$("#revCal").value, +$("#revOrd").value);
+  $("#revXp").value = s.xp;
+  $("#revDes").innerHTML = `Sugerido <b>${s.xp} XP</b>: base ${s.base} · ${s.punt === 1 ? "a tiempo" : s.punt === .5 ? "hasta 24 h tarde (×0.5)" : "más de 24 h tarde (×0.25)"} · ${s.vel > 1 ? "más rápido que lo estimado (×1.1)" : s.vel < 1 ? "más lento que lo estimado (×0.9)" : "tiempo normal"} · ${s.ev > 1 ? "con captura (×1.1)" : "sin captura"}${t.retrabajos ? ` · ${t.retrabajos} rechazo(s) (−${5 * t.retrabajos})` : ""}. Puedes cambiarlo.`;
+}
 async function revisar(t){
-  const evs = S.evid[t.id] || [], vivas = evs.filter(e => !e.archivada);
+  const evs = (S.evid[t.id] || []).filter(e => e.uso === "evidencia"), vivas = evs.filter(e => !e.archivada);
   const urls = await Promise.all(vivas.map(e => S.sb.storage.from("cm-evidencias").createSignedUrl(e.ruta, 900).then(r => r.data?.signedUrl || "")));
   const f = d => new Date(d).toLocaleString("es-MX", { dateStyle:"medium", timeStyle:"short" });
   abrirMdl(`<h3>${esc(t.titulo)}</h3>
     <p class="sub">${quien(t)} · entregó ${esc(f(t.enviada))} · límite ${esc(f(t.limite))}${t.enviada > t.limite ? ' · <span class="late">tarde</span>' : ""}${t.retrabajos ? ` · ${t.retrabajos} ${t.retrabajos === 1 ? "rechazo" : "rechazos"} antes` : ""}</p>
     <div class="evs">${vivas.map((e, i) => `<figure>${e.tipo === "application/pdf" ? `<a class="pdf" href="${esc(urls[i])}" target="_blank" rel="noopener">Abrir PDF</a>` : `<a href="${esc(urls[i])}" target="_blank" rel="noopener"><img src="${esc(urls[i])}" alt="Captura de entrega"></a>`}
       <figcaption><span>${esc(name(e.subida_por))}</span><span>${esc(f(e.subida))}</span></figcaption></figure>`).join("") || `<div class="empty">Sin capturas a la vista${evs.length ? ": ya están en el respaldo de OneDrive" : ""}.</div>`}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+      <label class="f">Calidad<select id="revCal">${[5, 4, 3, 2, 1].map(n => `<option value="${n}"${n === 3 ? " selected" : ""}>${"★".repeat(n)}${"☆".repeat(5 - n)}</option>`).join("")}</select></label>
+      <label class="f">Orden<select id="revOrd">${[5, 4, 3, 2, 1].map(n => `<option value="${n}"${n === 3 ? " selected" : ""}>${"★".repeat(n)}${"☆".repeat(5 - n)}</option>`).join("")}</select></label>
+      <label class="f">XP que das<input id="revXp" type="number" min="0" max="1000"></label>
+    </div>
+    <p class="sub" id="revDes" style="margin:0"></p>
     <label class="f">Comentario (si la rechazas, di qué falta)<textarea id="revNota" maxlength="500"></textarea></label>
-    <div class="row"><button class="ghost" type="button" data-cerrar>Cerrar</button><button class="ghost warn" type="button" data-rev="rechazar">Rechazar</button><button class="btn" type="button" data-rev="validar">Validar y completar</button></div>`, { rev:t });
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cerrar</button><button class="ghost warn" type="button" data-rev="rechazar">Rechazar</button><button class="btn" type="button" data-rev="validar">Validar y dar XP</button></div>`, { rev:t });
+  sugerirXp();
 }
 function pasar(t, act){
   const k = act ? (act.responsable || "n:" + act.responsable_nombre) : dueno(t);
@@ -852,6 +912,8 @@ $("#mdl").addEventListener("click", async e => {
   if (e.target.closest("#llOk")) return enviarLlamada();
   const tu = e.target.closest("button[data-tur]"); if (tu) { cerrarMdl(); return turno(tu.dataset.tur); }
   if (e.target.closest("#edGuardar") && MDL?.edt) return guardarTarea();
+  if (e.target.closest("#neGuardar") && MDL?.nota) { const { error } = await S.sb.from("cm_notas").update({ texto:$("#neTx").value.trim() || MDL.nota.texto, prioridad:$("#nePri").value, tipo:$("#neTipo").value }).eq("id", MDL.nota.id);
+    if (error) { toast(errMsg(error)); return; } cerrarMdl(); toast("Nota actualizada"); return load("notas"); }
   if (e.target.closest("#eaGuardar") && MDL?.eda) return guardarActMdl();
   const vp = e.target.closest("button[data-verpos]");
   if (vp) { const r = Object.values(S.remote).find(q => q.uid === vp.dataset.verpos); cerrarMdl(); if (r) { cam.follow = false; cam.x = r.x; cam.y = r.y - 60; cam.z = Math.max(cam.z, 1); clampCam(); } return; }
@@ -866,7 +928,8 @@ $("#mdl").addEventListener("click", async e => {
   const r = e.target.closest("button[data-rev]");
   if (r && MDL?.rev) { const nota = $("#revNota").value.trim(), t = MDL.rev;
     if (r.dataset.rev === "rechazar" && !nota) { toast("Escribe qué falta para que lo corrija"); $("#revNota").focus(); return; }
-    cerrarMdl(); return mover(t.id, r.dataset.rev, nota); }
+    const cal = r.dataset.rev === "validar" ? { calidad:+$("#revCal").value, orden:+$("#revOrd").value, xp:Math.max(0, Math.min(1000, Math.round(+$("#revXp").value || 0))) } : {};
+    cerrarMdl(); return mover(t.id, r.dataset.rev, nota, cal); }
   if (e.target.closest("button[data-pasa]") && MDL) {
     const v = $("#paQuien").value, quien = v.startsWith("n:") ? { p_responsable:null, p_nombre:v.slice(2) } : { p_responsable:v, p_nombre:null };
     const { pasa:t, act } = MDL, nota = $("#paNota")?.value.trim() || null;
@@ -875,7 +938,7 @@ $("#mdl").addEventListener("click", async e => {
     cerrarMdl(); toast(`Ahora la tiene ${nombreDe(v)}`); load("acts"); load("tareas");
   }
 });
-$("#mdl").addEventListener("change", e => { if (e.target.id === "evFile") agregarEv([...e.target.files]); });
+$("#mdl").addEventListener("change", e => { if (e.target.id === "evFile") agregarEv([...e.target.files]); if (e.target.id === "revCal" || e.target.id === "revOrd") sugerirXp(); if (e.target.id === "adjFile") subirAdjuntos(MDL.arch, [...e.target.files]).then(() => verArchivos(MDL.arch)); });
 $("#mdl").addEventListener("dragover", e => { if (e.target.closest("#evDrop")) { e.preventDefault(); $("#evDrop").classList.add("on"); } });
 $("#mdl").addEventListener("drop", e => { if (e.target.closest("#evDrop")) { e.preventDefault(); $("#evDrop").classList.remove("on"); agregarEv([...e.dataTransfer.files]); } });
 addEventListener("paste", e => { if (MDL?.t && e.clipboardData?.files.length) { e.preventDefault(); agregarEv([...e.clipboardData.files]); } });
@@ -1090,6 +1153,7 @@ function postitTarea(t, por){
     <div class="pi-who"><img src="${fotoDe(k)}" alt="">${esc(nombreDe(k))}</div><b class="pi-t">${esc(t.titulo)}</b>
     <small><span class="tg">${esc(t.tipo)}</span><span class="tg">${esc(priL(t.prioridad))}</span><span class="${late ? "late" : ""}">${esc(cuando(t))}</span>${t.minutos_estimados ? `<span>${t.minutos_estimados} min</span>` : ""}${min ? `<span>⏱ ${min} min</span>` : ""}${t.estado === "en_proceso" || t.estado === "en_revision" ? `<span class="tg">${esc(TST[t.estado][0])}</span>` : ""}</small>
     ${t.nota_revision && t.estado === "en_proceso" ? `<small style="color:#8a5a00"><b>Rechazada:</b> ${esc(t.nota_revision)}</small>` : ""}
+    ${(S.evid[t.id] || []).length ? `<div class="adj"><button type="button" class="ghost" data-arch="${esc(t.id)}">📎 Archivos y audios (${(S.evid[t.id] || []).length})</button></div>` : ""}${t.calidad ? `<small>Calidad ${"★".repeat(t.calidad)} · orden ${"★".repeat(t.orden || 0)}</small>` : ""}
     ${ac ? `<div class="acts">${ac}</div>` : ""}</div>`;
 }
 function postitAct(a, por){
@@ -1105,9 +1169,10 @@ function renderTableros(){
   // pendientes sueltos (los de la exhibición): la vista vieja por vencimiento sigue en "Por fecha"
   const p = PZ.p, mio = t => S.filter !== "mias" || t.responsable === me();
   $("#pBar").innerHTML = barra("p", p, ["fecha", "Por fecha"]);
-  const sueltas = S.tareas.filter(t => !t.actividad_id && mio(t) && (S.filter === "cumplidas" ? !abierta(t) : abierta(t)));
-  $("#mCols").hidden = p.vista !== "fecha"; $("#pTablero").hidden = p.vista === "fecha";
-  if (p.vista !== "fecha") $("#pTablero").innerHTML = tableroHTML(sueltas, p, "p", postitTarea);
+  $("#fRevision").hidden = !esJefe();
+  const sueltas = S.filter === "revision" ? S.tareas.filter(t => t.estado === "en_revision") : S.tareas.filter(t => !t.actividad_id && mio(t) && (S.filter === "cumplidas" ? !abierta(t) : abierta(t)));
+  $("#mCols").hidden = p.vista !== "fecha" || S.filter === "revision"; $("#pTablero").hidden = p.vista === "fecha" && S.filter !== "revision";
+  if (p.vista !== "fecha" || S.filter === "revision") $("#pTablero").innerHTML = tableroHTML(sueltas, p.vista === "fecha" ? { ...p, vista:"persona" } : p, "p", postitTarea);
   // actividades fijas del catálogo; "Semana" deja la vista por día
   const a = PZ.a;
   $("#aBar").innerHTML = barra("a", a, ["semana", "Semana por día"]);
@@ -1125,16 +1190,18 @@ function renderNotas(){
     const lst = S.notas.filter(x => x[n.cols] === v);
     return `<div class="pz-col" data-drop="n:${n.cols}:${esc(v)}"><div class="pz-h"><i class="cuadro" style="--bg:${n.cols === "tipo" ? CTIPO[v] : CPRI[v]}"></i><span><b>${esc(n.cols === "tipo" ? v : priL(v))}</b><small>${lst.length} notas</small></span></div>
       ${lst.map(x => `<div class="pi" draggable="${S.canWrite}" data-drag="n:${esc(x.id)}" style="--bg:${color(x, n.color)};--rot:${giro(x.id)}deg"><i class="chin"></i>
-        ${x.autor === me() || esJefe() ? `<button type="button" class="x" data-ndel="${esc(x.id)}" title="Quitar nota" aria-label="Quitar nota">✕</button>` : ""}
+        ${x.autor === me() || esJefe() ? `<button type="button" class="x" data-ndel="${esc(x.id)}" title="Quitar nota" aria-label="Quitar nota">✕</button><button type="button" class="x" style="right:24px" data-nedit="${esc(x.id)}" title="Editar nota" aria-label="Editar nota">✎</button>` : ""}
         <div class="pi-who"><img src="${avatarOf(x.autor)}" alt="">${esc(firstName(x.autor) || name(x.autor))}</div><span class="pi-t" style="font-weight:600">${esc(x.texto)}</span>
-        <small><span class="tg">${esc(x.tipo)}</span><span class="tg">${esc(priL(x.prioridad))}</span><span>${esc(ago(Date.parse(x.creado)))}</span></small></div>`).join("") || `<div class="pz-vacio">Suelta aquí una nota</div>`}</div>`;
+        <small><span class="tg">${esc(x.tipo)}</span><span class="tg">${esc(priL(x.prioridad))}</span><span>${esc(ago(Date.parse(x.creado)))}</span>${x.audio ? `<button type="button" class="ghost" data-naudio="${esc(x.audio)}" style="padding:1px 6px;font-size:11px">▶ Audio</button>` : ""}</small></div>`).join("") || `<div class="pz-vacio">Suelta aquí una nota</div>`}</div>`;
   }).join("");
 }
 $("#fNota").onsubmit = async e => {
   e.preventDefault(); const texto = $("#nTexto").value.trim(); if (!texto) return;
-  const { error } = await S.sb.from("cm_notas").insert({ texto, prioridad:$("#nPri").value, tipo:$("#nTipo").value });
+  let audio = null;
+  if (VOZ_N) { audio = await subirArchivo("notas", VOZ_N.blob); }
+  const { error } = await S.sb.from("cm_notas").insert({ texto, prioridad:$("#nPri").value, tipo:$("#nTipo").value, audio, transcripcion:VOZ_N?.texto || null });
   if (error) { toast(errMsg(error)); return; }
-  $("#nTexto").value = ""; load("notas");
+  VOZ_N = null; $("#nTexto").value = ""; delete $("#nTipo").dataset.tocado; load("notas");
 };
 $("#nTexto").addEventListener("input", () => { if (!$("#nTipo").dataset.tocado) $("#nTipo").value = tipoDe($("#nTexto").value); });
 $("#nTipo").addEventListener("change", () => { $("#nTipo").dataset.tocado = 1; });
@@ -1147,6 +1214,9 @@ $("#panel").addEventListener("click", async e => {
   const nd = e.target.closest("button[data-ndel]");
   if (nd) return confirmDel(nd, async () => { const { error } = await S.sb.from("cm_notas").delete().eq("id", nd.dataset.ndel); if (error) toast(errMsg(error)); else load("notas"); });
   const et = e.target.closest("button[data-edt]"); if (et) return editarTarea(S.tareas.find(t => t.id === et.dataset.edt));
+  const ar = e.target.closest("button[data-arch]"); if (ar) return verArchivos(S.tareas.find(t => t.id === ar.dataset.arch));
+  const ne = e.target.closest("button[data-nedit]"); if (ne) return editarNota(S.notas.find(x => x.id === ne.dataset.nedit));
+  const np = e.target.closest("button[data-naudio]"); if (np) return tocarAudio(np.dataset.naudio, np);
   const ea = e.target.closest("button[data-eda]"); if (ea) return editarAct(S.acts.find(a => a.id === ea.dataset.eda));
 });
 // arrastrar y soltar post-its entre columnas (persona = reasignar; prioridad o tipo = cambiarlo)
@@ -1237,6 +1307,83 @@ async function guardarActMdl(){
   cerrarMdl(); toast("Actividad actualizada"); load("acts"); load("tareas");
 }
 
+// ---------- archivos, imágenes y audios (Storage cm-evidencias). Los audios se pasan a texto al grabar (Chrome y Edge) ----------
+const URLS = new Map();     // ruta -> url firmada (válida 1 h)
+async function firmada(ruta){
+  const c = URLS.get(ruta); if (c && c.t > Date.now()) return c.u;
+  const { data } = await S.sb.storage.from("cm-evidencias").createSignedUrl(ruta, 3600);
+  if (data?.signedUrl) URLS.set(ruta, { u:data.signedUrl, t:Date.now() + 3300e3 });
+  return data?.signedUrl || "";
+}
+// pinta las imágenes, audios y ligas que vienen con data-firmar (la ruta del archivo)
+async function firmarEn(el){ for (const x of el.querySelectorAll("[data-firmar]")) { const u = await firmada(x.dataset.firmar); if (x.tagName === "A") x.href = u; else x.src = u; x.removeAttribute("data-firmar"); } }
+const limpioNom = n => String(n || "archivo").replace(/[^\w.\-]+/g, "_").slice(-80);
+async function subirArchivo(carpeta, f){
+  const ruta = `${S.uid}/${carpeta}/${Date.now()}_${limpioNom(f.name || "audio.webm")}`;
+  const { error } = await S.sb.storage.from("cm-evidencias").upload(ruta, f, { contentType:f.type || "application/octet-stream" });
+  if (error) { toast("No se pudo subir " + (f.name || "el audio") + (/mime|type/i.test(error.message) ? ": ese tipo de archivo no se permite" : "")); return null; }
+  return ruta;
+}
+async function subirAdjuntos(t, files, uso = "adjunto", transcripcion = null){
+  for (const f of files) {
+    if (f.size > 20e6) { toast(`${f.name} pesa más de 20 MB`); continue; }
+    const ruta = await subirArchivo(t.id, f); if (!ruta) continue;
+    const { error } = await S.sb.from("cm_evidencias").insert({ tarea_id:t.id, ruta, nombre:f.name || "Nota de voz", tipo:f.type, bytes:f.size, uso, transcripcion });
+    if (error) toast(errMsg(error));
+  }
+  await load("evid");
+}
+function verArchivos(t){
+  if (!t) return;
+  const lst = S.evid[t.id] || [], puede = t.estado !== "completada" && (esJefe() || t.responsable === me() || t.asignada_por === me());
+  const una = e => e.archivada ? `<li>${esc(e.nombre || "archivo")} · ya en el respaldo de OneDrive</li>`
+    : `<li style="margin-bottom:8px"><b>${esc({ evidencia:"Captura de entrega", adjunto:"Archivo de la tarea", audio:"Nota de voz" }[e.uso])}</b> · ${esc(name(e.subida_por))} · ${esc(hm(e.subida))}<br>${
+      /^image\//.test(e.tipo) ? `<a data-firmar="${esc(e.ruta)}" target="_blank" rel="noopener"><img data-firmar="${esc(e.ruta)}" alt="" style="max-width:260px;max-height:200px;border-radius:6px"></a>`
+      : /^audio\//.test(e.tipo) ? `<audio controls data-firmar="${esc(e.ruta)}"></audio>${e.transcripcion ? `<br><i>“${esc(e.transcripcion)}”</i>` : ""}`
+      : `<a data-firmar="${esc(e.ruta)}" target="_blank" rel="noopener" style="color:var(--brand-l)">${esc(e.nombre || "Abrir archivo")}</a>`}</li>`;
+  abrirMdl(`<h3>${esc(t.titulo)}</h3><ul style="padding-left:18px;margin:0">${lst.map(una).join("") || "<li>Sin archivos.</li>"}</ul>
+    ${puede ? `<label class="f">Agregar archivos o imágenes<input type="file" id="adjFile" multiple></label>` : ""}
+    <div class="row"><button class="btn" type="button" data-cerrar>Cerrar</button></div>`, { arch:t });
+  firmarEn($("#mdlIn"));
+}
+// grabadora: audio del micrófono + texto en vivo (reconocimiento de voz del navegador, en español de México)
+async function grabadora(alTexto){
+  const st = await navigator.mediaDevices.getUserMedia({ audio:true }), rec = new MediaRecorder(st), partes = [];
+  rec.ondataavailable = e => e.data.size && partes.push(e.data); rec.start();
+  let texto = "", sr = null; const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) { sr = new SR(); sr.lang = "es-MX"; sr.continuous = true; sr.interimResults = true;
+    sr.onresult = e => { texto = [...e.results].map(r => r[0].transcript).join(" ").trim(); alTexto && alTexto(texto); }; try { sr.start(); } catch {} }
+  return { detener:() => new Promise(res => { rec.onstop = () => { st.getTracks().forEach(x => x.stop()); const tipo = (rec.mimeType || "audio/webm").split(";")[0];
+    res({ blob:new File([new Blob(partes, { type:tipo })], `nota_de_voz.${tipo.includes("mp4") ? "m4a" : tipo.includes("ogg") ? "ogg" : "webm"}`, { type:tipo }), texto:texto.trim() }); };
+    try { sr && sr.stop(); } catch {} rec.stop(); }) };
+}
+// un botón 🎙 que alterna grabar / detener; alTerminar recibe { blob, texto }
+function botonGrabar(btn, alTexto, alTerminar){
+  let g = null, t0 = 0, reloj = null;
+  btn.onclick = async () => {
+    if (!g) {
+      try { g = await grabadora(alTexto); } catch { toast("No hay permiso para usar el micrófono"); return; }
+      t0 = Date.now(); btn.classList.add("on"); btn.dataset.txt ||= btn.textContent;
+      reloj = setInterval(() => { btn.textContent = `■ ${Math.floor((Date.now() - t0) / 1000)} s`; }, 300); return;
+    }
+    clearInterval(reloj); btn.classList.remove("on"); btn.textContent = btn.dataset.txt;
+    const r = await g.detener(); g = null; alTerminar(r);
+  };
+}
+async function tocarAudio(ruta, btn){ const a = new Audio(await firmada(ruta)); a.play(); btn.disabled = true; a.onended = () => { btn.disabled = false; }; }
+// pendientes: archivos e instrucciones de voz al asignar
+let VOZ_P = null;
+botonGrabar($("#mMic"), tx => { $("#mMicTx").textContent = tx; }, r => { VOZ_P = r; $("#mMicTx").textContent = r.texto ? `“${r.texto}”` : "Audio listo (sin texto: tu navegador no pasa la voz a texto)"; if (!$("#mTitle").value && r.texto) { $("#mTitle").value = r.texto.slice(0, 140); sugerirPendiente(); } });
+// notas: dictadas (se guarda el audio y el texto)
+let VOZ_N = null;
+botonGrabar($("#nMic"), tx => { $("#nTexto").value = tx.slice(0, 300); }, r => { VOZ_N = r; if (r.texto) $("#nTexto").value = r.texto.slice(0, 300); if (!$("#nTipo").dataset.tocado) $("#nTipo").value = tipoDe($("#nTexto").value); });
+function editarNota(x){
+  if (!x) return;
+  abrirMdl(`<h3>Editar nota</h3><label class="f">Nota<textarea id="neTx" maxlength="300">${esc(x.texto)}</textarea></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="f">Prioridad<select id="nePri">${opts(PRIS, x.prioridad, priL)}</select></label><label class="f">Tipo<select id="neTipo">${opts(TIPOS, x.tipo)}</select></label></div>
+    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="neGuardar">Guardar</button></div>`, { nota:x });
+}
+
 // ---------- asistencia (Control de Cambios): entrada, comida, regreso, salida y lo que terminó cada día ----------
 async function cargarAsistencia(){
   if (!$("#asDesde").value) { const d = new Date(); d.setDate(d.getDate() - 6); $("#asDesde").value = ymd(d); $("#asHasta").value = today(); }
@@ -1246,6 +1393,8 @@ async function cargarAsistencia(){
     S.sb.from("cm_turnos").select("*").gte("inicio", desde.toISOString()).lt("inicio", hasta.toISOString()).order("inicio"),
     S.sb.from("cm_tareas").select("id,titulo,responsable,completada,limite,minutos_efectivos,minutos_estimados,tipo,actividad_id").eq("estado", "completada").gte("completada", desde.toISOString()).lt("completada", hasta.toISOString()).order("completada")]);
   if (t.error || k.error) { toast(errTxt(t.error || k.error)); return; }
+  const { data:pz } = t.data.length ? await S.sb.from("cm_pausas").select("*").in("turno_id", t.data.map(r => r.id)) : { data:[] };
+  for (const r of t.data) r.pausas = (pz || []).filter(x => x.turno_id === r.id);
   const dias = {};       // persona|día -> fila
   const fila = (u, d) => dias[u + "|" + d] ||= { u, d, turnos:[], hechas:[] };
   for (const r of t.data) fila(r.usuario, ymd(new Date(r.inicio))).turnos.push(r);
@@ -1255,57 +1404,117 @@ async function cargarAsistencia(){
 }
 const hm = d => d ? new Date(d).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" }) : "—";
 function calcAsis(r){
-  const tr = r.turnos, ent = tr[0]?.inicio, sal = tr.at(-1)?.fin, abierto = tr.some(x => !x.fin), c = tr.find(x => x.comida_inicio);
-  const comida = tr.reduce((s, x) => s + (x.comida_inicio ? (Date.parse(x.comida_fin || x.fin || new Date()) - Date.parse(x.comida_inicio)) : 0), 0);
-  const total = tr.reduce((s, x) => s + (Date.parse(x.fin || new Date()) - Date.parse(x.inicio)), 0) - comida;
-  return { ent, sal:abierto ? null : sal, abierto, comIni:c?.comida_inicio, comFin:c?.comida_fin, comida, total };
+  const tr = r.turnos, ent = tr[0]?.inicio, sal = tr.at(-1)?.fin, abierto = tr.some(x => !x.fin), pz = tr.flatMap(x => x.pausas || []);
+  const mide = tipo => pz.filter(x => !tipo || x.tipo === tipo).reduce((s, x) => s + (Date.parse(x.fin || new Date()) - Date.parse(x.inicio)), 0);
+  const c = pz.find(x => x.tipo === "comida");
+  const total = tr.reduce((s, x) => s + (Date.parse(x.fin || new Date()) - Date.parse(x.inicio)), 0) - mide();
+  return { ent, sal:abierto ? null : sal, abierto, comIni:c?.inicio, comFin:c?.fin, comida:mide("comida"), permiso:mide("permiso"), descanso:mide("descanso"), total };
 }
 function pintarAsistencia(){
   if (!S.asis) return;
   const q = $("#asQuien").value, lst = S.asis.filter(r => !q || r.u === q), fd = d => new Date(d + "T12:00:00").toLocaleDateString("es-MX", { weekday:"short", day:"numeric", month:"short" });
-  $("#asT").innerHTML = `<thead><tr><th>Persona</th><th>Día</th><th>Entrada</th><th>Sale a comer</th><th>Regresa</th><th>Salida</th><th>Comida</th><th>Horas trabajadas</th><th>Terminó</th><th>Última terminada</th></tr></thead><tbody>${lst.map((r, i) => {
+  $("#asT").innerHTML = `<thead><tr><th>Persona</th><th>Día</th><th>Entrada</th><th>Sale a comer</th><th>Regresa</th><th>Salida</th><th>Comida</th><th>Permisos</th><th>Descansos</th><th>Horas trabajadas</th><th>Terminó</th><th>Última terminada</th></tr></thead><tbody>${lst.map((r, i) => {
     const a = calcAsis(r), ult = r.hechas.at(-1);
     return `<tr data-asis="${i}" style="cursor:pointer"><td>${who(r.u)}</td><td style="white-space:nowrap">${esc(fd(r.d))}</td><td>${esc(hm(a.ent))}</td><td>${esc(hm(a.comIni))}</td><td>${a.comIni && !a.comFin ? "en comida" : esc(hm(a.comFin))}</td>
-      <td>${a.abierto ? '<span class="chip" style="--c:#3fbf6a">en turno</span>' : esc(hm(a.sal))}</td><td>${a.comida ? esc(dur(a.comida)) : "—"}</td><td><b>${r.turnos.length ? esc(dur(a.total)) : "sin turno"}</b></td>
+      <td>${a.abierto ? '<span class="chip" style="--c:#3fbf6a">en turno</span>' : esc(hm(a.sal))}</td><td>${a.comida ? esc(dur(a.comida)) : "—"}</td><td>${a.permiso ? esc(dur(a.permiso)) : "—"}</td><td>${a.descanso ? esc(dur(a.descanso)) : "—"}</td><td><b>${r.turnos.length ? esc(dur(a.total)) : "sin turno"}</b></td>
       <td>${r.hechas.length}</td><td>${ult ? esc(hm(ult.completada)) : "—"}</td></tr>
-      <tr class="asis-det" data-asisdet="${i}" hidden><td colspan="10">${r.hechas.length ? r.hechas.map(h => `${esc(hm(h.completada))} · <b>${esc(h.titulo)}</b> · ${esc(h.tipo)}${h.minutos_efectivos > 0 ? ` · ${Math.round(h.minutos_efectivos)} min trabajados` : ""}${h.completada > h.limite ? ' · <span class="late">tarde</span>' : ""}`).join("<br>") : "No terminó pendientes ni actividades este día."}</td></tr>`;
-  }).join("") || `<tr><td colspan="10">Sin registros en esas fechas.</td></tr>`}</tbody>`;
+      <tr class="asis-det" data-asisdet="${i}" hidden><td colspan="12">${r.hechas.length ? r.hechas.map(h => `${esc(hm(h.completada))} · <b>${esc(h.titulo)}</b> · ${esc(h.tipo)}${h.minutos_efectivos > 0 ? ` · ${Math.round(h.minutos_efectivos)} min trabajados` : ""}${h.completada > h.limite ? ' · <span class="late">tarde</span>' : ""}`).join("<br>") : "No terminó pendientes ni actividades este día."}</td></tr>`;
+  }).join("") || `<tr><td colspan="12">Sin registros en esas fechas.</td></tr>`}</tbody>`;
 }
 $("#asT").addEventListener("click", e => { const r = e.target.closest("tr[data-asis]"); if (!r) return; const d = $(`tr[data-asisdet="${r.dataset.asis}"]`); d.hidden = !d.hidden; });
 for (const id of ["#asDesde", "#asHasta"]) $(id).addEventListener("change", cargarAsistencia);
 $("#asQuien").addEventListener("change", pintarAsistencia);
 $("#asCsv").onclick = () => {
   const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`, sel = $("#asQuien").value;
-  const filas = [["Persona", "Día", "Entrada", "Sale a comer", "Regresa", "Salida", "Comida (min)", "Horas trabajadas", "Pendientes y actividades terminadas", "Última terminada"],
-    ...S.asis.filter(r => !sel || r.u === sel).map(r => { const a = calcAsis(r); return [name(r.u), r.d, hm(a.ent), hm(a.comIni), hm(a.comFin), a.abierto ? "en turno" : hm(a.sal), Math.round(a.comida / 60000), (a.total / 36e5).toFixed(2), r.hechas.length, r.hechas.at(-1) ? hm(r.hechas.at(-1).completada) : ""]; })];
+  const filas = [["Persona", "Día", "Entrada", "Sale a comer", "Regresa", "Salida", "Comida (min)", "Permisos (min)", "Descansos (min)", "Horas trabajadas", "Pendientes y actividades terminadas", "Última terminada"],
+    ...S.asis.filter(r => !sel || r.u === sel).map(r => { const a = calcAsis(r); return [name(r.u), r.d, hm(a.ent), hm(a.comIni), hm(a.comFin), a.abierto ? "en turno" : hm(a.sal), Math.round(a.comida / 60000), Math.round(a.permiso / 60000), Math.round(a.descanso / 60000), (a.total / 36e5).toFixed(2), r.hechas.length, r.hechas.at(-1) ? hm(r.hechas.at(-1).completada) : ""]; })];
   const el = document.createElement("a"); el.href = URL.createObjectURL(new Blob(["\ufeff" + filas.map(x => x.map(q).join(",")).join("\r\n")], { type:"text/csv" }));
   el.download = `asistencia_${$("#asDesde").value}_${$("#asHasta").value}.csv`; el.click(); setTimeout(() => URL.revokeObjectURL(el.href), 5000);
 };
 
+// ---------- Salón de la Fama: categorías y gráficas de lo completado ----------
+const FAMA = { per:7, graf:"persona", quien:"" };
+async function cargarFama(){
+  let q = S.sb.from("cm_tareas").select("id,responsable,tipo,prioridad,completada,enviada,limite,minutos_efectivos,minutos_estimados,calidad,orden,xp,actividad_id").eq("estado", "completada").not("responsable", "is", null);
+  if (FAMA.per) { const d = new Date(); d.setDate(d.getDate() - FAMA.per); q = q.gte("completada", d.toISOString()); }
+  const { data, error } = await q.limit(5000); if (error) { toast(errTxt(error)); return; }
+  S.fama = data; pintarFama();
+}
+function pintarFama(){
+  if (!$("#famaQuien").options.length) $("#famaQuien").innerHTML = `<option value="">Todo el equipo</option>` + Object.keys(S.profiles).filter(id => S.profiles[id].name).map(id => `<option value="${esc(id)}">${esc(name(id))}</option>`).join("");
+  const d = S.fama || [], por = {};
+  for (const t of d) (por[t.responsable] ||= []).push(t);
+  const fila = (id, v, extra) => `<li><b>${esc(firstName(id) || name(id))}</b> <span>${esc(v)}${extra ? " · " + esc(extra) : ""}</span></li>`;
+  const top = (fn, orden, fmt, min = 3) => Object.entries(por).map(([id, l]) => ({ id, l, v:fn(l) })).filter(x => x.v != null && x.l.length >= min).sort((a, b) => orden * (b.v - a.v)).slice(0, 3);
+  const cats = [
+    ["🏆 Más XP", "suma del periodo", top(l => l.reduce((s, t) => s + t.xp, 0), 1, null, 1), x => `${x.v} XP`],
+    ["⚡ Más rápidos", "tiempo trabajado contra el estimado (mín. 3)", top(l => { const m = l.filter(t => t.minutos_estimados && +t.minutos_efectivos > 0); return m.length ? m.reduce((s, t) => s + t.minutos_efectivos / t.minutos_estimados, 0) / m.length : null; }, -1), x => `${Math.round(x.v * 100)} % del tiempo estimado`],
+    ["💎 Mejor calidad", "promedio de estrellas (mín. 3)", top(l => { const m = l.filter(t => t.calidad); return m.length ? m.reduce((s, t) => s + t.calidad, 0) / m.length : null; }, 1), x => `${x.v.toFixed(1)} ★`],
+    ["⏰ Más puntuales", "entregadas a tiempo (mín. 3)", top(l => l.filter(t => Date.parse(t.enviada || t.completada) <= Date.parse(t.limite)).length / l.length, 1), x => `${Math.round(x.v * 100)} % a tiempo`],
+    ["📋 Más completadas por día", "promedio en los días que trabajó", top(l => l.length / new Set(l.map(t => ymd(new Date(t.completada)))).size, 1, null, 1), x => `${x.v.toFixed(1)} por día`],
+  ];
+  $("#famaCats").innerHTML = cats.map(([t, sub, lst, f]) => `<div class="fama-c"><h4>${t}</h4><small>${sub}</small><ol style="margin-top:8px">${lst.map(x => fila(x.id, f(x), `${x.l.length} completadas`)).join("") || "<li><span>Aún sin datos suficientes</span></li>"}</ol></div>`).join("");
+  pintarGrafica();
+}
+// barras horizontales de una sola serie (naranja de marca, etiquetas en tinta normal, valor al pasar el cursor)
+function barrasSVG(items){
+  if (!items.length) return `<p class="sub" style="margin:0">Sin datos en este periodo.</p>`;
+  const max = Math.max(...items.map(x => x.v), 1), alto = 26, ancho = 640, izq = 150, w = ancho - izq - 60;
+  return `<svg viewBox="0 0 ${ancho} ${items.length * alto + 8}" role="img" aria-label="Gráfica de barras">${items.map((x, i) => { const y = i * alto + 4, bw = Math.max(2, x.v / max * w);
+    return `<g><title>${esc(x.l)}: ${x.v}</title><text x="${izq - 8}" y="${y + 15}" text-anchor="end">${esc(x.l)}</text><rect x="${izq}" y="${y + 4}" width="${bw}" height="14" rx="4" fill="#EE6602"/><text x="${izq + bw + 6}" y="${y + 15}" class="q">${x.v}</text></g>`; }).join("")}</svg>`;
+}
+function pintarGrafica(){
+  const d = (S.fama || []).filter(t => !FAMA.quien || t.responsable === FAMA.quien), cuenta = f => { const c = {}; for (const t of d) { const k = f(t); c[k] = (c[k] || 0) + 1; } return c; };
+  let items;
+  if (FAMA.graf === "persona") items = Object.entries(cuenta(t => t.responsable)).map(([id, v]) => ({ l:firstName(id) || name(id), v })).sort((a, b) => b.v - a.v);
+  if (FAMA.graf === "tipo") { const c = cuenta(t => t.tipo); items = TIPOS.filter(k => c[k]).map(k => ({ l:k, v:c[k] })); }
+  if (FAMA.graf === "prioridad") { const c = cuenta(t => t.prioridad); items = PRIS.filter(k => c[k]).map(k => ({ l:priL(k), v:c[k] })); }
+  if (FAMA.graf === "entrega") { const c = cuenta(t => { const r = Date.parse(t.enviada || t.completada) - Date.parse(t.limite); return r <= 0 ? "A tiempo" : r <= 864e5 ? "Hasta 24 h tarde" : "Más de 24 h tarde"; });
+    items = ["A tiempo", "Hasta 24 h tarde", "Más de 24 h tarde"].filter(k => c[k]).map(k => ({ l:k, v:c[k] })); }
+  if (FAMA.graf === "dia") { const c = cuenta(t => ymd(new Date(t.completada))); items = Object.keys(c).sort().slice(-14).map(k => ({ l:new Date(k + "T12:00:00").toLocaleDateString("es-MX", { weekday:"short", day:"numeric", month:"short" }), v:c[k] })); }
+  $("#famaG").innerHTML = `<p class="sub" style="margin:0 0 6px">Pendientes y actividades completadas${FAMA.quien ? " de " + esc(name(FAMA.quien)) : ""} · ${FAMA.per ? `últimos ${FAMA.per} días` : "todo el historial"}</p>` + barrasSVG(items);
+}
+$("#famaPer").onclick = e => { const b = e.target.closest("button[data-fper]"); if (!b) return; FAMA.per = +b.dataset.fper; $("#famaPer").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); cargarFama(); };
+$("#famaGraf").onclick = e => { const b = e.target.closest("button[data-fg]"); if (!b) return; FAMA.graf = b.dataset.fg; $("#famaGraf").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); pintarGrafica(); };
+$("#famaQuien").onchange = e => { FAMA.quien = e.target.value; pintarGrafica(); };
+
 // ---------- turno: checar entrada y salida ----------
 const miTurno = () => S.turnos.find(r => r.usuario === me() && !r.fin);
 const dur = ms => { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
-const enComida = t => t && t.comida_inicio && !t.comida_fin;
+const PAUSA_L = { comida:"comida", permiso:"permiso", descanso:"descanso" };
+const pausaAbierta = (u = me()) => S.pausas.find(p => p.usuario === u && !p.fin);
+const pausasDe = id => S.pausas.filter(p => p.turno_id === id);
 function pintarTurno(){
-  const b = $("#turnoBtn"), t = miTurno(); if (!b) return;
-  b.classList.toggle("on", !!t && !enComida(t));
-  b.innerHTML = !t ? `<i></i>Abrir turno` : enComida(t) ? `<i style="background:var(--warn)"></i>En comida · ${dur(Date.now() - Date.parse(t.comida_inicio))} · Regresar` : `<i></i>En turno · ${dur(Date.now() - Date.parse(t.inicio))} ▾`;
-  b.title = t ? `Entraste a las ${hm(t.inicio)}` : "Checa tu entrada";
+  const b = $("#turnoBtn"), t = miTurno(), pz = pausaAbierta(); if (!b) return;
+  b.classList.toggle("on", !!t && !pz);
+  b.innerHTML = !t ? `<i></i>Checar entrada` : pz ? `<i style="background:var(--warn)"></i>En ${PAUSA_L[pz.tipo]} · ${dur(Date.now() - Date.parse(pz.inicio))}` : `<i></i>En turno · ${dur(Date.now() - Date.parse(t.inicio))}`;
+  b.title = "Ir a la recepción";
 }
-async function turno(acc){
-  const t = miTurno(), { error } = await S.sb.rpc("cm_turno", { p_accion:acc });
-  if (error) { toast(/turno|comida/.test(error.message) ? error.message : errMsg(error)); return; }
-  toast({ abrir:"Turno abierto. ¡Buen día!", comer:"Buen provecho: tu comida quedó registrada", regresar:"De vuelta: se registró tu regreso", cerrar:`Turno cerrado: ${t ? dur(Date.now() - Date.parse(t.inicio)) : ""}` }[acc]);
+async function turno(acc, tipo){
+  const t = miTurno(), nota = $("#recNota")?.value.trim() || null;
+  const { error } = await S.sb.rpc("cm_turno", { p_accion:acc, p_tipo:tipo || null, p_nota:nota });
+  if (error) { toast(/turno|pausa/.test(error.message) ? error.message : errMsg(error)); return; }
+  if ($("#recNota")) $("#recNota").value = "";
+  toast({ abrir:"Entrada registrada. ¡Buen día!", pausa:{ comida:"Buen provecho: salida a comer registrada", permiso:"Permiso registrado", descanso:"Descanso registrado" }[tipo], volver:"De vuelta: se registró tu regreso", cerrar:`Salida registrada: ${t ? dur(Date.now() - Date.parse(t.inicio)) : ""}` }[acc]);
   load("turnos");
 }
-// sin turno: abrir · en comida: regresar · en turno: menú con salir a comer y cerrar
-$("#turnoBtn").onclick = () => {
-  const t = miTurno();
-  if (!t) return turno("abrir");
-  if (enComida(t)) return turno("regresar");
-  abrirMdl(`<h3>Tu turno</h3><p class="sub">Entraste a las ${esc(hm(t.inicio))}${t.comida_inicio ? ` · comida de ${esc(hm(t.comida_inicio))} a ${esc(hm(t.comida_fin))}` : ""} · llevas ${esc(dur(Date.now() - Date.parse(t.inicio)))}.</p>
-    <div class="row">${t.comida_inicio ? "" : `<button class="ghost" type="button" data-tur="comer">Salir a comer</button>`}<button class="btn" type="button" data-tur="cerrar">Cerrar turno</button></div>`);
-};
+// el botón de arriba lleva a la recepción, donde están todas las marcas
+$("#turnoBtn").onclick = () => { if (!S.busy && !S.panel) atajo(RECEP); };
+function renderRecepcion(){
+  const t = miTurno(), pz = pausaAbierta();
+  $("#recEst").innerHTML = `<img src="${avatarOf(me())}" alt="" style="width:52px;height:52px;border-radius:50%"><div><b>${!t ? "Aún no checas entrada" : pz ? `En ${PAUSA_L[pz.tipo]} desde las ${esc(hm(pz.inicio))}` : `En turno desde las ${esc(hm(t.inicio))}`}</b>
+    <small style="display:block;color:var(--muted)">${t ? `Llevas ${esc(dur(Date.now() - Date.parse(t.inicio)))}${pausasDe(t.id).length ? " · pausas: " + pausasDe(t.id).map(p => `${PAUSA_L[p.tipo]} ${hm(p.inicio)}–${p.fin ? hm(p.fin) : "…"}`).join(", ") : ""}` : "Checa tu entrada para empezar el día"}</small></div>`;
+  const b = (acc, tipo, txt, prin) => `<button type="button" data-rec="${acc}" data-tipo="${tipo || ""}"${prin ? ' class="prin"' : ""}>${txt}</button>`;
+  $("#recBtns").innerHTML = !t ? b("abrir", "", "🟢 Checar entrada", 1)
+    : pz ? b("volver", "", `↩ Regreso de ${PAUSA_L[pz.tipo]}`, 1)
+    : b("pausa", "comida", "🍽 Salir a comer") + b("pausa", "permiso", "📝 Permiso") + b("pausa", "descanso", "☕ Descanso") + b("cerrar", "", "🔴 Checar salida", 1);
+  const hoy = S.turnos.filter(r => !r.fin || ymd(new Date(r.inicio)) === today());
+  $("#recHoy").innerHTML = hoy.length ? hoy.map(r => { const p = pausaAbierta(r.usuario);
+    return `<li class="item" style="--c:${r.fin ? "var(--line)" : p ? "var(--warn)" : "var(--ok)"}"><span class="chip" style="--c:${r.fin ? "#8a8580" : p ? "#ffcc33" : "#3fbf6a"}">${r.fin ? "Salió" : p ? "En " + PAUSA_L[p.tipo] : "En turno"}</span>
+      <div><b>${who(r.usuario)}</b><small>Entrada ${esc(hm(r.inicio))}${pausasDe(r.id).map(x => ` · ${PAUSA_L[x.tipo]} ${esc(hm(x.inicio))}${x.fin ? "–" + esc(hm(x.fin)) : ""}`).join("")}${r.fin ? ` · salida ${esc(hm(r.fin))}` : ""}</small></div></li>`; }).join("")
+    : `<li class="empty">Nadie ha checado hoy.</li>`;
+}
+$("#recBtns").onclick = e => { const b = e.target.closest("button[data-rec]"); if (b) { b.disabled = true; turno(b.dataset.rec, b.dataset.tipo); } };
 
 let profBusy = false;
 async function refreshProfiles(){
@@ -1397,7 +1606,7 @@ function renderData(){
   $("#jRevL").innerHTML = rev.length ? rev.map(tarjeta).join("") : `<div class="empty">No hay entregas por revisar.</div>`;
   const hoyT = S.turnos.filter(r => !r.fin || ymd(new Date(r.inicio)) === today()), hm = d => new Date(d).toLocaleTimeString("es-MX", { hour:"2-digit", minute:"2-digit" });
   $("#jTurnos").innerHTML = hoyT.length ? hoyT.map(r => `<li class="item" style="--c:${r.fin ? "var(--line)" : "var(--ok)"}"><span class="chip" style="--c:${r.fin ? "#8a8580" : "#3fbf6a"}">${r.fin ? "Cerrado" : "En turno"}</span>
-    <div><b>${who(r.usuario)}</b><small>Entrada ${esc(hm(r.inicio))}${ymd(new Date(r.inicio)) !== today() ? " (ayer)" : ""} · ${r.fin ? `salida ${esc(hm(r.fin))}` : "sigue en turno"}${r.comida_inicio ? ` · comida ${esc(hm(r.comida_inicio))}${r.comida_fin ? "–" + esc(hm(r.comida_fin)) : " (en comida)"}` : ""} · ${esc(dur((r.fin ? Date.parse(r.fin) : Date.now()) - Date.parse(r.inicio)))}</small></div></li>`).join("")
+    <div><b>${who(r.usuario)}</b><small>Entrada ${esc(hm(r.inicio))}${ymd(new Date(r.inicio)) !== today() ? " (ayer)" : ""} · ${r.fin ? `salida ${esc(hm(r.fin))}` : "sigue en turno"}${pausasDe(r.id).map(x => ` · ${PAUSA_L[x.tipo]} ${esc(hm(x.inicio))}${x.fin ? "–" + esc(hm(x.fin)) : ""}`).join("")} · ${esc(dur((r.fin ? Date.parse(r.fin) : Date.now()) - Date.parse(r.inicio)))}</small></div></li>`).join("")
     : `<li class="empty">Nadie ha abierto turno hoy.</li>`;
 
   // dashboards y herramientas
@@ -1416,11 +1625,12 @@ function renderData(){
   }).join("") : `<li class="empty">Sin cambios registrados. Cada cambio pendiente enciende una luz en la consola de la sala.</li>`;
 
   // sala de juntas: lo que me piden a mí y lo que yo pedí
-  const TIPO = { autorizacion:["Autorización","#4c8fe8"], ayuda:["Ayuda","#ffcc33"], duda:["Duda","#b48cf0"] };
+  const TIPO = { autorizacion:["Autorización","#4c8fe8"], ayuda:["Ayuda","#ffcc33"], duda:["Duda","#b48cf0"], apoyo:["Apoyo","#3fbf6a"], reunion:["Reunión","#ff9f43"] };
   const EST = { pendiente:["Pendiente","#ffcc33"], aprobada:["Aprobada","#3fbf6a"], rechazada:["Rechazada","#ff6b5e"], resuelta:["Resuelta","#3fbf6a"] };
-  const sp = $("#sPara"), keepP = sp.value, jefes = S.jefes.filter(id => id !== me());
-  sp.innerHTML = jefes.length ? jefes.map(id => `<option value="${esc(id)}">${esc(name(id))}</option>`).join("") : `<option value="">Sin dirección disponible</option>`;
-  if (jefes.includes(keepP)) sp.value = keepP;
+  // dirección primero; luego cualquier compañero del equipo (apoyo, respuesta o reunión)
+  const sp = $("#sPara"), keepP = sp.value, jefes = S.jefes.filter(id => id !== me()), comp = Object.keys(S.profiles).filter(id => id !== me() && S.profiles[id].name && !S.jefes.includes(id)).sort((a, b) => name(a).localeCompare(name(b)));
+  sp.innerHTML = [...jefes.map(id => `<option value="${esc(id)}">${esc(name(id))} · dirección</option>`), ...comp.map(id => `<option value="${esc(id)}">${esc(name(id))}</option>`)].join("") || `<option value="">No hay a quién</option>`;
+  if (jefes.includes(keepP) || comp.includes(keepP)) sp.value = keepP;
   const paraMi = S.sols.filter(s => s.para === me()), pend = paraMi.filter(s => s.estado === "pendiente"), resp = paraMi.filter(s => s.estado !== "pendiente").slice(0, 10);
   $("#jJefe").hidden = !S.jefes.includes(me()) && !paraMi.length;
   $("#jN").textContent = pend.length; $("#jN").hidden = !pend.length;
@@ -1498,8 +1708,12 @@ $("#panel").addEventListener("click", e => {
 const quienDb = v => v.startsWith("n:") ? { responsable_nombre:v.slice(2) } : { responsable:v };
 $("#fMis").onsubmit = async e => { e.preventDefault(); const t = $("#mTitle").value.trim(), d = $("#mDue").value; if (!t || !d) return;
   const limite = new Date(`${d}T${$("#mHora").value || "18:00"}:00`).toISOString();
-  const { error } = await S.sb.from("cm_tareas").insert({ titulo:t, categoria:$("#mCat").value || sugerencia(t).cat, tipo:$("#mTipo").value || tipoDe(t), prioridad:$("#mPri").value, limite, ...quienDb($("#mOwner").value) });
+  const { data:nueva, error } = await S.sb.from("cm_tareas").insert({ titulo:t, categoria:$("#mCat").value || sugerencia(t).cat, tipo:$("#mTipo").value || tipoDe(t), prioridad:$("#mPri").value, limite, ...quienDb($("#mOwner").value) }).select("id").single();
   if (error) { toast(errMsg(error)); return; }
+  const archivos = [...$("#mArch").files];
+  if (archivos.length) await subirAdjuntos(nueva, archivos);
+  if (VOZ_P) { await subirAdjuntos(nueva, [VOZ_P.blob], "audio", VOZ_P.texto || null); VOZ_P = null; $("#mMicTx").textContent = ""; }
+  $("#mArch").value = "";
   $("#mTitle").value = ""; $("#mSug").textContent = ""; delete $("#mCat").dataset.tocado; delete $("#mTipo").dataset.tocado; $("#mTipo").value = ""; delete $("#mOwner").dataset.tocado; $("#mCat").value = ""; load("tareas"); };
 // al escribir el pendiente se sugieren categoría y responsable, mientras no se hayan elegido a mano
 function sugerirPendiente(){
@@ -1689,6 +1903,9 @@ for (const r of ROOMS) {
   const d = r.door;
   r.spot = d.side === "s" ? [d.at, r.y + r.h - 75] : d.side === "e" ? [r.x + r.w - 75, d.at] : [r.x + 75, d.at];
 }
+// la recepción (el mostrador abajo del logo): ahí se checa entrada, comida, permiso, descanso y salida
+const RECEP = { id:"recepcion", name:"Recepción", icon:"clock", x:700, y:1300, w:250, h:0, spot:[825, 1338] };
+const PUNTOS = [RECEP];
 const SPAWN = [1200, 1240];
 const OBST = [];
 const block = (x, y, w, h) => OBST.push({ x, y, w, h });
@@ -1974,7 +2191,7 @@ const sb_tips = () => {
   const toca = ab.filter(t => t.actividad_id && t.responsable === me() && diaDe(t) === today()).length, lider = xpTable()[0];
   const t = [];
   if (S.uid && !S.players[S.uid]) t.push("Pasa al Armario a armar tu personaje");
-  if (S.uid && !miTurno()) t.push("No olvides abrir tu turno (botón arriba a la izquierda)");
+  if (S.uid && !miTurno()) t.push("Pasa a la recepción a checar tu entrada");
   if (venc) t.push(`¡Ojo! Tienes ${venc} ${venc === 1 ? "tarea vencida" : "tareas vencidas"}`);
   t.push(mias ? `Tienes ${mias} ${mias === 1 ? "tarea abierta" : "tareas abiertas"}` : "No tienes tareas abiertas");
   if (toca) t.push(`Hoy tocan ${toca} ${toca === 1 ? "actividad" : "actividades"} de la semana`);
@@ -2053,6 +2270,7 @@ function icon(c, k, x, y){
   if (k === "tool") { c.moveTo(-8, 8); c.lineTo(3, -3); c.arc(6, -6, 4.5, Math.PI * .75, Math.PI * 2.25); }
   if (k === "hanger") { c.arc(0, -6, 3, Math.PI, Math.PI * 2.4); c.moveTo(0, -3); c.lineTo(-10, 6); c.lineTo(10, 6); c.closePath(); }
   if (k === "swap") { c.moveTo(-8, -4); c.lineTo(8, -4); c.moveTo(4, -8); c.lineTo(8, -4); c.lineTo(4, 0); c.moveTo(8, 4); c.lineTo(-8, 4); c.moveTo(-4, 0); c.lineTo(-8, 4); c.lineTo(-4, 8); }
+  if (k === "clock") { c.arc(0, 0, 9, 0, 7); c.moveTo(0, 0); c.lineTo(0, -5); c.moveTo(0, 0); c.lineTo(4, 3); }
   if (k === "meet") { c.arc(-5, -5, 3.5, 0, 7); c.moveTo(8.5, -5); c.arc(5, -5, 3.5, 0, 7); c.moveTo(-11, 8); c.quadraticCurveTo(-5, -1, 1, 8); c.moveTo(-1, 8); c.quadraticCurveTo(5, -1, 11, 8); }
   if (k === "trophy") { c.moveTo(-6, -8); c.lineTo(6, -8); c.lineTo(4, 1); c.lineTo(-4, 1); c.closePath(); c.moveTo(0, 1); c.lineTo(0, 6); c.moveTo(-5, 8); c.lineTo(5, 8); c.moveTo(-6, -6); c.lineTo(-9, -6); c.lineTo(-8, -2); c.lineTo(-5, -1); c.moveTo(6, -6); c.lineTo(9, -6); c.lineTo(8, -2); c.lineTo(5, -1); }
   c.stroke(); c.restore();
@@ -2066,7 +2284,7 @@ function badgeOf(id){
   return 0;
 }
 function drawMarkers(t){
-  for (const r of ROOMS) {
+  for (const r of [...ROOMS, ...PUNTOS]) {
     const [x, y] = markerPos(r), hot = hoverRoom === r, pulse = r.id === "armario" && S.uid && !S.players[S.uid];
     const rad = (hot ? 30 : 26) + (pulse ? Math.sin(t / 250) * 3 : 0);
     ctx.save(); ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 12; ctx.shadowOffsetY = 4;
@@ -2081,7 +2299,7 @@ function drawMarkers(t){
     ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y + rad + 17.5);
   }
 }
-function markerHit(sx, sy){ return ROOMS.find(r => { const [x, y] = markerPos(r); return Math.hypot(sx - x, sy - y) < 32 || (Math.abs(sx - x) < 90 && sy > y + 26 && sy < y + 58); }) || null; }
+function markerHit(sx, sy){ return [...ROOMS, ...PUNTOS].find(r => { const [x, y] = markerPos(r); return Math.hypot(sx - x, sy - y) < 32 || (Math.abs(sx - x) < 90 && sy > y + 26 && sy < y + 58); }) || null; }
 function gHit(sx, sy){ const [x, y] = toScreen(G.x, G.y), h = 104 * cam.z, w = h * .7; return sx > x - w / 2 && sx < x + w / 2 && sy > y - h && sy < y; }
 const roomAt = (wx, wy) => ROOMS.find(r => wx > r.x && wx < r.x + r.w && wy > r.y && wy < r.y + r.h) || null;
 
@@ -2089,7 +2307,7 @@ const roomAt = (wx, wy) => ROOMS.find(r => wx > r.x && wx < r.x + r.w && wy > r.
 function travelTo(x, y, onArrive){
   const path = findPath(P.x, P.y, x, y);
   if (!path) { toast("No puedo llegar ahí"); return false; }
-  P.path = path; P.onArrive = onArrive || null; P.target = path[path.length - 1]; cam.follow = true; return true;
+  P.ver = null; P.path = path; P.onArrive = onArrive || null; P.target = path[path.length - 1]; cam.follow = true; return true;
 }
 function goRoom(r){
   if (S.busy) return;
@@ -2120,12 +2338,14 @@ function enterRoom(r){
 }
 function openPanel(r){
   S.panel = r.id;
-  $("#pTitle").innerHTML = `${esc(r.name)}<small>${{ pendientes:"Tareas del equipo con responsable y fecha", recurrentes:"Lo que toca cada semana", dashboards:"Tableros del grupo", herramientas:"Archivos, calculadoras y formatos", cambios:"Bitácora de cambios, usuarios y acceso, auditoría", armario:"Arma tu minifigura paso a paso", fama:"Ranking por XP", juntas:"Autorizaciones, ayuda y dudas con dirección" }[r.id]}</small>`;
+  $("#pTitle").innerHTML = `${esc(r.name)}<small>${{ pendientes:"Tareas del equipo con responsable y fecha", recurrentes:"Lo que toca cada semana", dashboards:"Tableros del grupo", herramientas:"Archivos, calculadoras y formatos", cambios:"Bitácora de cambios, usuarios y acceso, auditoría", recepcion:"Entrada, comida, permisos, descansos y salida", armario:"Arma tu minifigura paso a paso", fama:"Categorías, gráficas y ranking por XP", juntas:"Autorizaciones con dirección, apoyo y reuniones con el equipo" }[r.id]}</small>`;
   document.querySelectorAll("[data-sec]").forEach(s => s.hidden = s.dataset.sec !== r.id);
   $(".panel-in").classList.toggle("claro", r.id === "armario");
   if (r.id === "armario") { ARM.saved = { ...S.fig }; armView("ed"); renderArm(); }
   if (r.id === "juntas") load("sols");
   if (r.id === "cambios") camTab(CAM.tab);
+  if (r.id === "recepcion") renderRecepcion();
+  if (r.id === "fama") cargarFama();
   if (r.id === "recurrentes") { S.dia = dayIdx(); renderData(); }
   $("#panel").hidden = false; $("#pClose").focus();
 }
@@ -2146,7 +2366,7 @@ function renderPause(){
     <div class="bar"><i style="width:${lvlPct(mine.xp)}%"></i></div>
     <div class="stats"><div><b>${act}</b><span>tareas abiertas</span></div><div><b>${toca}</b><span>tocan hoy</span></div><div><b>${mine.n}</b><span>completadas</span></div></div>`;
   const sinLeer = convKeys().reduce((a, k) => a + unread(k), 0), teNec = badgeOf("juntas");
-  const items = [["reanudar","Reanudar",""], ["mensajes","Mensajes", sinLeer ? `${sinLeer} sin leer` : ""], ...ROOMS.filter(r => !SIN_ACCESO[r.id] || tengo(r.id)).map(r => [r.id, r.name, { pendientes:`${S.tareas.filter(t => !t.actividad_id && abierta(t)).length} activos`, recurrentes:`${toca} hoy`, dashboards:`${S.portals.filter(p => p.tipo !== "herramienta").length}`, herramientas:`${S.portals.filter(p => p.tipo === "herramienta").length}`, cambios:`${S.changes.filter(c => c.status !== "aplicado").length} abiertos`, juntas:teNec ? `${teNec} te necesitan` : "" }[r.id] || ""]), ["salir","Cerrar sesión",""]];
+  const items = [["reanudar","Reanudar",""], ["mensajes","Mensajes", sinLeer ? `${sinLeer} sin leer` : ""], ...[RECEP, ...ROOMS].filter(r => !SIN_ACCESO[r.id] || tengo(r.id)).map(r => [r.id, r.name, { pendientes:`${S.tareas.filter(t => !t.actividad_id && abierta(t)).length} activos`, recurrentes:`${toca} hoy`, dashboards:`${S.portals.filter(p => p.tipo !== "herramienta").length}`, herramientas:`${S.portals.filter(p => p.tipo === "herramienta").length}`, cambios:`${S.changes.filter(c => c.status !== "aplicado").length} abiertos`, juntas:teNec ? `${teNec} te necesitan` : "" }[r.id] || ""]), ["salir","Cerrar sesión",""]];
   const sel = document.activeElement?.dataset?.go;
   $("#pMenu").innerHTML = items.map(([k, l, n]) => `<button type="button" data-go="${k}">${esc(l)}<small>${esc(n)}</small></button>`).join("");
   ($(`#pMenu [data-go="${sel}"]`) || $("#pMenu button")).focus();
@@ -2217,7 +2437,10 @@ $("#chatX").onclick = closeChat;
 const dmKey = id => "dm:" + [me(), id].sort().join(":");
 const convOther = k => k === "grupo" ? null : k.slice(3).split(":").find(x => x !== me());
 const lastRead = k => { try { return +localStorage.getItem("cm-leido-" + k) || 0; } catch { return 0; } };
-const markRead = k => { try { localStorage.setItem("cm-leido-" + k, Date.now()); } catch {} };
+// leído: en este navegador y en la base (visto), como mucho cada 10 s por conversación
+const VISTO_ENV = {};
+const markRead = k => { try { localStorage.setItem("cm-leido-" + k, Date.now()); } catch {}
+  if (S.uid && (!VISTO_ENV[k] || Date.now() - VISTO_ENV[k] > 10000)) { VISTO_ENV[k] = Date.now(); S.sb.from("cm_vistos").upsert({ conversacion:k, usuario:S.uid, visto:new Date().toISOString() }).then(() => {}); } };
 const unread = k => { const t = lastRead(k); return S.msgs.filter(m => m.conversacion === k && m.de !== me() && Date.parse(m.creado) > t).length; };
 const convKeys = () => ["grupo", ...Object.keys(S.profiles).filter(id => id !== me() && S.profiles[id].name).map(dmKey)];
 const hora = s => new Date(s).toLocaleString("es-MX", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
@@ -2228,17 +2451,38 @@ function renderMsgs(){
   if (!$("#msgs").classList.contains("dentro") || innerWidth > 640) markRead(S.conv);
   const lastOf = k => { for (let i = S.msgs.length - 1; i >= 0; i--) if (S.msgs[i].conversacion === k) return S.msgs[i]; return null; };
   const rows = keys.map(k => ({ k, last:lastOf(k) })).sort((a, b) => a.k === "grupo" ? -1 : b.k === "grupo" ? 1 : (b.last ? Date.parse(b.last.creado) : 0) - (a.last ? Date.parse(a.last.creado) : 0) || name(convOther(a.k)).localeCompare(name(convOther(b.k))));
-  $("#convs").innerHTML = rows.map(({ k, last }) => { const o = convOther(k), u = unread(k);
+  const enl = [...enLinea()].filter(id => id !== me());
+  $("#convs").innerHTML = `<div class="enl">${enl.length ? `<b>●</b> En línea: ${enl.map(id => esc(firstName(id) || name(id))).join(", ")}` : "Nadie más está en línea"}</div>` + rows.map(({ k, last }) => { const o = convOther(k), u = unread(k);
     return `<button type="button" class="conv" data-conv="${esc(k)}" aria-current="${k === S.conv}">${o ? `<img src="${avatarOf(o)}" alt="">` : `<span class="grupo-ic">GB</span>`}
       <span style="min-width:0"><b>${esc(o ? name(o) : "Equipo GB")}${o && enLinea().has(o) ? '<span class="on-dot" title="En línea"></span>' : ""}</b><small>${last ? esc((last.de === me() ? "Tú: " : o ? "" : (firstName(last.de) || "") + ": ") + last.texto) : (o ? "Sin mensajes" : "Grupo de todo el equipo")}</small></span>${u ? "<i></i>" : ""}</button>`; }).join("");
   const o = convOther(S.conv);
   $("#convH").innerHTML = `<button type="button" data-back aria-label="Volver" style="${innerWidth > 640 ? "display:none" : ""}">‹</button>${o ? `<img src="${avatarOf(o)}" alt="">` : `<span class="grupo-ic">GB</span>`}<b>${esc(o ? name(o) : "Equipo GB")}</b><button type="button" id="msgsX2" aria-label="Cerrar mensajes">×</button>`;
   const lst = S.msgs.filter(m => m.conversacion === S.conv);
   $("#convM").innerHTML = lst.length ? lst.map(m => { const mio = m.de === me();
-    return `<div class="msg${mio ? " mio" : ""}"><img src="${avatarOf(m.de)}" alt=""><div><small>${mio ? "" : esc(name(m.de)) + " · "}${esc(hora(m.creado))}</small><div class="bub">${esc(m.texto)}</div></div></div>`; }).join("")
+    const arch = !m.archivo ? "" : /^image\//.test(m.archivo_tipo) ? `<a data-firmar="${esc(m.archivo)}" target="_blank" rel="noopener"><img data-firmar="${esc(m.archivo)}" alt="${esc(m.archivo_nombre || "imagen")}"></a>`
+      : /^audio\//.test(m.archivo_tipo) ? `<audio controls data-firmar="${esc(m.archivo)}"></audio>` : `<a data-firmar="${esc(m.archivo)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">📎 ${esc(m.archivo_nombre || "archivo")}</a>`;
+    const txt = m.archivo && /^audio\//.test(m.archivo_tipo) ? (m.transcripcion ? `<span class="tr">“${esc(m.transcripcion)}”</span>` : "🎤 Nota de voz") : m.archivo ? "" : esc(m.texto);
+    return `<div class="msg${mio ? " mio" : ""}"><img src="${avatarOf(m.de)}" alt=""><div><small>${mio ? "" : esc(name(m.de)) + " · "}${esc(hora(m.creado))}</small><div class="bub">${txt}${arch}</div></div></div>`; }).join("") + visto(lst)
     : `<p class="sub" style="margin:auto;text-align:center">${o ? `Escríbele a ${esc(firstName(o) || name(o))}.` : "Escribe al grupo de todo el equipo."}</p>`;
-  $("#convM").scrollTop = 1e6;
+  $("#convM").scrollTop = 1e6; firmarEn($("#convM")).then(() => { $("#convM").scrollTop = 1e6; });
 }
+// "Visto" debajo de mi último mensaje: quién de la conversación ya lo vio
+function visto(lst){
+  const mios = lst.filter(m => m.de === me()), ult = mios.at(-1); if (!ult || lst.at(-1) !== ult) return "";
+  const v = S.vistos.filter(x => x.conversacion === S.conv && x.usuario !== me() && Date.parse(x.visto) >= Date.parse(ult.creado));
+  if (!v.length) return `<div class="visto">Enviado</div>`;
+  return `<div class="visto">${S.conv === "grupo" ? "Visto por " + v.map(x => esc(firstName(x.usuario) || name(x.usuario))).join(", ") : "Visto " + esc(hm(v[0].visto))}</div>`;
+}
+async function enviarArchivoChat(f, transcripcion){
+  if (f.size > 20e6) { toast("El archivo pesa más de 20 MB"); return; }
+  const ruta = await subirArchivo("chat", f); if (!ruta) return;
+  const voz = /^audio\//.test(f.type);
+  const { error } = await S.sb.from("cm_mensajes").insert({ conversacion:S.conv, texto:(voz ? (transcripcion || "Nota de voz") : (f.name || "archivo")).slice(0, 2000), archivo:ruta, archivo_nombre:f.name, archivo_tipo:f.type, transcripcion:transcripcion || null });
+  if (error) toast(errMsg(error)); else load("msgs");
+}
+$("#msgArch").onclick = () => $("#msgFile").click();
+$("#msgFile").onchange = e => { const f = e.target.files[0]; if (f) enviarArchivoChat(f); e.target.value = ""; };
+botonGrabar($("#msgMic"), tx => { $("#msgIn").placeholder = tx || "Grabando…"; }, r => { $("#msgIn").placeholder = "Escribe un mensaje…"; enviarArchivoChat(r.blob, r.texto); });
 function openMsgs(k){
   if (S.mode !== "play") return;
   if (!$("#chat").hidden) closeChat();
@@ -2272,7 +2516,7 @@ addEventListener("keydown", e => {
   if (e.key === " ") { e.preventDefault(); if (S.paused) closePause(); else if (!S.panel && $("#msgs").hidden) openPause(); return; }
   if ((e.key === "c" || e.key === "C") && !S.panel) { e.preventDefault(); $("#msgs").hidden ? openMsgs() : closeMsgs(); return; }
   if (S.paused || S.panel) return;
-  const k = KEYMAP[e.key]; if (k) { S.keys[k] = true; P.path = null; P.onArrive = null; cam.follow = true; e.preventDefault(); }
+  const k = KEYMAP[e.key]; if (k) { S.keys[k] = true; P.path = null; P.onArrive = null; P.ver = null; cam.follow = true; e.preventDefault(); }
 });
 addEventListener("keyup", e => { const k = KEYMAP[e.key]; if (k) S.keys[k] = false; });
 addEventListener("blur", () => S.keys = {});
@@ -2307,8 +2551,11 @@ const endPtr = e => {
 };
 cv.addEventListener("pointerup", endPtr); cv.addEventListener("pointercancel", endPtr);
 cv.addEventListener("wheel", e => { if (S.mode !== "play") return; e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * .0015)); }, { passive:false });
+const PANTALLAS = [1470, 1690, 1910, 2130];       // pantallas de la Sala de Dashboards (x de cada una; y 50 a 126)
 function clickAt(sx, sy){
   if (gHit(sx, sy)) { goSaurio(); return; }
+  { const [wx, wy] = toWorld(sx, sy), i = PANTALLAS.findIndex(x => wx >= x && wx <= x + 200 && wy >= 50 && wy <= 126), d = S.portals.filter(p => p.tipo !== "herramienta")[i];
+    if (d) { window.open(d.url, "_blank", "noopener"); toast(`Abriendo ${d.name}`); travelTo(PANTALLAS[i] + 100, 190, () => { P.ver = d.name; P.angT = 180; }); return; } }
   for (const r of Object.values(S.remote)) { const [x, y] = toScreen(r.x, r.y), h = 66 * cam.z;
     if (r.uid && sx > x - h * .35 && sx < x + h * .35 && sy > y - h && sy < y) { openMsgs(dmKey(r.uid)); return; } }
   const m = markerHit(sx, sy); if (m) { goRoom(m); return; }
@@ -2323,10 +2570,10 @@ let lastSent = 0, sentKey = "";
 const MI_LLAVE = rid();
 function sendPresence(now){
   if (!S.chReady) return;
-  const key = `${Math.round(P.x)},${Math.round(P.y)},${P.dir},${P.walking},${JSON.stringify(S.fig)}`;
+  const key = `${Math.round(P.x)},${Math.round(P.y)},${P.dir},${P.walking},${P.ver || ""},${JSON.stringify(S.fig)}`;
   if (key === sentKey || now - lastSent < 150) return;
   sentKey = key; lastSent = now;
-  S.ch.track({ x:Math.round(P.x), y:Math.round(P.y), d:P.dir, w:P.walking, fig:S.fig, uid:S.uid }).catch(() => {});
+  S.ch.track({ x:Math.round(P.x), y:Math.round(P.y), d:P.dir, w:P.walking, fig:S.fig, uid:S.uid, ver:P.ver || null }).catch(() => {});
 }
 function syncPeers(){
   const seen = new Set();
@@ -2335,7 +2582,7 @@ function syncPeers(){
     const pr = metas[metas.length - 1] || {}; if (typeof pr.x !== "number" || typeof pr.y !== "number") continue;
     seen.add(peer);
     const r = S.remote[peer] ||= { x:pr.x, y:pr.y, phase:0 };
-    Object.assign(r, { tx:clamp(pr.x,0,W), ty:clamp(pr.y,0,H), dir:[0,1,2,3].includes(pr.d) ? pr.d : 0, walking:!!pr.w, fig:sanitizeFig(pr.fig), uid:typeof pr.uid === "string" ? pr.uid : null });
+    Object.assign(r, { tx:clamp(pr.x,0,W), ty:clamp(pr.y,0,H), dir:[0,1,2,3].includes(pr.d) ? pr.d : 0, walking:!!pr.w, fig:sanitizeFig(pr.fig), uid:typeof pr.uid === "string" ? pr.uid : null, ver:typeof pr.ver === "string" ? pr.ver.slice(0, 40) : null });
   }
   for (const k of Object.keys(S.remote)) if (!seen.has(k)) delete S.remote[k];
   // aviso cuando alguien entra (la primera sincronización solo toma lista)
@@ -2424,8 +2671,8 @@ function draw(t, dt){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const tag = (wx, wy, txt, mine) => { const [x, y] = toScreen(wx, wy); ctx.font = "700 12px Figtree, sans-serif"; const w = ctx.measureText(txt).width + 14;
     ctx.fillStyle = mine ? "rgba(238,102,2,.95)" : "rgba(18,16,15,.82)"; rr(ctx, x - w / 2, y - 18, w, 18, 9); ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y - 9); };
-  for (const r of Object.values(S.remote)) tag(r.x, r.y - 104, firstName(r.uid) || name(r.uid), false);
-  tag(P.x, P.y - 104, firstName(S.uid) || "Tú", true);
+  for (const r of Object.values(S.remote)) tag(r.x, r.y - 104, (firstName(r.uid) || name(r.uid)) + (r.ver ? ` · 👁 ${r.ver}` : ""), false);
+  tag(P.x, P.y - 104, (firstName(S.uid) || "Tú") + (P.ver ? ` · 👁 ${P.ver}` : ""), true);
   if (t < G.tipUntil && G.tip && !G.talk) {
     const [x, y] = toScreen(G.x, G.y - 104); ctx.font = "700 13px Figtree, sans-serif"; const w = Math.min(280, ctx.measureText(G.tip).width + 24);
     ctx.fillStyle = "#fff"; rr(ctx, x - w / 2, y - 40, w, 30, 10); ctx.beginPath(); ctx.moveTo(x - 7, y - 11); ctx.lineTo(x + 7, y - 11); ctx.lineTo(x, y - 2); ctx.closePath(); ctx.fill();
@@ -2486,7 +2733,7 @@ async function entrar(){
   await S.sb.rpc("cm_vincular_cuenta");    // si esta persona tenía tareas a su nombre "sin cuenta", pasan a su usuario
   await S.sb.rpc("cm_generar_semana");     // crea las tareas de la semana si aún no existen (no repite)
   S.acc = (await S.sb.rpc("cm_mis_accesos")).data || [];
-  await Promise.all(["tareas","acts","turnos",...(tengo("cambios") ? ["changes"] : []),"portals","players","sols","msgs","llamadas","notas"].map(load));
+  await Promise.all(["tareas","acts","turnos",...(tengo("cambios") ? ["changes"] : []),"portals","players","sols","msgs","llamadas","notas","vistos"].map(load));
   await refreshProfiles();
   if (S.players[S.uid]) S.fig = S.players[S.uid].fig;
 
@@ -2494,7 +2741,7 @@ async function entrar(){
   const espera = {};
   const recargar = col => { clearTimeout(espera[col]); espera[col] = setTimeout(() => load(col), 250); };
   let datos = S.sb.channel("cm-datos");
-  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["llamadas","cm_llamadas"], ["notas","cm_notas"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
+  for (const [col, t] of [...Object.entries(TABLA), ["players","cm_jugadores"], ["tareas","cm_tareas"], ["acts","cm_actividades"], ["evid","cm_evidencias"], ["turnos","cm_turnos"], ["turnos","cm_pausas"], ["vistos","cm_vistos"], ["llamadas","cm_llamadas"], ["notas","cm_notas"], ["sols","cm_solicitudes"], ["msgs","cm_mensajes"]])
     datos = datos.on("postgres_changes", { event:"*", schema:"public", table:t }, () => recargar(col));
   datos.subscribe();
   S.ch = S.sb.channel("cm-oficina", { config:{ presence:{ key:MI_LLAVE } } });
