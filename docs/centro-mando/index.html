@@ -1131,37 +1131,39 @@ function barra(id, st, vieja){
   const vistas = [["persona", "Por persona"], ["prioridad", "Por prioridad"], ["tipo", "Por tipo"], ...(vieja ? [vieja] : [])];
   return `<span>Vista</span>${sg("vista", vistas)}${st.persona && st.vista === "persona" ? `<span>Columnas</span>${sg("cols", [["prioridad", "Prioridad"], ["tipo", "Tipo"]])}` : ""}<span>Color</span>${sg("color", [["prioridad", "Prioridad"], ["tipo", "Tipo"]])}`;
 }
-// lo entregado (en revisión) se pinta en la columna de dirección: es su pendiente por revisar y calificar
-const dueP = t => t.estado === "en_revision" && S.jefes[0] ? S.jefes[0] : dueno(t);
+// lo entregado (en revisión) sigue con su responsable y además sale en la columna de dirección como pendiente por revisar;
+// las entregas de actividades semanales solo salen en dirección (el responsable las ve en Actividades semanales)
+const revisor = () => S.jefes[0];
+const lugaresP = t => t.estado !== "en_revision" || !revisor() ? [dueno(t)] : t.actividad_id ? [revisor()] : [...new Set([dueno(t), revisor()])];
 const ordenPz = (a, b) => (PRIS.indexOf(a.prioridad) - PRIS.indexOf(b.prioridad)) || TIPOS.indexOf(a.tipo) - TIPOS.indexOf(b.tipo);
 // columnas: personas (con su foto) o valores de prioridad / tipo; cada columna recibe post-its arrastrados
 function tableroHTML(items, st, kind, postit){
   const enPersona = st.vista === "persona" && st.persona, campo = enPersona ? st.cols : st.vista;
   let cols;
   if (st.vista === "persona" && !st.persona) {
-    const lugar = kind === "a" ? duenoAct : dueP;
-    const ks = [...new Set([...gente(), ...items.map(lugar)])].filter(k => k !== "-");
-    cols = ks.map(k => { const suyas = items.filter(i => lugar(i) === k), rev = suyas.filter(i => i.estado === "en_revision").length;
-      return { drop:`persona:${k}`, head:`<button type="button" class="pz-h" data-pzper="${kind}" data-k="${esc(k)}" title="Ver sus notas por ${st.cols}"><img src="${fotoDe(k)}" alt=""><span><b>${esc(nombreDe(k))}</b><small>${suyas.length} notas${rev ? ` · <b style="color:#ffcc33">${rev} por revisar</b>` : ""} · entrar ›</small></span></button>`,
+    const lugares = kind === "a" ? a => [duenoAct(a)] : lugaresP;
+    const ks = [...new Set([...gente(), ...items.flatMap(lugares)])].filter(k => k !== "-");
+    cols = ks.map(k => { const suyas = items.filter(i => lugares(i).includes(k)), rev = suyas.filter(i => i.estado === "en_revision").length;
+      return { k, drop:`persona:${k}`, head:`<button type="button" class="pz-h" data-pzper="${kind}" data-k="${esc(k)}" title="Ver sus notas por ${st.cols}"><img src="${fotoDe(k)}" alt=""><span><b>${esc(nombreDe(k))}</b><small>${suyas.length} notas${rev ? ` · <b style="color:#ffcc33">${rev} ${k === revisor() ? "por revisar" : "en revisión"}</b>` : ""} · entrar ›</small></span></button>`,
       items:suyas }; });
   } else {
-    const base = enPersona ? items.filter(i => (kind === "a" ? duenoAct : dueP)(i) === st.persona) : items;
+    const base = enPersona ? items.filter(i => (kind === "a" ? [duenoAct(i)] : lugaresP(i)).includes(st.persona)) : items;
     const vals = campo === "tipo" ? TIPOS : PRIS;
-    cols = vals.map(v => ({ drop:`${campo}:${v}`, head:`<div class="pz-h"><i class="cuadro" style="--bg:${campo === "tipo" ? CTIPO[v] : CPRI[v]}"></i><span><b>${esc(campo === "tipo" ? v : priL(v))}</b><small>${base.filter(i => i[campo] === v).length} notas</small></span></div>`,
+    cols = vals.map(v => ({ k:enPersona ? st.persona : null, drop:`${campo}:${v}`, head:`<div class="pz-h"><i class="cuadro" style="--bg:${campo === "tipo" ? CTIPO[v] : CPRI[v]}"></i><span><b>${esc(campo === "tipo" ? v : priL(v))}</b><small>${base.filter(i => i[campo] === v).length} notas</small></span></div>`,
       items:base.filter(i => i[campo] === v) }));
   }
   const top = enPersona ? `<div style="grid-column:1/-1;display:flex;gap:10px;align-items:center"><button type="button" class="ghost" data-pzper="${kind}" data-k="" style="background:#fff8;color:#1d1a16">‹ Todo el equipo</button><span class="pz-h" style="width:auto"><img src="${fotoDe(st.persona)}" alt=""><b>${esc(nombreDe(st.persona))}</b></span></div>` : "";
-  return top + cols.map(c => `<div class="pz-col" data-drop="${kind}:${esc(c.drop)}">${c.head}${c.items.sort(ordenPz).map(i => postit(i, st.color)).join("") || `<div class="pz-vacio">Suelta aquí una nota</div>`}</div>`).join("");
+  return top + cols.map(c => `<div class="pz-col" data-drop="${kind}:${esc(c.drop)}">${c.head}${c.items.sort(ordenPz).map(i => postit(i, st.color, c.k)).join("") || `<div class="pz-vacio">Suelta aquí una nota</div>`}</div>`).join("");
 }
 const duenoAct = a => a.responsable || (a.responsable_nombre ? "n:" + a.responsable_nombre : "-");
 const color = (i, por) => por === "tipo" ? CTIPO[i.tipo] || CTIPO.Otro : CPRI[i.prioridad] || CPRI.media;
-function postitTarea(t, por){
+function postitTarea(t, por, col){
   const k = dueno(t), late = vencida(t), min = minutosDe(t), ed = S.canWrite && t.estado !== "completada" && t.estado !== "en_revision" && (esJefe() || t.responsable === me() || t.asignada_por === me());
-  const ac = accionesDe(t);
+  const ac = accionesDe(t), copia = t.estado === "en_revision" && col && col === revisor();   // la copia en la columna de dirección
   return `<div class="pi${t.estado === "completada" ? " hecha" : ""}" draggable="${ed}" data-drag="p:${esc(t.id)}" style="--bg:${color(t, por)};--rot:${giro(t.id)}deg"><i class="chin"></i>
     ${ed ? `<button type="button" class="x" data-edt="${esc(t.id)}" title="Editar" aria-label="Editar">✎</button>` : ""}
-    ${t.estado === "en_revision" ? `<span class="pi-rev">🔎 Por revisar${t.actividad_id ? " · actividad semanal" : ""}</span>` : ""}
-    <div class="pi-who"><img src="${fotoDe(k)}" alt="">${t.estado === "en_revision" ? "Entregó " : ""}${esc(nombreDe(k))}</div><b class="pi-t">${esc(t.titulo)}</b>
+    ${copia ? `<span class="pi-rev">🔎 Por revisar${t.actividad_id ? " · actividad semanal" : ""}</span>` : t.estado === "en_revision" ? `<span class="pi-rev" style="color:#9fd0ea">⏳ Enviada a revisión</span>` : t.estado === "completada" ? `<span class="pi-rev" style="color:#7ee2a0">✓ Aprobada · +${t.xp} XP</span>` : ""}
+    <div class="pi-who"><img src="${fotoDe(k)}" alt="">${copia ? "Entregó " : ""}${esc(nombreDe(k))}</div><b class="pi-t">${esc(t.titulo)}</b>
     <small><span class="tg">${esc(t.tipo)}</span><span class="tg">${esc(priL(t.prioridad))}</span><span class="${late ? "late" : ""}">${esc(cuando(t))}</span>${t.minutos_estimados ? `<span>${t.minutos_estimados} min</span>` : ""}${min ? `<span>⏱ ${min} min</span>` : ""}${t.estado === "en_proceso" || t.estado === "en_revision" ? `<span class="tg">${esc(TST[t.estado][0])}</span>` : ""}</small>
     ${t.nota_revision && t.estado === "en_proceso" ? `<small style="color:#8a5a00"><b>Rechazada:</b> ${esc(t.nota_revision)}</small>` : ""}
     ${(S.evid[t.id] || []).length ? `<div class="adj"><button type="button" class="ghost" data-arch="${esc(t.id)}">📎 Archivos y audios (${(S.evid[t.id] || []).length})</button></div>` : ""}${t.calidad ? `<small>Calidad ${"★".repeat(t.calidad)} · orden ${"★".repeat(t.orden || 0)}</small>` : ""}
@@ -1185,7 +1187,8 @@ function renderTableros(){
   $("#pBar").innerHTML = barra("p", p, ["fecha", "Por fecha"]);
   $("#fRevision").hidden = !esJefe();
   // las entregas (también de actividades semanales) entran aquí para que dirección las tenga como pendiente
-  const entra = t => t.estado === "en_revision" ? S.filter !== "cumplidas" && (S.filter !== "mias" || t.responsable === me() || esJefe()) : !t.actividad_id && mio(t) && (S.filter === "cumplidas" ? !abierta(t) : abierta(t));
+  const reciente = t => t.estado === "completada" && Date.now() - Date.parse(t.completada || 0) < 864e5;
+  const entra = t => t.estado === "en_revision" ? S.filter !== "cumplidas" && (S.filter !== "mias" || t.responsable === me() || esJefe()) : !t.actividad_id && mio(t) && (S.filter === "cumplidas" ? !abierta(t) : abierta(t) || reciente(t));
   const sueltas = S.filter === "revision" ? S.tareas.filter(t => t.estado === "en_revision") : S.tareas.filter(entra);
   $("#mCols").hidden = p.vista !== "fecha" || S.filter === "revision"; $("#pTablero").hidden = p.vista === "fecha" && S.filter !== "revision";
   if (p.vista !== "fecha" || S.filter === "revision") $("#pTablero").innerHTML = tableroHTML(sueltas, p.vista === "fecha" ? { ...p, vista:"persona" } : p, "p", postitTarea);
