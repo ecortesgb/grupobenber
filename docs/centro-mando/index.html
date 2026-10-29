@@ -916,6 +916,10 @@ $("#mdl").addEventListener("click", async e => {
   if (e.target.closest("#neGuardar") && MDL?.nota) { const { error } = await S.sb.from("cm_notas").update({ texto:$("#neTx").value.trim() || MDL.nota.texto, prioridad:$("#nePri").value, tipo:$("#neTipo").value }).eq("id", MDL.nota.id);
     if (error) { toast(errMsg(error)); return; } cerrarMdl(); toast("Nota actualizada"); return load("notas"); }
   if (e.target.closest("#eaGuardar") && MDL?.eda) return guardarActMdl();
+  // eliminar desde la ventana de edición (pide confirmar con un segundo clic)
+  const eb = e.target.closest("#edBorrar"); if (eb && MDL?.edt) return confirmDel(eb, async () => { const { error } = await S.sb.from("cm_tareas").delete().eq("id", MDL.edt.id);
+    if (error) { toast(errMsg(error)); return; } cerrarMdl(); toast("Pendiente eliminado"); load("tareas"); });
+  const ab = e.target.closest("#eaBorrar"); if (ab && MDL?.eda) return confirmDel(ab, async () => { if (await quitarAct(MDL.eda.id)) cerrarMdl(); });
   const vp = e.target.closest("button[data-verpos]");
   if (vp) { const r = Object.values(S.remote).find(q => q.uid === vp.dataset.verpos); cerrarMdl(); if (r) { cam.follow = false; cam.x = r.x; cam.y = r.y - 60; cam.z = Math.max(cam.z, 1); clampCam(); } return; }
   const es = e.target.closest("button[data-escribir]"); if (es) { cerrarMdl(); return openMsgs(dmKey(es.dataset.escribir)); }
@@ -1261,7 +1265,7 @@ function editarTarea(t){
       <label class="f">Hora<input id="edHora" type="time" value="${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}"></label>
       <label class="f">Tiempo (minutos)<input id="edMin" type="number" min="5" max="1440" step="5" value="${t.minutos_estimados || ""}" placeholder="sin estimar"></label>
     </div>
-    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="edGuardar">Guardar</button></div>`, { edt:t });
+    <div class="row">${esJefe() || (t.asignada_por === me() && t.estado === "asignada") ? `<button class="ghost warn" type="button" id="edBorrar" style="margin-right:auto">Eliminar pendiente</button>` : ""}<button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="edGuardar">Guardar</button></div>`, { edt:t });
 }
 async function guardarTarea(){
   const t = MDL.edt, f = $("#edFecha").value, h = $("#edHora").value || "18:00", nuevo = $("#edResp").value;
@@ -1285,7 +1289,7 @@ function editarAct(a){
       <label class="f">Tiempo (minutos)<input id="eaMin" type="number" min="5" max="1440" step="5" value="${a.minutos_estimados}"></label>
     </div>
     <div class="f"><span>Días</span><div class="dias" id="eaDias">${DL.map((d, i) => `<label><input type="checkbox" value="${i + 1}"${a.dias.includes(i + 1) ? " checked" : ""}>${d}</label>`).join("")}</div></div>
-    <div class="row"><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="eaGuardar">Guardar</button></div>`, { eda:a });
+    <div class="row"><button class="ghost warn" type="button" id="eaBorrar" style="margin-right:auto" title="Deja de salir cada semana; lo ya hecho se conserva">Eliminar actividad</button><button class="ghost" type="button" data-cerrar>Cancelar</button><button class="btn" type="button" id="eaGuardar">Guardar</button></div>`, { eda:a });
 }
 async function guardarAct(a, cambios){
   const nuevosDias = cambios.dias && cambios.dias.join() !== a.dias.join(), nuevaHora = "horas" in cambios && String(cambios.horas) !== String(a.horas);
@@ -1703,12 +1707,14 @@ $("#panel").addEventListener("click", e => {
   if (d) return confirmDel(d, async () => { const { error } = await S.sb.from("cm_tareas").delete().eq("id", d.dataset.tdel); if (error) toast(errMsg(error)); else load("tareas"); });
   // quitar del catálogo: deja de generarse y se borran sus tareas futuras que nadie ha empezado
   const a = e.target.closest("button[data-actdel]");
-  if (a) return confirmDel(a, async () => {
-    const { error } = await S.sb.from("cm_actividades").update({ activa:false }).eq("id", a.dataset.actdel);
-    if (error) { toast(errMsg(error)); return; }
-    await S.sb.from("cm_tareas").delete().eq("actividad_id", a.dataset.actdel).eq("estado", "asignada").gt("limite", new Date().toISOString());
-    load("acts"); load("tareas"); });
+  if (a) return confirmDel(a, () => quitarAct(a.dataset.actdel));
 });
+async function quitarAct(id){
+  const { error } = await S.sb.from("cm_actividades").update({ activa:false }).eq("id", id);
+  if (error) { toast(errMsg(error)); return false; }
+  await S.sb.from("cm_tareas").delete().eq("actividad_id", id).eq("estado", "asignada").gt("limite", new Date().toISOString());
+  toast("Actividad eliminada: ya no sale en las semanas siguientes"); load("acts"); load("tareas"); return true;
+}
 const quienDb = v => v.startsWith("n:") ? { responsable_nombre:v.slice(2) } : { responsable:v };
 $("#fMis").onsubmit = async e => { e.preventDefault(); const t = $("#mTitle").value.trim(), d = $("#mDue").value; if (!t || !d) return;
   const limite = new Date(`${d}T${$("#mHora").value || "18:00"}:00`).toISOString();
