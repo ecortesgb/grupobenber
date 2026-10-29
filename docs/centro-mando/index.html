@@ -191,6 +191,7 @@ button.pz-h{cursor:pointer}button.pz-h:hover{background:rgba(60,40,26,.95)}
 .pi-t{font-size:13.5px;line-height:1.25;overflow-wrap:anywhere}
 .pi small{display:flex;flex-wrap:wrap;gap:4px;color:#3b342c;font-size:11px;align-items:center}
 .pi .tg{background:rgba(0,0,0,.1);border-radius:3px;padding:1px 5px;font-weight:700}.pi .late{color:#b3261e!important;font-weight:800}
+.pi-rev{align-self:flex-start;background:#1d1a16;color:#ffcc33;font-size:10.5px;font-weight:800;border-radius:6px;padding:2px 7px}
 .pi-hoy{border-top:1px dashed rgba(0,0,0,.2);padding-top:5px;display:flex;flex-direction:column;gap:4px}
 .pi .acts{justify-content:flex-start}.pi .acts button,.pi .acts .chip{font-size:10.5px}
 .pi .acts button{background:rgba(255,255,255,.55);color:#1d1a16;border-color:rgba(0,0,0,.25);padding:3px 7px}
@@ -801,7 +802,7 @@ function accionesDe(t){
   const pasa = ok && t.estado !== "completada" && t.estado !== "en_revision" && (esJefe() || t.responsable === me()) ? `<button class="ghost" data-pasar="${id}" title="Pasar a quien la cubre o apoya">Pasar</button>` : "";
   const acts = t.estado === "asignada" ? b("iniciar", "Iniciar") + fin + pasa
     : t.estado === "en_proceso" ? (t.en_marcha_desde ? b("pausar", "Pausar") : b("reanudar", "Reanudar")) + fin + pasa
-    : t.estado === "en_revision" ? (esJefe() ? `<button class="ghost ok" data-revisar="${id}">Revisar evidencia</button>` : "")
+    : t.estado === "en_revision" ? (esJefe() ? `<button class="ghost ok" data-revisar="${id}">Revisar y calificar</button>` : "")
     : `<span class="chip" style="--c:#3fbf6a">+${t.xp} XP</span>` + b("reabrir", "Reabrir");
   const quitar = !t.actividad_id && S.canWrite && (esJefe() || (t.asignada_por === me() && t.estado === "asignada")) ? `<button class="ghost warn" data-tdel="${id}">Quitar</button>` : "";
   return acts + quitar;
@@ -1130,17 +1131,21 @@ function barra(id, st, vieja){
   const vistas = [["persona", "Por persona"], ["prioridad", "Por prioridad"], ["tipo", "Por tipo"], ...(vieja ? [vieja] : [])];
   return `<span>Vista</span>${sg("vista", vistas)}${st.persona && st.vista === "persona" ? `<span>Columnas</span>${sg("cols", [["prioridad", "Prioridad"], ["tipo", "Tipo"]])}` : ""}<span>Color</span>${sg("color", [["prioridad", "Prioridad"], ["tipo", "Tipo"]])}`;
 }
+// lo entregado (en revisión) se pinta en la columna de dirección: es su pendiente por revisar y calificar
+const dueP = t => t.estado === "en_revision" && S.jefes[0] ? S.jefes[0] : dueno(t);
 const ordenPz = (a, b) => (PRIS.indexOf(a.prioridad) - PRIS.indexOf(b.prioridad)) || TIPOS.indexOf(a.tipo) - TIPOS.indexOf(b.tipo);
 // columnas: personas (con su foto) o valores de prioridad / tipo; cada columna recibe post-its arrastrados
 function tableroHTML(items, st, kind, postit){
   const enPersona = st.vista === "persona" && st.persona, campo = enPersona ? st.cols : st.vista;
   let cols;
   if (st.vista === "persona" && !st.persona) {
-    const ks = [...new Set([...gente(), ...items.map(kind === "a" ? duenoAct : dueno)])].filter(k => k !== "-");
-    cols = ks.map(k => ({ drop:`persona:${k}`, head:`<button type="button" class="pz-h" data-pzper="${kind}" data-k="${esc(k)}" title="Ver sus notas por ${st.cols}"><img src="${fotoDe(k)}" alt=""><span><b>${esc(nombreDe(k))}</b><small>${items.filter(i => (kind === "a" ? duenoAct(i) : dueno(i)) === k).length} notas · entrar ›</small></span></button>`,
-      items:items.filter(i => (kind === "a" ? duenoAct(i) : dueno(i)) === k) }));
+    const lugar = kind === "a" ? duenoAct : dueP;
+    const ks = [...new Set([...gente(), ...items.map(lugar)])].filter(k => k !== "-");
+    cols = ks.map(k => { const suyas = items.filter(i => lugar(i) === k), rev = suyas.filter(i => i.estado === "en_revision").length;
+      return { drop:`persona:${k}`, head:`<button type="button" class="pz-h" data-pzper="${kind}" data-k="${esc(k)}" title="Ver sus notas por ${st.cols}"><img src="${fotoDe(k)}" alt=""><span><b>${esc(nombreDe(k))}</b><small>${suyas.length} notas${rev ? ` · <b style="color:#ffcc33">${rev} por revisar</b>` : ""} · entrar ›</small></span></button>`,
+      items:suyas }; });
   } else {
-    const base = enPersona ? items.filter(i => (kind === "a" ? duenoAct(i) : dueno(i)) === st.persona) : items;
+    const base = enPersona ? items.filter(i => (kind === "a" ? duenoAct : dueP)(i) === st.persona) : items;
     const vals = campo === "tipo" ? TIPOS : PRIS;
     cols = vals.map(v => ({ drop:`${campo}:${v}`, head:`<div class="pz-h"><i class="cuadro" style="--bg:${campo === "tipo" ? CTIPO[v] : CPRI[v]}"></i><span><b>${esc(campo === "tipo" ? v : priL(v))}</b><small>${base.filter(i => i[campo] === v).length} notas</small></span></div>`,
       items:base.filter(i => i[campo] === v) }));
@@ -1151,11 +1156,12 @@ function tableroHTML(items, st, kind, postit){
 const duenoAct = a => a.responsable || (a.responsable_nombre ? "n:" + a.responsable_nombre : "-");
 const color = (i, por) => por === "tipo" ? CTIPO[i.tipo] || CTIPO.Otro : CPRI[i.prioridad] || CPRI.media;
 function postitTarea(t, por){
-  const k = dueno(t), late = vencida(t), min = minutosDe(t), ed = S.canWrite && t.estado !== "completada" && (esJefe() || t.responsable === me() || t.asignada_por === me());
+  const k = dueno(t), late = vencida(t), min = minutosDe(t), ed = S.canWrite && t.estado !== "completada" && t.estado !== "en_revision" && (esJefe() || t.responsable === me() || t.asignada_por === me());
   const ac = accionesDe(t);
   return `<div class="pi${t.estado === "completada" ? " hecha" : ""}" draggable="${ed}" data-drag="p:${esc(t.id)}" style="--bg:${color(t, por)};--rot:${giro(t.id)}deg"><i class="chin"></i>
     ${ed ? `<button type="button" class="x" data-edt="${esc(t.id)}" title="Editar" aria-label="Editar">✎</button>` : ""}
-    <div class="pi-who"><img src="${fotoDe(k)}" alt="">${esc(nombreDe(k))}</div><b class="pi-t">${esc(t.titulo)}</b>
+    ${t.estado === "en_revision" ? `<span class="pi-rev">🔎 Por revisar${t.actividad_id ? " · actividad semanal" : ""}</span>` : ""}
+    <div class="pi-who"><img src="${fotoDe(k)}" alt="">${t.estado === "en_revision" ? "Entregó " : ""}${esc(nombreDe(k))}</div><b class="pi-t">${esc(t.titulo)}</b>
     <small><span class="tg">${esc(t.tipo)}</span><span class="tg">${esc(priL(t.prioridad))}</span><span class="${late ? "late" : ""}">${esc(cuando(t))}</span>${t.minutos_estimados ? `<span>${t.minutos_estimados} min</span>` : ""}${min ? `<span>⏱ ${min} min</span>` : ""}${t.estado === "en_proceso" || t.estado === "en_revision" ? `<span class="tg">${esc(TST[t.estado][0])}</span>` : ""}</small>
     ${t.nota_revision && t.estado === "en_proceso" ? `<small style="color:#8a5a00"><b>Rechazada:</b> ${esc(t.nota_revision)}</small>` : ""}
     ${(S.evid[t.id] || []).length ? `<div class="adj"><button type="button" class="ghost" data-arch="${esc(t.id)}">📎 Archivos y audios (${(S.evid[t.id] || []).length})</button></div>` : ""}${t.calidad ? `<small>Calidad ${"★".repeat(t.calidad)} · orden ${"★".repeat(t.orden || 0)}</small>` : ""}
@@ -1178,7 +1184,9 @@ function renderTableros(){
   const p = PZ.p, mio = t => S.filter !== "mias" || t.responsable === me();
   $("#pBar").innerHTML = barra("p", p, ["fecha", "Por fecha"]);
   $("#fRevision").hidden = !esJefe();
-  const sueltas = S.filter === "revision" ? S.tareas.filter(t => t.estado === "en_revision") : S.tareas.filter(t => !t.actividad_id && mio(t) && (S.filter === "cumplidas" ? !abierta(t) : abierta(t)));
+  // las entregas (también de actividades semanales) entran aquí para que dirección las tenga como pendiente
+  const entra = t => t.estado === "en_revision" ? S.filter !== "cumplidas" && (S.filter !== "mias" || t.responsable === me() || esJefe()) : !t.actividad_id && mio(t) && (S.filter === "cumplidas" ? !abierta(t) : abierta(t));
+  const sueltas = S.filter === "revision" ? S.tareas.filter(t => t.estado === "en_revision") : S.tareas.filter(entra);
   $("#mCols").hidden = p.vista !== "fecha" || S.filter === "revision"; $("#pTablero").hidden = p.vista === "fecha" && S.filter !== "revision";
   if (p.vista !== "fecha" || S.filter === "revision") $("#pTablero").innerHTML = tableroHTML(sueltas, p.vista === "fecha" ? { ...p, vista:"persona" } : p, "p", postitTarea);
   // actividades fijas del catálogo; "Semana" deja la vista por día
