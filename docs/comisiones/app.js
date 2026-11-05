@@ -333,8 +333,10 @@ async function elegirSemana(s) {
 
 async function entrar() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data: acc } = await sb.from('com_accesos').select('*').eq('user_id', user.id).eq('activo', true).maybeSingle();
-  $('#usuario').innerHTML = `<span>${esc(acc?.nombre || user.email.split('@')[0])}${acc ? ' · ' + ROLES[acc.rol] : ''}</span><button id="salir">Salir</button>`;
+  const { data: yo, error: e1 } = await sb.rpc('com_yo');      // admin de RH GB = admin aquí; los demás según com_accesos
+  if (e1) throw new Error(e1.message);
+  const acc = yo && yo.rol ? yo : null;
+  $('#usuario').innerHTML = `<span>${esc(yo?.nombre || user.email.split('@')[0])}${acc ? ' · ' + ROLES[acc.rol] : ''}</span><button id="salir">Salir</button>`;
   $('#salir').onclick = async () => { await sb.auth.signOut(); location.reload(); };
   if (!acc) return ver('sinAcceso');
   YO = acc; ver('portal');
