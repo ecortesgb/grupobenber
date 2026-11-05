@@ -1,0 +1,78 @@
+/* Colorimetría Grupo Benber (la misma de Avance GB y RH GB) */
+:root{
+  --orange:#EE6602; --orange-dark:#C74F00; --orange-soft:#FCE3D0;
+  --dark:#17191D; --dark2:#20232B; --dark3:#2A2E38;
+  --green:#1E7A1E; --red:#DC2626; --amber:#D97706; --blue:#00509C; --purple:#5C2483;
+  --bg:#F5F3F1; --card:#FFFFFF; --line:#EAE6E2; --text:#1A1A1A; --muted:#767a82;
+  --radius:16px; --radius-sm:10px; --shadow:0 2px 10px rgba(20,20,20,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px}
+header{background:var(--dark);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--orange)}
+header img{height:38px}
+header h1{font-size:18px;margin:0;font-weight:700}
+header .sub{color:#b8bcc4;font-size:12px}
+.usuario{font-size:13px;color:#d6d8dc;display:flex;gap:10px;align-items:center}
+.usuario button{background:transparent;color:#fff;border-color:#444}
+main{max-width:1500px;margin:0 auto;padding:16px 16px 60px}
+.oculto{display:none!important}
+.grow{flex:1}
+.bar{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+select,input{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);font:inherit;font-size:14px;background:#fff}
+button{border:1px solid var(--line);background:#fff;border-radius:var(--radius-sm);padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+button.pri{background:var(--orange);border-color:var(--orange);color:#fff}
+button.pri:hover{background:var(--orange-dark)}
+button.mini{padding:3px 9px;font-size:12px}
+button:disabled{opacity:.45;cursor:default}
+.estado{font-size:13px;color:var(--muted)} .estado.err{color:var(--red)}
+.note{font-size:12px;color:var(--muted);margin:6px 0}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+.login{max-width:380px;margin:60px auto;display:flex;flex-direction:column;gap:12px}
+.login h2{margin:0}
+.login label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
+.vacio{padding:60px 20px;text-align:center;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px}
+.cards .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.cards .val{font-size:24px;font-weight:700;margin-top:4px}
+.cards .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.ok{color:var(--green)} .mal{color:var(--red)} .ambar{color:var(--amber)} .nar{color:var(--orange-dark)}
+nav.tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:2px solid var(--line);margin-bottom:14px}
+nav.tabs button{background:none;border:none;border-bottom:3px solid transparent;border-radius:0;color:var(--muted);padding:10px 14px;font-size:14px}
+nav.tabs button.active{color:var(--orange-dark);border-bottom-color:var(--orange)}
+.panel{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.toolbar input[type=search]{width:240px}
+.toolbar .info{margin-left:auto;font-size:13px;color:var(--muted)}
+.tablewrap{overflow:auto;max-height:64vh;border:1px solid var(--line);border-radius:var(--radius-sm)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+thead th{position:sticky;top:0;background:var(--dark2);color:#fff;text-align:left;padding:8px 10px;cursor:pointer;white-space:nowrap;user-select:none;font-weight:600}
+thead th:hover{background:var(--dark3)}
+tbody td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;max-width:380px;overflow:hidden;text-overflow:ellipsis}
+tbody tr:hover{background:var(--orange-soft)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;font-size:13px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+.b-ok{background:#e6f4ea;color:var(--green)} .b-no{background:#fde8e8;color:var(--red)}
+.b-am{background:#fdf1dc;color:var(--amber)} .b-az{background:#e0edf9;color:var(--blue)} .b-gr{background:#eee;color:#555}
+.b-or{background:var(--orange-soft);color:var(--orange-dark)}
+@media (max-width:700px){.toolbar input[type=search]{width:100%} header .sub{display:none}}
+
+/* ---------- impresión: un estado de cuenta por promotor ---------- */
+#imprimir{display:none}
+@media print{
+  @page{size:letter;margin:12mm}
+  body{background:#fff}
+  #app{display:none}
+  #imprimir{display:block}
+  .hoja{page-break-after:always;font-size:11px}
+  .hoja:last-child{page-break-after:auto}
+  .hoja .enc{display:flex;align-items:center;gap:12px;border-bottom:3px solid var(--orange);padding-bottom:8px;margin-bottom:10px}
+  .hoja .enc img{height:40px}
+  .hoja h2{margin:0;font-size:16px}
+  .hoja h3{font-size:12px;margin:12px 0 4px;color:var(--orange-dark)}
+  .hoja table{font-size:10px}
+  .hoja thead th{position:static;background:#20232B;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:4px 6px}
+  .hoja td{padding:3px 6px;white-space:normal;max-width:none}
+  .hoja .total{font-size:15px;font-weight:700;text-align:right;margin-top:8px}
+  .hoja .pie{margin-top:14px;color:#666;font-size:9px}
+}

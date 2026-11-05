@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://ecortesgb.github.io; connect-src https://pzbesenfqcbfvmyuerfq.supabase.co">
+<title>Comisiones — Grupo Benber</title>
+<link rel="icon" type="image/png" href="https://ecortesgb.github.io/grupobenber/img/icono-avance-32.png?v=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="estilo.css?v=1793899576">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<script src="config.js?v=1793899576"></script>
+<script src="logo.js?v=1793899576"></script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <img id="logo" alt="Grupo Benber">
+    <div class="tit"><h1>Comisiones</h1><div class="sub" id="sub">Revisión, aclaraciones y pago</div></div>
+    <span class="grow"></span>
+    <div id="usuario" class="usuario"></div>
+  </header>
+
+  <main id="login" class="oculto">
+    <form class="card login" id="fLogin">
+      <h2>Entrar</h2>
+      <p class="note">Usa el mismo usuario y contraseña de RH GB.</p>
+      <label>Usuario <input id="lUser" autocomplete="username" required></label>
+      <label>Contraseña <input id="lPass" type="password" autocomplete="current-password" required></label>
+      <button class="pri" type="submit">Entrar</button>
+      <p class="estado err" id="lErr"></p>
+    </form>
+  </main>
+
+  <main id="sinAcceso" class="oculto"><div class="card vacio">Tu usuario no tiene acceso al portal de comisiones. Pídelo a Comisiones.</div></main>
+
+  <main id="portal" class="oculto">
+    <div class="bar">
+      <label>Semana <select id="semana"></select></label>
+      <span id="semInfo" class="note"></span>
+      <span class="grow"></span>
+      <label id="admEstado" class="oculto">Estado <select id="estadoSem"><option value="previo">Previo</option><option value="final">Final</option><option value="pagada">Pagada</option></select></label>
+      <span class="estado" id="estado"></span>
+    </div>
+    <div id="cards" class="cards"></div>
+    <nav class="tabs" id="tabs"></nav>
+    <div id="panels"></div>
+  </main>
+</div>
+<div id="imprimir"></div>
+<script src="app.js?v=1793899576"></script>
+</body>
+</html>
