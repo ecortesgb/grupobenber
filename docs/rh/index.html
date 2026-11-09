@@ -342,6 +342,8 @@ body.solo-per #fb-toggle,body.solo-per #fb-pin,body.solo-per #fb-summary,body.so
 #fb-clear{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:7px 12px;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--text-muted);font-family:inherit;display:flex;align-items:center;gap:5px;white-space:nowrap}
 #fb-clear:hover{border-color:var(--red);color:var(--red)}
 #filterbar .fb-clear-wrap{min-width:0;max-width:none;border-left:0}
+/* escritorio: filtros de ancho fijo para que las dos filas queden en columnas (Estrella arriba de Supervisor, Tienda arriba de Sub_Terr y Líder), igual que Avance GB */
+@media (min-width:861px){#filterbar .fb-left>.fb-field:not(.fb-clear-wrap),#filterbar .fb-est>.fb-field{min-width:108px;max-width:108px;width:108px}#filterbar .fb-left>.fb-field.fb-tienda{min-width:216px;max-width:216px;width:216px}#fb-est-toggle{width:100px}}
 .fb-chips{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:8px}.fb-chips:empty{display:none;padding:0}
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--orange-soft);color:var(--orange-dark);border-radius:20px;padding:4px 6px 4px 10px;font-size:11px;font-weight:700;white-space:nowrap}
 .chip-x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:0;border-radius:50%;background:rgba(0,0,0,.1);color:inherit;font-size:11px;cursor:pointer;padding:0}
@@ -446,10 +448,10 @@ body.sin-foto [onclick*="capturaDescargar"], body.sin-foto [onclick*="capturaCop
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js" integrity="sha384-gnyZit14c5lnGcarmA166QQjjJXpucw25ogZXuwH3HxxY904zHkBqmxVpelsPorb" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
-<script src="config.js?v=1794000428"></script>
-<script src="assets.js?v=1794000428"></script>
-<script src="gbsaurio.js?v=1794000428"></script>
-<script src="gbsaurio_disfraz.js?v=1794000428"></script>
-<script src="app.js?v=1794000428"></script>
+<script src="config.js?v=1794256672"></script>
+<script src="assets.js?v=1794256672"></script>
+<script src="gbsaurio.js?v=1794256672"></script>
+<script src="gbsaurio_disfraz.js?v=1794256672"></script>
+<script src="app.js?v=1794256672"></script>
 </body>
 </html>
