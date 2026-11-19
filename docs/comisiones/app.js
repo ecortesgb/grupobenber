@@ -16,7 +16,7 @@ const ESTADOS_ACL = ['Pendiente', 'Enviada', 'Resuelta', 'Rechazada'];
 const CLASE_ACL = { Pendiente: 'b-am', Enviada: 'b-az', Resuelta: 'b-ok', Rechazada: 'b-no' };
 const GRUPO_CLASE = { 'Pagada': 'b-ok', 'Pagable en $0': 'b-am', 'No pagada': 'b-no', 'No impactada': 'b-az', 'Otra semana': 'b-gr', 'Sin actividad': 'b-gr' };
 
-let sb, YO = null, SEMANAS = [], SEM = null, DATOS = {};
+let sb, YO = null, SEMANAS = [], SEM = null, DATOS = {}, SEC = 'prom', CORTES = [], CORTE = null, POS = null;
 
 function setEstado(t, err) { const e = $('#estado'); e.textContent = t || ''; e.className = 'estado' + (err ? ' err' : ''); }
 const ver = id => ['login', 'sinAcceso', 'portal'].forEach(x => $('#' + x).classList.toggle('oculto', x !== id));
@@ -104,19 +104,30 @@ function excel(nombre, cols, filas) {
 }
 
 /* ---------- pestañas ---------- */
+const TODOS = ['admin', 'direccion', 'gerente', 'supervisor', 'nomina'], REVISAN = ['admin', 'direccion', 'gerente', 'supervisor'];
 const PESTANAS = [
-  { id: 'resumen', t: 'Resumen', roles: ['admin', 'direccion', 'gerente', 'supervisor', 'nomina'], fn: pResumen },
-  { id: 'promotores', t: 'Promotores', roles: ['admin', 'direccion', 'gerente', 'supervisor', 'nomina'], fn: pPromotores },
-  { id: 'lineas', t: 'Líneas (DN)', roles: ['admin', 'direccion', 'gerente', 'supervisor'], fn: pLineas },
-  { id: 'tiendas', t: 'Tiendas y cuota', roles: ['admin', 'direccion', 'gerente', 'supervisor'], fn: pTiendas },
-  { id: 'aclaraciones', t: 'Aclaraciones', roles: ['admin', 'direccion', 'gerente', 'supervisor'], fn: pAclaraciones },
-  { id: 'operativos', t: 'Operativos', roles: ['admin', 'direccion', 'gerente', 'supervisor', 'nomina'], fn: pOperativos },
-  { id: 'nomina', t: 'Nómina', roles: ['admin', 'direccion', 'nomina'], fn: pNomina },
+  { id: 'resumen', sec: 'prom', t: 'Resumen', roles: TODOS, fn: pResumen },
+  { id: 'promotores', sec: 'prom', t: 'Desglose por promotor', roles: TODOS, fn: pPromotores },
+  { id: 'layoutP', sec: 'prom', t: 'Layout de pago', roles: TODOS, fn: pLayoutProm },
+  { id: 'lineas', sec: 'prom', t: 'Líneas (DN)', roles: REVISAN, fn: pLineas },
+  { id: 'diferencias', sec: 'prom', t: 'Diferencias de líneas', roles: REVISAN, fn: pDiferencias },
+  { id: 'tiendas', sec: 'prom', t: 'Tiendas y cuota', roles: REVISAN, fn: pTiendas },
+  { id: 'ajustes', sec: 'prom', t: 'Ajustes por tienda', roles: REVISAN, fn: pAjustes },
+  { id: 'aclaraciones', sec: 'prom', t: 'Aclaraciones', roles: REVISAN, fn: pAclaraciones },
+  { id: 'nomina', sec: 'prom', t: 'Nómina', roles: ['admin', 'direccion', 'nomina'], fn: pNomina },
+  { id: 'layoutO', sec: 'oper', t: 'Resumen y layout', roles: TODOS, fn: pLayoutOper },
+  { id: 'operativos', sec: 'oper', t: 'Desglose', roles: TODOS, fn: pOperativos },
+  { id: 'posRes', sec: 'pos', t: 'Resumen', roles: TODOS, fn: pPosResumen },
+  { id: 'posP', sec: 'pos', t: 'Desglose promotor', roles: TODOS, fn: () => pPosNivel('promotor') },
+  { id: 'posS', sec: 'pos', t: 'Supervisor', roles: TODOS, fn: () => pPosNivel('supervisor') },
+  { id: 'posG', sec: 'pos', t: 'Gerente', roles: TODOS, fn: () => pPosNivel('gerente') },
+  { id: 'posT', sec: 'pos', t: 'Temm pospago', roles: TODOS, fn: pPosTemm },
+  { id: 'posL', sec: 'pos', t: 'Layout de pago', roles: TODOS, fn: pPosLayout },
 ];
 let activa = 'resumen';
 function pintarTabs() {
   const tabs = $('#tabs'); tabs.innerHTML = '';
-  PESTANAS.filter(p => es(...p.roles)).forEach(p => {
+  PESTANAS.filter(p => p.sec === SEC && es(...p.roles)).forEach(p => {
     const b = document.createElement('button'); b.textContent = p.t; b.classList.toggle('active', p.id === activa);
     b.onclick = () => abrirTab(p.id); tabs.appendChild(b);
   });
@@ -124,6 +135,9 @@ function pintarTabs() {
 async function abrirTab(id) {
   activa = id; pintarTabs();
   const cont = $('#panels'); cont.innerHTML = '<div class="panel vacio">Cargando...</div>';
+  $('#cards').innerHTML = '';
+  if (SEC !== 'pos' && !SEM) { cont.innerHTML = '<div class="panel vacio">Todavía no hay semanas publicadas.</div>'; return; }
+  if (SEC === 'pos' && !CORTE) { cont.innerHTML = '<div class="panel vacio">Todavía no hay pagos de pospago publicados.</div>'; return; }
   try { const el = await PESTANAS.find(p => p.id === id).fn(); cont.innerHTML = ''; el.classList.add('panel'); cont.appendChild(el); }
   catch (e) { cont.innerHTML = `<div class="panel vacio mal">${esc(e.message)}</div>`; setEstado(''); }
 }
@@ -212,14 +226,15 @@ async function pLineas() {
   const li = await cargar('lineas');
   const acl = await cargar('aclaraciones'), yaAcl = new Set(acl.map(a => String(a.dn)));
   const t = tabla({
-    filas: li, filtros: ['grupo', 'estatus', 'gerente', 'supervisor', 'cadena'], exportar: 'Lineas',
+    filas: li, filtros: ['grupo', 'estatus', 'causa', 'gerente', 'supervisor', 'cadena'], exportar: 'Lineas',
     nota: '"Habría pagado" es una estimación de lo que la línea pagaría si Telefónica la hubiera validado.',
     cols: [
       { k: 'dn', t: 'DN' }, { k: 'tienda', t: 'Tienda' }, { k: 'idpdv', t: 'IDPDV' }, { k: 'promotor', t: 'Promotor' }, { k: 'usuario_fw', t: 'Usuario FW' },
       { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' }, { k: 'cadena', t: 'Cadena' },
       { k: 'grupo', t: 'Grupo', html: f => f.grupo ? `<span class="badge ${GRUPO_CLASE[f.grupo] || 'b-gr'}">${esc(f.grupo)}</span>` : '' },
-      { k: 'estatus', t: 'Estatus' }, { k: 'motivo', t: 'Motivo' }, { k: 'producto', t: 'Producto' },
+      { k: 'estatus', t: 'Estatus' }, { k: 'motivo', t: 'Motivo' }, { k: 'causa', t: 'Causa' }, { k: 'producto', t: 'Producto' },
       { k: 'fecha_registro', t: 'Fecha registro', tipo: 'f' }, { k: 'fecha_alta', t: 'Fecha alta', tipo: 'f' }, { k: 'monto', t: 'Monto alta', tipo: '$' },
+      { k: 'ajuste', t: 'Ajuste manual' },
       { k: 'comision', t: 'Comisión', tipo: '$' }, { k: 'potencial', t: 'Habría pagado', tipo: '$' },
       { k: '_acl', t: '', soloPantalla: true, html: f => f.dn == null ? '' : yaAcl.has(String(f.dn)) ? '<span class="badge b-az">En aclaración</span>' : `<button class="mini" data-dn="${esc(f.dn)}">Aclarar</button>` },
     ],
@@ -319,6 +334,161 @@ async function pNomina() {
   return t;
 }
 
+/* ---------- promotores: layout, diferencias, ajustes ---------- */
+async function pLayoutProm() {
+  const pr = await cargar('promotores'), m = new Map();
+  pr.filter(f => f.usuario_fw && f.usuario_fw !== 'NO REGISTRO').forEach(f => {
+    const x = m.get(f.usuario_fw) || { usuario: f.usuario_fw, nombre: f.promotor, gerente: f.gerente, supervisor: f.supervisor, temm: 0, total_alc: 0, total: 0 };
+    x.temm += f.comision_temm || 0; x.total_alc += f.comision_prepago || 0; x.total += f.comision || 0; m.set(f.usuario_fw, x);
+  });
+  const r2 = v => Math.round(v * 100) / 100;
+  const filas = [...m.values()].map(x => Object.assign(x, { temm: r2(x.temm), total_alc: r2(x.total_alc), total: r2(x.total) })).filter(x => x.total > 0).sort((a, b) => b.total - a.total);
+  const tot = filas.reduce((a, f) => a + f.total, 0);
+  $('#cards').innerHTML = `<div class="card"><div class="lbl">Layout promotores</div><div class="val nar">${dinero(tot)}</div><div class="sub">${entero(filas.length)} promotores con pago</div></div>`;
+  return tabla({ filas, filtros: ['gerente', 'supervisor'], exportar: 'Layout promotores',
+    nota: 'Lo que se paga a cada promotor esta semana (suma de sus tiendas).' + (SEM.estado === 'previo' ? ' <b class="ambar">La semana sigue en PREVIO.</b>' : ''),
+    cols: [{ k: 'usuario', t: 'Usuario' }, { k: 'nombre', t: 'Nombre' }, { k: 'temm', t: 'Comisión alcance Temm', tipo: '$' },
+      { k: 'total_alc', t: 'Comisión alcance Total', tipo: '$' }, { k: 'total', t: 'Comisión total', tipo: '$' },
+      { k: 'gerente', t: 'Gerente', soloPantalla: true }, { k: 'supervisor', t: 'Supervisor', soloPantalla: true }] });
+}
+
+async function pDiferencias() {
+  const li = (await cargar('lineas')).filter(f => f.grupo === 'No impactada' || f.grupo === 'No pagada');
+  const por = {}; li.forEach(f => por[f.causa || 'Sin causa'] = (por[f.causa || 'Sin causa'] || 0) + 1);
+  $('#cards').innerHTML = Object.entries(por).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([c, n]) => `<div class="card"><div class="lbl">${esc(c)}</div><div class="val">${entero(n)}</div><div class="sub">líneas</div></div>`).join('');
+  return tabla({ filas: li, filtros: ['causa', 'grupo', 'gerente', 'supervisor', 'cadena'], exportar: 'Diferencias',
+    nota: 'Líneas registradas por el promotor que no pagaron: no impactadas (sin alta en proforma) y altas que no pagan. La causa sale del estatus en registros de Telefónica, la vinculación (enrolamiento) y las recargas de ARIX.',
+    cols: [{ k: 'dn', t: 'DN' }, { k: 'tienda', t: 'Tienda' }, { k: 'idpdv', t: 'IDPDV' }, { k: 'promotor', t: 'Promotor' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' },
+      { k: 'grupo', t: 'Grupo', html: f => f.grupo ? `<span class="badge ${GRUPO_CLASE[f.grupo] || 'b-gr'}">${esc(f.grupo)}</span>` : '' },
+      { k: 'estatus', t: 'Estatus' }, { k: 'causa', t: 'Causa' }, { k: 'producto', t: 'Producto' },
+      { k: 'fecha_registro', t: 'Fecha registro', tipo: 'f' }, { k: 'potencial', t: 'Habría pagado', tipo: '$' }] });
+}
+
+async function pAjustes() {
+  const aj = (SEM.totales || {}).ajustes || [];
+  const d = document.createElement('div');
+  const v = (o) => o && o.ajuste != null ? `${o.real == null ? '' : entero(o.real)} → <b>${entero(o.ajuste)}</b>` : (o && o.real != null ? entero(o.real) : '');
+  d.innerHTML = `<p class="note" style="margin-top:0">Apoyos especiales de esta semana: tiendas a las que se les cambió la cuota o se les contaron más altas para que su alcance llegara a pago. Se capturan en el tablero de Comisiones y ya están incluidos en los montos. Solo afectan la comisión de promotores.</p>
+    ${aj.length ? `<div class="tablewrap" style="max-height:none"><table><thead><tr><th>IDPDV</th><th>Tienda</th><th>Gerente</th><th>Supervisor</th><th>Altas nat.</th><th>Cuota Total</th><th>Temm nat.</th><th>Cuota Temm</th><th>Comisión tienda</th><th>Nota</th></tr></thead><tbody>
+    ${aj.map(a => `<tr><td>${esc(a.idpdv)}</td><td>${esc(a.tienda)}</td><td>${esc(a.gerente)}</td><td>${esc(a.supervisor)}</td><td class="num">${v(a.AltasNaturales)}</td><td class="num">${v(a.CuotaTotal)}</td><td class="num">${v(a.AltasNaturalesTemm)}</td><td class="num">${v(a.CuotaTemm)}</td><td class="num">${a.comision != null ? dinero(a.comision) : ''}</td><td>${esc(a.nota)}</td></tr>`).join('')}
+    </tbody></table></div>` : '<div class="vacio">Sin ajustes manuales esta semana.</div>'}`;
+  return d;
+}
+
+/* ---------- operativos: layout ---------- */
+async function pLayoutOper() {
+  const op = (await cargar('operativos')).filter(f => f.nivel !== 'piso' && (f.comision || 0) > 0).map(f => {
+    const d = f.datos || {}, ok = (f.comision || 0) > 0;
+    return { nombre: f.nombre, puesto: f.nivel[0].toUpperCase() + f.nivel.slice(1), gerente: f.gerente,
+      total_alc: ok ? d['Comision General'] || 0 : 0, temm: ok ? d['Comision Temm'] || 0 : 0, porta: ok ? d['Comision Porta'] || 0 : 0, total: f.comision || 0 };
+  }).sort((a, b) => b.total - a.total);
+  const todos = (await cargar('operativos')).filter(f => f.nivel !== 'piso');
+  const suma = n => todos.filter(f => f.nivel === n).reduce((a, f) => a + (f.comision || 0), 0);
+  $('#cards').innerHTML = [['Operativos', op.reduce((a, f) => a + f.total, 0), `${op.length} con pago`], ['Supervisores', suma('supervisor'), ''], ['Gerentes', suma('gerente'), ''], ['Subdirectores', suma('subdirector'), '']]
+    .map(([l, v, s], i) => `<div class="card"><div class="lbl">${l}</div><div class="val ${i ? '' : 'nar'}">${dinero(v)}</div><div class="sub">${s}</div></div>`).join('');
+  return tabla({ filas: op, filtros: ['puesto'], exportar: 'Layout operativos',
+    nota: 'A quién se le paga esta semana. Con candado "No Cumple" no se paga ningún concepto (ver Desglose).',
+    cols: [{ k: 'nombre', t: 'Nombre' }, { k: 'puesto', t: 'Puesto' }, { k: 'total_alc', t: 'Comisión alcance Total', tipo: '$' }, { k: 'temm', t: 'Comisión alcance Temm', tipo: '$' },
+      { k: 'porta', t: 'Comisión alcance Porta', tipo: '$' }, { k: 'total', t: 'Comisión total', tipo: '$' }] });
+}
+
+/* ---------- pospago ---------- */
+async function cargarPos(nivel) {
+  POS = POS || {};
+  if (POS[nivel]) return POS[nivel];
+  $('#estadoPos').textContent = 'Cargando...';
+  const out = [];
+  for (let i = 0; ; i += 1000) {
+    const { data, error } = await sb.from('com_pos_lineas').select('*').eq('corte', CORTE.corte).eq('nivel', nivel).range(i, i + 999);
+    if (error) throw new Error(error.message);
+    out.push(...data); if (data.length < 1000) break;
+  }
+  $('#estadoPos').textContent = '';
+  return POS[nivel] = out;
+}
+const ESTADO_FACT = v => !v ? '' : `<span class="badge ${/^A pagar/.test(v) ? 'b-ok' : v === 'Pagada' ? 'b-gr' : v === 'Espera proforma' ? 'b-am' : /no elegida/.test(v) ? 'b-az' : v === 'Excluida' ? 'b-no' : 'b-gr'}">${esc(v)}</span>`;
+function cardsPos() {
+  const t = CORTE.totales || {}, e = t.espera_proforma || {};
+  $('#cards').innerHTML = [
+    ['Pospago a pagar', dinero(t.total), `${entero(t.promotores)} promotores · ${entero(t.dn_a_pagar)} DN`, 'nar'],
+    ['Facturas promotor', dinero(t.facturas_promotor), 'factura 1, 2 y 3 pagadas en proforma', ''],
+    ['Temm pospago', dinero(t.temm), '1.3% del PVP, tienda con 90% o más de alcance Temm', ''],
+    ['Supervisores', dinero(t.supervisor), '', ''], ['Gerentes', dinero(t.gerente), '', ''],
+    ['Espera proforma', dinero((e.P || 0) + (e.S || 0) + (e.G || 0)), 'el cliente pagó; Telefónica aún no la trae', 'ambar'],
+  ].map(([l, v, s, c]) => `<div class="card"><div class="lbl">${l}</div><div class="val ${c}">${v}</div><div class="sub">${s}</div></div>`).join('');
+}
+async function pPosResumen() {
+  cardsPos();
+  const t = CORTE.totales || {}, otras = t.otras_proformas || [], d = document.createElement('div');
+  d.innerHTML = `<p class="note" style="margin-top:0">Pago de pospago de las proformas <b>${esc(CORTE.proformas.map(p => 'S' + p).join(', '))}</b> · calculado ${esc(CORTE.generado)} · publicado ${fecha(CORTE.publicado_en)}${CORTE.estado === 'previo' ? ' · <b class="ambar">PREVIO</b>' : ''}</p>
+    <h3>Reglas</h3><p class="note">Cada factura (1 a 3) se paga cuando ya viene pagada en la proforma mensual de pospago (mes vencido). Tarifa promotor / supervisor / gerente: factura 1 = 45 / 11 / 8, factura 2 = 78 / 4 / 2, factura 3 = 89 / 30 / 21.
+    El Temm pospago se paga solo al promotor: 1.3% del PVP de la proforma, si la tienda llegó a 90% o más de alcance Temm en la semana de la venta (el pospago Temm no cuenta para ese alcance). El incentivo 100% Porta ya no existe.</p>
+    <h3>Pendiente en proformas que no entran en este pago</h3>
+    <div class="tablewrap" style="max-height:none"><table><thead><tr><th>Proforma</th><th>Promotor</th><th>Supervisor</th><th>Gerente</th></tr></thead><tbody>
+    ${otras.length ? otras.map(o => `<tr><td>${esc(o.proforma)}</td><td class="num">${dinero(o.P)}</td><td class="num">${dinero(o.S)}</td><td class="num">${dinero(o.G)}</td></tr>`).join('') : '<tr><td colspan="4">Nada pendiente.</td></tr>'}
+    </tbody></table></div>`;
+  return d;
+}
+async function pPosNivel(nivel) {
+  cardsPos();
+  const filas = await cargarPos(nivel), temm = nivel === 'promotor';
+  const cols = [{ k: 'dn', t: 'DN' }, { k: 'tipo', t: 'Tipo' }, { k: 'usuario', t: 'Usuario' }, { k: 'nombre', t: 'Promotor' }, { k: 'tienda', t: 'Tienda' },
+    { k: 'semana_alta', t: 'Semana alta' }, { k: 'supervisor', t: 'Supervisor' }, { k: 'gerente', t: 'Gerente' },
+    { k: 'f1', t: 'Factura 1', html: f => ESTADO_FACT(f.f1) }, { k: 'c1', t: 'Comisión F1', tipo: '$' },
+    { k: 'f2', t: 'Factura 2', html: f => ESTADO_FACT(f.f2) }, { k: 'c2', t: 'Comisión F2', tipo: '$' },
+    { k: 'f3', t: 'Factura 3', html: f => ESTADO_FACT(f.f3) }, { k: 'c3', t: 'Comisión F3', tipo: '$' }];
+  if (temm) cols.push({ k: 'temm', t: 'Comisión Temm', tipo: '$' });
+  cols.push({ k: 'total', t: 'Total', tipo: '$' });
+  const conPago = filas.filter(f => (f.total || 0) > 0);
+  const t = tabla({ filas: conPago, filtros: ['tipo', 'f1', 'f2', 'f3', nivel === 'gerente' ? 'gerente' : 'supervisor'], exportar: 'Pospago ' + nivel, cols,
+    extra: `<label class="note"><input type="checkbox" class="todosDN"> Ver todos los DN (también sin pago)</label>`,
+    nota: `Un renglón por DN con lo que se paga de cada factura${temm ? ' y el Temm pospago' : ' (sin Temm)'}. "A pagar": Telefónica ya la pagó en la proforma de este pago. "Espera proforma": el cliente pagó y Telefónica aún no la trae.` });
+  t.querySelector('.todosDN').onchange = async e => { const nuevo = await (async () => { const x = tabla({ filas: e.target.checked ? filas : conPago, filtros: ['tipo', 'f1', 'f2', 'f3', nivel === 'gerente' ? 'gerente' : 'supervisor'], exportar: 'Pospago ' + nivel, cols, nota: '' }); return x; })(); t.replaceWith(nuevo); nuevo.classList.add('panel'); };
+  return t;
+}
+async function pPosTemm() {
+  cardsPos();
+  const f = (await cargarPos('temm')).map(x => Object.assign({}, x.datos || {}, x));
+  return tabla({ filas: f, filtros: ['paga', 'proforma', 'gerente'], exportar: 'Temm pospago',
+    nota: 'Todos los Temm pospago de las proformas desde la S40 y el alcance Temm de su tienda en la semana de la venta.',
+    cols: [{ k: 'dn', t: 'DN' }, { k: 'proforma', t: 'Proforma' }, { k: 'semana_alta', t: 'Semana venta' }, { k: 'tienda', t: 'Tienda' }, { k: 'usuario', t: 'Usuario' }, { k: 'nombre', t: 'Promotor' },
+      { k: 'gerente', t: 'Gerente' }, { k: 'pvp', t: 'PVP', tipo: '$' }, { k: 'temm_naturales', t: 'Temm nat. tienda', tipo: 'n' }, { k: 'cuota_temm', t: 'Cuota Temm', tipo: 'n' },
+      { k: 'alcance_temm', t: '% Alcance Temm', tipo: '%' }, { k: 'paga', t: 'Paga', html: x => x.paga ? `<span class="badge ${x.paga === 'Sí' ? 'b-ok' : 'b-no'}">${esc(x.paga)}</span>` : '' },
+      { k: 'temm', t: 'Comisión Temm', tipo: '$' }] });
+}
+async function pPosLayout() {
+  cardsPos();
+  const r2 = v => Math.round(v * 100) / 100;
+  const agrupa = (filas, clave, extra) => { const m = new Map(); filas.filter(f => (f.total || 0) > 0).forEach(f => { const k = f[clave] || '(sin dato)'; const x = m.get(k) || extra(f, k); x.dn++; x.total += f.total; if (x.temm != null) { x.temm += f.temm || 0; } m.set(k, x); }); return [...m.values()].map(x => Object.assign(x, { total: r2(x.total) }, x.temm != null ? { temm: r2(x.temm), facturas: r2(x.total - x.temm) } : {})).sort((a, b) => b.total - a.total); };
+  const lp = agrupa(await cargarPos('promotor'), 'usuario', (f, k) => ({ usuario: k, nombre: f.nombre, dn: 0, temm: 0, total: 0 }));
+  const ls = agrupa(await cargarPos('supervisor'), 'supervisor', (f, k) => ({ nombre: k, dn: 0, total: 0 }));
+  const lg = agrupa(await cargarPos('gerente'), 'gerente', (f, k) => ({ nombre: k, dn: 0, total: 0 }));
+  const d = document.createElement('div');
+  const sec = (t, el) => { const h = document.createElement('h3'); h.textContent = t; d.appendChild(h); d.appendChild(el); };
+  sec('Promotores', tabla({ filas: lp, exportar: 'Layout pospago promotores', cols: [{ k: 'usuario', t: 'Usuario' }, { k: 'nombre', t: 'Nombre' }, { k: 'facturas', t: 'Comisión facturas', tipo: '$' }, { k: 'temm', t: 'Comisión Temm', tipo: '$' }, { k: 'total', t: 'Total', tipo: '$' }] }));
+  sec('Supervisores', tabla({ filas: ls, exportar: 'Layout pospago supervisores', cols: [{ k: 'nombre', t: 'Supervisor' }, { k: 'dn', t: 'DN', tipo: 'n' }, { k: 'total', t: 'Comisión', tipo: '$' }] }));
+  sec('Gerentes', tabla({ filas: lg, exportar: 'Layout pospago gerentes', cols: [{ k: 'nombre', t: 'Gerente' }, { k: 'dn', t: 'DN', tipo: 'n' }, { k: 'total', t: 'Comisión', tipo: '$' }] }));
+  return d;
+}
+function elegirCorte(c) {
+  CORTE = CORTES.find(x => x.corte === c); POS = null;
+  if (!CORTE) return;
+  $('#corteInfo').innerHTML = `proformas ${esc(CORTE.proformas.map(p => 'S' + p).join(', '))} · <span class="badge ${CORTE.estado === 'pagada' ? 'b-ok' : 'b-am'}">${CORTE.estado === 'pagada' ? 'Pagada' : 'Previo'}</span>`;
+  $('#estadoCorte').value = CORTE.estado;
+  $('#sub').textContent = `Pospago · proformas ${CORTE.proformas.map(p => 'S' + p).join(', ')}`;
+}
+async function seccion(s) {
+  SEC = s; try { localStorage.setItem('gb_com_portal_sec', s); } catch (e) { }
+  document.querySelectorAll('#secciones button').forEach(b => b.classList.toggle('active', b.dataset.s === s));
+  $('#barPos').classList.toggle('oculto', s !== 'pos'); $('#barSem').classList.toggle('oculto', s === 'pos');
+  $('#cards').innerHTML = '';
+  if (s === 'pos') elegirCorte(CORTE ? CORTE.corte : (CORTES[0] || {}).corte);
+  else if (SEM) $('#sub').textContent = `Semana ${SEM.semana} · ${SEM.rango}`;
+  const primera = PESTANAS.find(p => p.sec === s && es(...p.roles));
+  await abrirTab(PESTANAS.find(p => p.id === activa && p.sec === s && es(...p.roles)) ? activa : primera.id);
+}
+
 /* ---------- arranque ---------- */
 async function elegirSemana(s) {
   SEM = SEMANAS.find(x => x.semana === s); DATOS = {};
@@ -328,7 +498,7 @@ async function elegirSemana(s) {
   $('#estadoSem').value = SEM.estado;
   $('#sub').textContent = `Semana ${SEM.semana} · ${SEM.rango}`;
   $('#cards').innerHTML = '';
-  await abrirTab(PESTANAS.find(p => p.id === activa && es(...p.roles)) ? activa : 'resumen');
+  if (SEC !== 'pos') await abrirTab(PESTANAS.find(p => p.id === activa && p.sec === SEC && es(...p.roles)) ? activa : PESTANAS.find(p => p.sec === SEC).id);
 }
 
 async function entrar() {
@@ -344,7 +514,21 @@ async function entrar() {
   const { data, error } = await sb.from('com_semanas').select('*').order('semana', { ascending: false });
   if (error) return setEstado(error.message, true);
   SEMANAS = data;
-  if (!SEMANAS.length) { $('#panels').innerHTML = '<div class="panel vacio">Todavía no hay semanas publicadas.</div>'; return; }
+  const rc = await sb.from('com_pos_cortes').select('*').order('publicado_en', { ascending: false });
+  CORTES = rc.data || [];
+  $('#corte').innerHTML = CORTES.map(c => `<option value="${esc(c.corte)}">${esc(c.proformas.map(p => 'S' + p).join(' + '))}</option>`).join('');
+  $('#corte').onchange = e => { elegirCorte(e.target.value); abrirTab(activa); };
+  $('#admCorte').classList.toggle('oculto', YO.rol !== 'admin');
+  $('#estadoCorte').onchange = async e => {
+    const nuevo = e.target.value;
+    if (!confirm(`¿Marcar el pago de pospago ${CORTE.corte} como ${nuevo === 'pagada' ? 'Pagado' : 'Previo'}?`)) { e.target.value = CORTE.estado; return; }
+    const { error } = await sb.from('com_pos_cortes').update({ estado: nuevo }).eq('corte', CORTE.corte);
+    if (error) { setEstado(error.message, true); e.target.value = CORTE.estado; return; }
+    CORTE.estado = nuevo; elegirCorte(CORTE.corte);
+  };
+  document.querySelectorAll('#secciones button').forEach(b => b.onclick = () => seccion(b.dataset.s));
+  try { const g = localStorage.getItem('gb_com_portal_sec'); if (['prom', 'oper', 'pos'].includes(g)) SEC = g; } catch (e) { }
+  if (!SEMANAS.length) { await seccion('pos'); return; }
   $('#semana').innerHTML = SEMANAS.map(s => `<option value="${esc(s.semana)}">${esc(s.semana)} · ${esc(s.rango)}</option>`).join('');
   let g = null; try { g = localStorage.getItem('gb_com_portal_semana'); } catch (e) { }
   const ini = SEMANAS.some(s => s.semana === g) ? g : SEMANAS[0].semana;
@@ -357,7 +541,9 @@ async function entrar() {
     if (error) { setEstado(error.message, true); e.target.value = SEM.estado; return; }
     SEM.estado = nuevo; elegirSemana(SEM.semana);
   };
+  SEM = SEMANAS.find(x => x.semana === ini);
   await elegirSemana(ini);
+  if (SEC !== 'prom') await seccion(SEC); else document.querySelectorAll('#secciones button').forEach(b => b.classList.toggle('active', b.dataset.s === 'prom'));
 }
 
 (async () => {

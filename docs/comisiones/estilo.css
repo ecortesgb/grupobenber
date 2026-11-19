@@ -76,3 +76,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
   .hoja .total{font-size:15px;font-weight:700;text-align:right;margin-top:8px}
   .hoja .pie{margin-top:14px;color:#666;font-size:9px}
 }
+
+nav.secciones{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+nav.secciones button{font-size:15px;padding:9px 18px;border-radius:999px;border:1px solid var(--line,#EAE6E2);background:#fff;font-weight:600;cursor:pointer}
+nav.secciones button.active{background:#17191D;border-color:#17191D;color:#fff}
