@@ -14,6 +14,8 @@ const CUOTAS = { final: 'Final (proforma)', original: 'Original Telefónica', be
 const ESTADOS_SEM = { previo: ['Previo', 'b-am'], final: ['Final', 'b-az'], pagada: ['Pagada', 'b-ok'] };
 const ESTADOS_ACL = ['Pendiente', 'Enviada', 'Resuelta', 'Rechazada'];
 const CLASE_ACL = { Pendiente: 'b-am', Enviada: 'b-az', Resuelta: 'b-ok', Rechazada: 'b-no' };
+const MESES = { 1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic' };
+const mesesTxt = c => (c.proformas || []).map(m => MESES[m] || m).join(', ');
 const GRUPO_CLASE = { 'Pagada': 'b-ok', 'Pagable en $0': 'b-am', 'No pagada': 'b-no', 'No impactada': 'b-az', 'Otra semana': 'b-gr', 'Sin actividad': 'b-gr' };
 
 let sb, YO = null, SEMANAS = [], SEM = null, DATOS = {}, SEC = 'prom', CORTES = [], CORTE = null, POS = null;
@@ -118,7 +120,8 @@ const PESTANAS = [
   { id: 'layoutO', sec: 'oper', t: 'Resumen y layout', roles: TODOS, fn: pLayoutOper },
   { id: 'operativos', sec: 'oper', t: 'Desglose', roles: TODOS, fn: pOperativos },
   { id: 'posRes', sec: 'pos', t: 'Resumen', roles: TODOS, fn: pPosResumen },
-  { id: 'posP', sec: 'pos', t: 'Desglose promotor', roles: TODOS, fn: () => pPosNivel('promotor') },
+  { id: 'posD', sec: 'pos', t: 'Desglose promotores', roles: TODOS, fn: pPosDesglose },
+  { id: 'posP', sec: 'pos', t: 'Por DN (promotor)', roles: TODOS, fn: () => pPosNivel('promotor') },
   { id: 'posS', sec: 'pos', t: 'Supervisor', roles: TODOS, fn: () => pPosNivel('supervisor') },
   { id: 'posG', sec: 'pos', t: 'Gerente', roles: TODOS, fn: () => pPosNivel('gerente') },
   { id: 'posT', sec: 'pos', t: 'Temm pospago', roles: TODOS, fn: pPosTemm },
@@ -411,7 +414,7 @@ const ESTADO_FACT = v => !v ? '' : `<span class="badge ${/^A pagar/.test(v) ? 'b
 function cardsPos() {
   const t = CORTE.totales || {}, e = t.espera_proforma || {};
   $('#cards').innerHTML = [
-    ['Pospago a pagar', dinero(t.total), `${entero(t.promotores)} promotores · ${entero(t.dn_a_pagar)} DN`, 'nar'],
+    ['Pospago a pagar ' + (CORTE.semana_pago || ''), dinero(t.total), `${entero(t.promotores)} promotores · ${entero(t.dn_a_pagar)} DN`, 'nar'],
     ['Facturas promotor', dinero(t.facturas_promotor), 'factura 1, 2 y 3 pagadas en proforma', ''],
     ['Temm pospago', dinero(t.temm), '1.3% del PVP, tienda con 90% o más de alcance Temm', ''],
     ['Supervisores', dinero(t.supervisor), '', ''], ['Gerentes', dinero(t.gerente), '', ''],
@@ -421,7 +424,7 @@ function cardsPos() {
 async function pPosResumen() {
   cardsPos();
   const t = CORTE.totales || {}, otras = t.otras_proformas || [], d = document.createElement('div');
-  d.innerHTML = `<p class="note" style="margin-top:0">Pago de pospago de las proformas <b>${esc(CORTE.proformas.map(p => 'S' + p).join(', '))}</b> · calculado ${esc(CORTE.generado)} · publicado ${fecha(CORTE.publicado_en)}${CORTE.estado === 'previo' ? ' · <b class="ambar">PREVIO</b>' : ''}</p>
+  d.innerHTML = `<p class="note" style="margin-top:0">Pago de pospago de la semana <b>${esc(CORTE.semana_pago || CORTE.corte)}</b> con lo que nos pagaron en las proformas de <b>${esc(mesesTxt(CORTE))}</b> · calculado ${esc(CORTE.generado)} · publicado ${fecha(CORTE.publicado_en)}${CORTE.estado === 'previo' ? ' · <b class="ambar">PREVIO</b>' : ''}</p>
     <h3>Reglas</h3><p class="note">Cada factura (1 a 3) se paga cuando ya viene pagada en la proforma mensual de pospago (mes vencido). Tarifa promotor / supervisor / gerente: factura 1 = 45 / 11 / 8, factura 2 = 78 / 4 / 2, factura 3 = 89 / 30 / 21.
     El Temm pospago se paga solo al promotor: 1.3% del PVP de la proforma, si la tienda llegó a 90% o más de alcance Temm en la semana de la venta (el pospago Temm no cuenta para ese alcance). El incentivo 100% Porta ya no existe.</p>
     <h3>Pendiente en proformas que no entran en este pago</h3>
@@ -446,6 +449,29 @@ async function pPosNivel(nivel) {
     nota: `Un renglón por DN con lo que se paga de cada factura${temm ? ' y el Temm pospago' : ' (sin Temm)'}. "A pagar": Telefónica ya la pagó en la proforma de este pago. "Espera proforma": el cliente pagó y Telefónica aún no la trae.` });
   t.querySelector('.todosDN').onchange = async e => { const nuevo = await (async () => { const x = tabla({ filas: e.target.checked ? filas : conPago, filtros: ['tipo', 'f1', 'f2', 'f3', nivel === 'gerente' ? 'gerente' : 'supervisor'], exportar: 'Pospago ' + nivel, cols, nota: '' }); return x; })(); t.replaceWith(nuevo); nuevo.classList.add('panel'); };
   return t;
+}
+const COLS_DES = ['ID PDV', 'Nombre PDV', 'Usuario', 'Nombre Usuario', 'Rol de usuario', 'Cadena', 'Region', 'Gerente', 'Supervisor', 'DN', 'DNS', 'FACTURA',
+  'DES_CICLO', 'FECHA_ALTA', 'Sem Alta', 'COD_CUENTA', 'FECHA_EMISION', 'FECHA_PAGO', 'CANAL_PAGO', 'MONTO_FACTURA', 'SALDO_PENDIENTE', 'ESTATUS_FACTURA',
+  'PLAN', 'FECHA_VENCIMIENTO', 'NUM_FACT', 'ESTATUS', 'FECHA_EXPORTADO', 'FECHA_BAJA', 'TERRITORIO_PV', 'PLAZA_PV', 'CVE_ABONADO_TEMM', 'Producto Registro',
+  'Monto Recarga', 'Costo Equipo', 'Fecha registro', 'DES_FORMA_PAGO', 'Pagado Proforma', 'Comision F1', 'Comision F2', 'Comision F3', 'Comision Temm-Pos', 'Comision Total'];
+async function pPosDesglose() {
+  cardsPos();
+  const todas = (await cargarPos('desglose')).map(x => Object.assign({ DN: x.dn }, x.datos || {}));
+  const hoy = new Set(todas.filter(f => (f._hoy || 0) > 0).map(f => f.DN));
+  const sem = CORTE.semana_pago || CORTE.corte;
+  const cols = COLS_DES.map(k => ({ k, t: k, tipo: /^FECHA|Fecha registro/.test(k) ? 'f' : k === 'Comision Total' || k === 'MONTO_FACTURA' || k === 'SALDO_PENDIENTE' ? '$' : '' }));
+  const d = document.createElement('div');
+  d.innerHTML = `<div class="toolbar"><label class="note"><input type="radio" name="vdes" value="hoy" checked> Solo lo que se paga en ${esc(sem)} (${entero(hoy.size)} DN)</label>
+    <label class="note"><input type="radio" name="vdes" value="todo"> Todo el detalle (${entero(new Set(todas.map(f => f.DN)).size)} DN)</label></div>`;
+  const pinta = modo => {
+    const filas = modo === 'hoy' ? todas.filter(f => hoy.has(f.DN)) : todas;
+    const t = tabla({ filas, cols, filtros: ['Gerente', 'Supervisor', 'Usuario', 'Sem Alta'], exportar: 'Desglose pospago ' + sem + (modo === 'hoy' ? '' : ' completo'),
+      nota: 'Un renglón por factura de cada alta. En la última factura de cada DN: "Pagado Proforma" = en qué mes nos pagó Telefónica cada factura; "Comision F1/F2/F3" y "Comision Temm-Pos" = en qué semana se pagó o se paga al promotor. "DNS" es el DN con asteriscos para compartir con promotores.' });
+    const viejo = d.querySelector('.tdes'); t.classList.add('tdes'); viejo ? viejo.replaceWith(t) : d.appendChild(t);
+  };
+  d.querySelectorAll('input[name=vdes]').forEach(r => r.onchange = () => pinta(r.value));
+  pinta('hoy');
+  return d;
 }
 async function pPosTemm() {
   cardsPos();
@@ -474,9 +500,9 @@ async function pPosLayout() {
 function elegirCorte(c) {
   CORTE = CORTES.find(x => x.corte === c); POS = null;
   if (!CORTE) return;
-  $('#corteInfo').innerHTML = `proformas ${esc(CORTE.proformas.map(p => 'S' + p).join(', '))} · <span class="badge ${CORTE.estado === 'pagada' ? 'b-ok' : 'b-am'}">${CORTE.estado === 'pagada' ? 'Pagada' : 'Previo'}</span>`;
+  $('#corteInfo').innerHTML = `proformas ${esc(mesesTxt(CORTE))} · <span class="badge ${CORTE.estado === 'pagada' ? 'b-ok' : 'b-am'}">${CORTE.estado === 'pagada' ? 'Pagada' : 'Previo'}</span>`;
   $('#estadoCorte').value = CORTE.estado;
-  $('#sub').textContent = `Pospago · proformas ${CORTE.proformas.map(p => 'S' + p).join(', ')}`;
+  $('#sub').textContent = `Pospago · pago ${CORTE.semana_pago || CORTE.corte} · proformas ${mesesTxt(CORTE)}`;
 }
 async function seccion(s) {
   SEC = s; try { localStorage.setItem('gb_com_portal_sec', s); } catch (e) { }
@@ -516,7 +542,7 @@ async function entrar() {
   SEMANAS = data;
   const rc = await sb.from('com_pos_cortes').select('*').order('publicado_en', { ascending: false });
   CORTES = rc.data || [];
-  $('#corte').innerHTML = CORTES.map(c => `<option value="${esc(c.corte)}">${esc(c.proformas.map(p => 'S' + p).join(' + '))}</option>`).join('');
+  $('#corte').innerHTML = CORTES.map(c => `<option value="${esc(c.corte)}">${esc((c.semana_pago || c.corte) + ' (' + mesesTxt(c) + ')')}</option>`).join('');
   $('#corte').onchange = e => { elegirCorte(e.target.value); abrirTab(activa); };
   $('#admCorte').classList.toggle('oculto', YO.rol !== 'admin');
   $('#estadoCorte').onchange = async e => {
