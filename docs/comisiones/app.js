@@ -122,6 +122,7 @@ const PESTANAS = [
   { id: 'posRes', sec: 'pos', t: 'Resumen', roles: TODOS, fn: pPosResumen },
   { id: 'posD', sec: 'pos', t: 'Desglose promotores', roles: TODOS, fn: pPosDesglose },
   { id: 'posR', sec: 'pos', t: 'Resumen por DN', roles: TODOS, fn: () => pPosDesglose(true) },
+  { id: 'posPP', sec: 'pos', t: 'Pendiente pago proforma', roles: TODOS, fn: pPosPendiente },
   { id: 'posP', sec: 'pos', t: 'Por DN (promotor)', roles: TODOS, fn: () => pPosNivel('promotor') },
   { id: 'posS', sec: 'pos', t: 'Supervisor', roles: TODOS, fn: () => pPosNivel('supervisor') },
   { id: 'posG', sec: 'pos', t: 'Gerente', roles: TODOS, fn: () => pPosNivel('gerente') },
@@ -489,6 +490,18 @@ async function pPosDesglose(porDN) {
   d.querySelectorAll('input[name=vdes]').forEach(r => r.onchange = () => pinta(r.value));
   pinta('hoy');
   return d;
+}
+async function pPosPendiente() {
+  const f = (await cargarPos('pendiente')).map(x => Object.assign({ DN: x.dn }, x.datos || {}));
+  const rec = f.filter(x => /reclamar/.test(x.Estado || ''));
+  $('#cards').innerHTML = [['Reclamar a Telefónica', entero(rec.length), `facturas · ${dinero(rec.reduce((a, x) => a + (x['Comision promotor'] || 0), 0))} de comisión a promotor`, 'mal'],
+    ['Por llegar', entero(f.length - rec.length), 'facturas que llegan en la siguiente proforma', 'ambar']]
+    .map(([l, v, s, c]) => `<div class="card"><div class="lbl">${l}</div><div class="val ${c}">${v}</div><div class="sub">${s}</div></div>`).join('');
+  const cols = ['ID PDV', 'Nombre PDV', 'Usuario', 'Nombre Usuario', 'Gerente', 'Supervisor', 'DN', 'DNS', 'FECHA_ALTA', 'Sem Alta', 'Fecha registro', 'Factura',
+    'Fecha pago cliente', 'Mes pago cliente', 'Proforma esperada', 'Estado', 'Comision promotor', 'Pagado a promotor', 'Pago manual']
+    .map(k => ({ k, t: k, tipo: /FECHA|Fecha/.test(k) ? 'f' : /Comision|Pagado a/.test(k) ? '$' : '' }));
+  return tabla({ filas: f, cols, filtros: ['Estado', 'Proforma esperada', 'Mes pago cliente', 'Gerente', 'Factura'], exportar: 'Pendiente pago proforma',
+    nota: 'Facturas (1 a 3) que el cliente ya pagó y que Telefónica no nos ha pagado en ninguna proforma. Telefónica paga la factura 1 de un alta en la proforma del mes siguiente (N1), la 2 dos meses después (N2) y la 3 tres meses después (N3). "No vino: reclamar" = esa proforma ya llegó y no la trajo.' });
 }
 async function pPosTemm() {
   cardsPos();
