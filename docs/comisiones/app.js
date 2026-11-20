@@ -462,9 +462,17 @@ const COLS_RES = ['ID PDV', 'Nombre PDV', 'Usuario', 'Nombre Usuario', 'Rol de u
 async function pPosDesglose(porDN) {
   cardsPos();
   let todas = (await cargarPos('desglose')).map(x => Object.assign({ DN: x.dn }, x.datos || {}));
-  if (porDN) {          // una fila por DN: la de su última factura (ahí viene el resumen de pago)
-    const m = new Map(); todas.forEach(f => { const y = m.get(f.DN); if (!y || (f.NUM_FACT || 0) >= (y.NUM_FACT || 0)) m.set(f.DN, f); });
-    todas = [...m.values()];
+  if (porDN) {          // una fila por DN: datos de su última factura y lo de todas sus facturas junto
+    const g = new Map();
+    todas.slice().sort((a, b) => (a.NUM_FACT || 0) - (b.NUM_FACT || 0)).forEach(f => { if (!g.has(f.DN)) g.set(f.DN, []); g.get(f.DN).push(f); });
+    const une = (fs, k) => fs.map(f => f[k]).filter(x => x).join(' - ');
+    const junta = lista => { let ant = null; return lista.map(x => { const [mes, fa] = x.split(' = '); const o = mes === ant ? fa : x; ant = mes; return o; }).join(' - '); };
+    todas = [...g.values()].map(fs => Object.assign({}, fs[fs.length - 1], {
+      'Pagado Proforma': junta(fs.map(f => f['Pagado Proforma']).filter(x => x)),
+      'Comision F1': une(fs, 'Comision F1'), 'Comision F2': une(fs, 'Comision F2'), 'Comision F3': une(fs, 'Comision F3'),
+      'Comision Temm-Pos': une(fs, 'Comision Temm-Pos'),
+      'Comision Total': Math.round(fs.reduce((a, f) => a + (f['Comision Total'] || 0), 0) * 100) / 100,
+      _hoy: fs.reduce((a, f) => a + (f._hoy || 0), 0) }));
   }
   const hoy = new Set(todas.filter(f => (f._hoy || 0) > 0).map(f => f.DN));
   const sem = CORTE.semana_pago || CORTE.corte;
@@ -475,7 +483,7 @@ async function pPosDesglose(porDN) {
   const pinta = modo => {
     const filas = modo === 'hoy' ? todas.filter(f => hoy.has(f.DN)) : todas;
     const t = tabla({ filas, cols, filtros: ['Gerente', 'Supervisor', 'Usuario', 'Sem Alta'], exportar: (porDN ? 'Resumen DN pospago ' : 'Desglose pospago ') + sem + (modo === 'hoy' ? '' : ' completo'),
-      nota: porDN ? 'Una fila por DN: estructura, alta, registro y lo que se ha pagado de cada factura y del Temm.' : 'Un renglón por factura de cada alta. En la última factura de cada DN: "Pagado Proforma" = en qué mes nos pagó Telefónica cada factura; "Comision F1/F2/F3" y "Comision Temm-Pos" = en qué semana se pagó o se paga al promotor. "DNS" es el DN con asteriscos para compartir con promotores.' });
+      nota: porDN ? 'Una fila por DN: estructura, alta, registro y lo que se ha pagado de cada factura y del Temm.' : 'Un renglón por factura (1 a 3) de cada alta. "Pagado Proforma" = en qué mes nos pagó Telefónica esa factura; "Comision F1/F2/F3" = en qué semana se pagó o se paga al promotor; el Temm va en el renglón de la factura 1. "DNS" es el DN con asteriscos para compartir con promotores.' });
     const viejo = d.querySelector('.tdes'); t.classList.add('tdes'); viejo ? viejo.replaceWith(t) : d.appendChild(t);
   };
   d.querySelectorAll('input[name=vdes]').forEach(r => r.onchange = () => pinta(r.value));
