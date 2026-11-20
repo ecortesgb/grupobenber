@@ -102,7 +102,7 @@ function tabla({ cols, filas, filtros = [], nota = '', exportar = null, extra = 
 function excel(nombre, cols, filas) {
   const ws = XLSX.utils.aoa_to_sheet([cols.map(c => c.t), ...filas.map(f => cols.map(c => { const v = f[c.k]; return c.tipo === 'f' ? fecha(v) : (v ?? ''); }))]);
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Datos');
-  XLSX.writeFile(wb, `${nombre} - ${SEM.semana}.xlsx`);
+  XLSX.writeFile(wb, `${nombre} - ${SEC === 'pos' && CORTE ? (CORTE.semana_pago || CORTE.corte) : SEM.semana}.xlsx`);
 }
 
 /* ---------- pestañas ---------- */
@@ -402,6 +402,10 @@ async function pLayoutOper() {
 async function cargarPos(nivel) {
   POS = POS || {};
   if (POS[nivel]) return POS[nivel];
+  if (POS['_' + nivel]) return POS['_' + nivel];
+  return POS['_' + nivel] = cargarPos2(nivel);
+}
+async function cargarPos2(nivel) {
   $('#estadoPos').textContent = 'Cargando...';
   const out = [];
   for (let i = 0; ; i += 1000) {
@@ -460,21 +464,60 @@ const COLS_RES = ['ID PDV', 'Nombre PDV', 'Usuario', 'Nombre Usuario', 'Rol de u
   'DES_CICLO', 'FECHA_ALTA', 'Sem Alta', 'COD_CUENTA', 'PLAN', 'ESTATUS', 'FECHA_EXPORTADO', 'FECHA_BAJA', 'TERRITORIO_PV', 'PLAZA_PV', 'CVE_ABONADO_TEMM',
   'Producto Registro', 'Monto Recarga', 'Costo Equipo', 'Fecha registro', 'DES_FORMA_PAGO', 'Pagado Proforma', 'Comision F1', 'Comision F2', 'Comision F3',
   'Comision Temm-Pos', 'Comision Total'];
+function resumenDN(filas) {       // una fila por DN: datos de su última factura y lo de todas sus facturas junto
+  const g = new Map();
+  filas.slice().sort((a, b) => (a.NUM_FACT || 0) - (b.NUM_FACT || 0)).forEach(f => { if (!g.has(f.DN)) g.set(f.DN, []); g.get(f.DN).push(f); });
+  const une = (fs, k) => fs.map(f => f[k]).filter(x => x).join(' - ');
+  const junta = lista => { let ant = null; return lista.map(x => { const [mes, fa] = x.split(' = '); const o = mes === ant ? fa : x; ant = mes; return o; }).join(' - '); };
+  return [...g.values()].map(fs => Object.assign({}, fs[fs.length - 1], {
+    'Pagado Proforma': junta(fs.map(f => f['Pagado Proforma']).filter(x => x)),
+    'Comision F1': une(fs, 'Comision F1'), 'Comision F2': une(fs, 'Comision F2'), 'Comision F3': une(fs, 'Comision F3'),
+    'Comision Temm-Pos': une(fs, 'Comision Temm-Pos'),
+    'Comision Total': Math.round(fs.reduce((a, f) => a + (f['Comision Total'] || 0), 0) * 100) / 100,
+    _hoy: Math.round(fs.reduce((a, f) => a + (f._hoy || 0), 0) * 100) / 100 }));
+}
+function layoutsPos(P, S, G) {
+  const r2 = v => Math.round(v * 100) / 100;
+  const agrupa = (filas, clave, extra) => { const m = new Map(); filas.filter(f => (f.total || 0) > 0).forEach(f => { const k = f[clave] || '(sin dato)'; const x = m.get(k) || extra(f, k); x.dn++; x.total += f.total; if (x.temm != null) { x.temm += f.temm || 0; } m.set(k, x); }); return [...m.values()].map(x => Object.assign(x, { total: r2(x.total) }, x.temm != null ? { temm: r2(x.temm), facturas: r2(x.total - x.temm) } : {})).sort((a, b) => b.total - a.total); };
+  return { lp: agrupa(P, 'usuario', (f, k) => ({ usuario: k, nombre: f.nombre, dn: 0, temm: 0, total: 0 })),
+    ls: agrupa(S, 'supervisor', (f, k) => ({ nombre: k, dn: 0, total: 0 })), lg: agrupa(G, 'gerente', (f, k) => ({ nombre: k, dn: 0, total: 0 })) };
+}
+async function excelPagoCompleto() {
+  if (!CORTE) return;
+  const sem = CORTE.semana_pago || CORTE.corte, t = CORTE.totales || {};
+  $('#estadoPos').textContent = 'Armando Excel...';
+  const [P, S, G, T, D, PP] = await Promise.all(['promotor', 'supervisor', 'gerente', 'temm', 'desglose', 'pendiente'].map(cargarPos));
+  const plano = x => Object.assign({ DN: x.dn }, x.datos || {});
+  const des = D.map(plano), hoy = new Set(des.filter(f => (f._hoy || 0) > 0).map(f => f.DN));
+  const desHoy = des.filter(f => hoy.has(f.DN)), res = resumenDN(desHoy);
+  const pago = 'Pago ' + sem;
+  const hoja = (cols, filas, f = r => cols.map(c => r[c] ?? '')) => XLSX.utils.aoa_to_sheet([cols, ...filas.map(f)]);
+  const conPago = (cols, filas) => hoja([...cols, pago], filas, r => [...cols.map(c => r[c] ?? ''), r._hoy || 0]);
+  const L = layoutsPos(P, S, G);
+  const nivel = (filas, temm) => hoja(['DN', 'Tipo', 'Usuario', 'Promotor', 'Tienda', 'Semana alta', 'Supervisor', 'Gerente', 'Factura 1', 'Comisión F1', 'Factura 2', 'Comisión F2', 'Factura 3', 'Comisión F3', ...(temm ? ['Comisión Temm'] : []), 'Total'],
+    filas.filter(f => (f.total || 0) > 0), f => [f.dn, f.tipo, f.usuario, f.nombre, f.tienda, f.semana_alta, f.supervisor, f.gerente, f.f1, f.c1, f.f2, f.c2, f.f3, f.c3, ...(temm ? [f.temm] : []), f.total]);
+  const wb = XLSX.utils.book_new();
+  const add = (n, ws) => XLSX.utils.book_append_sheet(wb, ws, n);
+  add('Resumen', XLSX.utils.aoa_to_sheet([['Concepto', 'Valor'], ['Semana de pago', sem], ['Proformas (mes) que se pagan', mesesTxt(CORTE)],
+    ['Facturas promotor', t.facturas_promotor], ['Temm pospago (1.3% PVP)', t.temm], ['Supervisores', t.supervisor], ['Gerentes', t.gerente], ['TOTAL', t.total],
+    ['Promotores', t.promotores], ['DN', t.dn_a_pagar], ['Calculado', CORTE.generado]]));
+  add('Pendiente pago proforma', hoja(['ID PDV', 'Nombre PDV', 'Usuario', 'Nombre Usuario', 'Gerente', 'Supervisor', 'DN', 'DNS', 'FECHA_ALTA', 'Sem Alta', 'Fecha registro', 'Factura',
+    'Fecha pago cliente', 'Mes pago cliente', 'Proforma esperada', 'Estado', 'Comision promotor', 'Pagado a promotor', 'Pago manual'], PP.map(plano)));
+  add('Resumen DN', conPago(COLS_RES, res));
+  add('Desglose promotores', conPago(COLS_DES, desHoy));
+  add('Layout Promotor', hoja(['Usuario', 'Nombre', 'Comisión facturas', 'Comisión Temm', 'Total'], L.lp, r => [r.usuario, r.nombre, r.facturas, r.temm, r.total]));
+  add('Layout Supervisor', hoja(['Supervisor', 'DN', 'Comisión'], L.ls, r => [r.nombre, r.dn, r.total]));
+  add('Layout Gerente', hoja(['Gerente', 'DN', 'Comisión'], L.lg, r => [r.nombre, r.dn, r.total]));
+  add('Desglose Promotor', nivel(P, true)); add('Desglose Supervisor', nivel(S, false)); add('Desglose Gerente', nivel(G, false));
+  add('Temm pospago', hoja(['DN', 'Proforma', 'Semana venta', 'Tienda', 'Usuario', 'Promotor', 'Gerente', 'PVP', 'Temm nat. tienda', 'Cuota Temm', '% Alcance Temm', 'Paga', 'Comisión Temm'],
+    T.map(plano), r => [r.DN, r.proforma, r.semana_alta, r.tienda, r.usuario, r.nombre, r.gerente, r.pvp, r.temm_naturales, r.cuota_temm, r.alcance_temm, r.paga, r.temm]));
+  XLSX.writeFile(wb, `Pospago ${sem} (${mesesTxt(CORTE).replace(/, /g, '-')}).xlsx`);
+  $('#estadoPos').textContent = '';
+}
 async function pPosDesglose(porDN) {
   cardsPos();
   let todas = (await cargarPos('desglose')).map(x => Object.assign({ DN: x.dn }, x.datos || {}));
-  if (porDN) {          // una fila por DN: datos de su última factura y lo de todas sus facturas junto
-    const g = new Map();
-    todas.slice().sort((a, b) => (a.NUM_FACT || 0) - (b.NUM_FACT || 0)).forEach(f => { if (!g.has(f.DN)) g.set(f.DN, []); g.get(f.DN).push(f); });
-    const une = (fs, k) => fs.map(f => f[k]).filter(x => x).join(' - ');
-    const junta = lista => { let ant = null; return lista.map(x => { const [mes, fa] = x.split(' = '); const o = mes === ant ? fa : x; ant = mes; return o; }).join(' - '); };
-    todas = [...g.values()].map(fs => Object.assign({}, fs[fs.length - 1], {
-      'Pagado Proforma': junta(fs.map(f => f['Pagado Proforma']).filter(x => x)),
-      'Comision F1': une(fs, 'Comision F1'), 'Comision F2': une(fs, 'Comision F2'), 'Comision F3': une(fs, 'Comision F3'),
-      'Comision Temm-Pos': une(fs, 'Comision Temm-Pos'),
-      'Comision Total': Math.round(fs.reduce((a, f) => a + (f['Comision Total'] || 0), 0) * 100) / 100,
-      _hoy: fs.reduce((a, f) => a + (f._hoy || 0), 0) }));
-  }
+  if (porDN) todas = resumenDN(todas);
   const hoy = new Set(todas.filter(f => (f._hoy || 0) > 0).map(f => f.DN));
   const sem = CORTE.semana_pago || CORTE.corte;
   const cols = (porDN ? COLS_RES : COLS_DES).map(k => ({ k, t: k, tipo: /^FECHA|Fecha registro/.test(k) ? 'f' : k === 'Comision Total' || k === 'MONTO_FACTURA' || k === 'SALDO_PENDIENTE' ? '$' : '' }));
@@ -484,7 +527,7 @@ async function pPosDesglose(porDN) {
     <label class="note"><input type="radio" name="vdes" value="todo"> Todo el detalle (${entero(new Set(todas.map(f => f.DN)).size)} DN)</label></div>`;
   const pinta = modo => {
     const filas = modo === 'hoy' ? todas.filter(f => hoy.has(f.DN)) : todas;
-    const t = tabla({ filas, cols, filtros: ['Gerente', 'Supervisor', 'Usuario', 'Sem Alta'], exportar: (porDN ? 'Resumen DN pospago ' : 'Desglose pospago ') + sem + (modo === 'hoy' ? '' : ' completo'),
+    const t = tabla({ filas, cols, filtros: ['Gerente', 'Supervisor', 'Usuario', 'Sem Alta'], exportar: (porDN ? 'Resumen DN pospago' : 'Desglose pospago') + (modo === 'hoy' ? '' : ' completo'),
       nota: porDN ? 'Una fila por DN: estructura, alta, registro y lo que se ha pagado de cada factura y del Temm.' : 'Un renglón por factura (1 a 3) de cada alta. "Pagado Proforma" = en qué mes nos pagó Telefónica esa factura; "Comision F1/F2/F3" = en qué semana se pagó o se paga al promotor; el Temm va en el renglón de la factura 1. "DNS" es el DN con asteriscos para compartir con promotores.' });
     const viejo = d.querySelector('.tdes'); t.classList.add('tdes'); viejo ? viejo.replaceWith(t) : d.appendChild(t);
   };
@@ -516,11 +559,7 @@ async function pPosTemm() {
 }
 async function pPosLayout() {
   cardsPos();
-  const r2 = v => Math.round(v * 100) / 100;
-  const agrupa = (filas, clave, extra) => { const m = new Map(); filas.filter(f => (f.total || 0) > 0).forEach(f => { const k = f[clave] || '(sin dato)'; const x = m.get(k) || extra(f, k); x.dn++; x.total += f.total; if (x.temm != null) { x.temm += f.temm || 0; } m.set(k, x); }); return [...m.values()].map(x => Object.assign(x, { total: r2(x.total) }, x.temm != null ? { temm: r2(x.temm), facturas: r2(x.total - x.temm) } : {})).sort((a, b) => b.total - a.total); };
-  const lp = agrupa(await cargarPos('promotor'), 'usuario', (f, k) => ({ usuario: k, nombre: f.nombre, dn: 0, temm: 0, total: 0 }));
-  const ls = agrupa(await cargarPos('supervisor'), 'supervisor', (f, k) => ({ nombre: k, dn: 0, total: 0 }));
-  const lg = agrupa(await cargarPos('gerente'), 'gerente', (f, k) => ({ nombre: k, dn: 0, total: 0 }));
+  const { lp, ls, lg } = layoutsPos(await cargarPos('promotor'), await cargarPos('supervisor'), await cargarPos('gerente'));
   const d = document.createElement('div');
   const sec = (t, el) => { const h = document.createElement('h3'); h.textContent = t; d.appendChild(h); d.appendChild(el); };
   sec('Promotores', tabla({ filas: lp, exportar: 'Layout pospago promotores', cols: [{ k: 'usuario', t: 'Usuario' }, { k: 'nombre', t: 'Nombre' }, { k: 'facturas', t: 'Comisión facturas', tipo: '$' }, { k: 'temm', t: 'Comisión Temm', tipo: '$' }, { k: 'total', t: 'Total', tipo: '$' }] }));
@@ -574,6 +613,7 @@ async function entrar() {
   const rc = await sb.from('com_pos_cortes').select('*').order('publicado_en', { ascending: false });
   CORTES = rc.data || [];
   $('#corte').innerHTML = CORTES.map(c => `<option value="${esc(c.corte)}">${esc((c.semana_pago || c.corte) + ' (' + mesesTxt(c) + ')')}</option>`).join('');
+  $('#posXls').onclick = () => excelPagoCompleto().catch(e => { $('#estadoPos').textContent = e.message; });
   $('#corte').onchange = e => { elegirCorte(e.target.value); abrirTab(activa); };
   $('#admCorte').classList.toggle('oculto', YO.rol !== 'admin');
   $('#estadoCorte').onchange = async e => {
