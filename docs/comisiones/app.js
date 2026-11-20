@@ -10,7 +10,7 @@ const entero = v => Number(v || 0).toLocaleString('es-MX');
 const pct = v => v == null ? '' : (Number(v) * 100).toFixed(1) + '%';
 const fecha = v => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
 const ROLES = { admin: 'Administrador', direccion: 'Dirección', gerente: 'Gerente', supervisor: 'Supervisor', nomina: 'Nómina' };
-const CUOTAS = { final: 'Final (proforma)', original: 'Original Telefónica', benber: 'Benber (agencia)' };
+const CUOTAS = { benber: 'Benber (motor)', original: 'Telefónica original', final: 'Proforma (histórico)' };
 const ESTADOS_SEM = { previo: ['Previo', 'b-am'], final: ['Final', 'b-az'], pagada: ['Pagada', 'b-ok'] };
 const ESTADOS_ACL = ['Pendiente', 'Enviada', 'Resuelta', 'Rechazada'];
 const CLASE_ACL = { Pendiente: 'b-am', Enviada: 'b-az', Resuelta: 'b-ok', Rechazada: 'b-no' };
@@ -18,7 +18,7 @@ const MESES = { 1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: '
 const mesesTxt = c => (c.proformas || []).map(m => MESES[m] || m).join(', ');
 const GRUPO_CLASE = { 'Pagada': 'b-ok', 'Pagable en $0': 'b-am', 'No pagada': 'b-no', 'No impactada': 'b-az', 'Otra semana': 'b-gr', 'Sin actividad': 'b-gr' };
 
-let sb, YO = null, SEMANAS = [], SEM = null, DATOS = {}, SEC = 'prom', CORTES = [], CORTE = null, POS = null;
+let sb, YO = null, SEMANAS = [], SEM = null, DATOS = {}, SEC = 'prom', CORTES = [], CORTE = null, POS = null, VISTA = null;   // VISTA = cuota que se está viendo
 
 function setEstado(t, err) { const e = $('#estado'); e.textContent = t || ''; e.className = 'estado' + (err ? ' err' : ''); }
 const ver = id => ['login', 'sinAcceso', 'portal'].forEach(x => $('#' + x).classList.toggle('oculto', x !== id));
@@ -36,21 +36,17 @@ async function todo(tabla, select, filtros = {}) {
     if (data.length < 1000) return out;
   }
 }
-async function cargar(clave) {          // cada conjunto se baja una sola vez por semana
-  if (DATOS[clave]) return DATOS[clave];
-  const s = { semana: SEM.semana };
+const cuotasSem = () => Object.keys((SEM.totales || {}).cuotas || { [SEM.cuota]: 1 });
+async function cargar(clave, cuota = VISTA) {   // cada conjunto se baja una sola vez por semana y cuota
+  const k = clave === 'aclaraciones' ? clave : clave + '|' + cuota;
+  if (DATOS[k]) return DATOS[k];
+  const s = clave === 'aclaraciones' ? { semana: SEM.semana } : { semana: SEM.semana, cuota };
   setEstado('Cargando ' + clave + '...');
-  const q = {
-    promotores: () => todo('com_promotores', '*', s),
-    lineas: () => todo('com_lineas', '*', s),
-    tiendas: () => todo('com_tiendas', '*', s),
-    operativos: () => todo('com_operativos', '*', s),
-    aclaraciones: () => todo('com_aclaraciones', '*', s),
-  }[clave];
-  DATOS[clave] = await q();
+  DATOS[k] = await todo('com_' + clave, '*', s);
   setEstado('');
-  return DATOS[clave];
+  return DATOS[k];
 }
+const avisoVista = () => VISTA !== SEM.cuota ? ` <b class="ambar">Estás viendo la cuota ${esc(CUOTAS[VISTA])}; la semana se paga con ${esc(CUOTAS[SEM.cuota])}.</b>` : '';
 
 /* ---------- tabla genérica: búsqueda, filtros, orden, páginas, Excel ---------- */
 function tabla({ cols, filas, filtros = [], nota = '', exportar = null, extra = '', alPintar = null }) {
@@ -113,7 +109,9 @@ const PESTANAS = [
   { id: 'layoutP', sec: 'prom', t: 'Layout de pago', roles: TODOS, fn: pLayoutProm },
   { id: 'lineas', sec: 'prom', t: 'Líneas (DN)', roles: REVISAN, fn: pLineas },
   { id: 'diferencias', sec: 'prom', t: 'Diferencias de líneas', roles: REVISAN, fn: pDiferencias },
+  { id: 'compara', sec: 'prom', t: 'Comparativo de cuotas', roles: ['admin', 'direccion', 'gerente', 'supervisor'], fn: pCompara },
   { id: 'tiendas', sec: 'prom', t: 'Tiendas y cuota', roles: REVISAN, fn: pTiendas },
+  { id: 'proforma', sec: 'prom', t: 'Cuota proforma vs Telefónica', roles: REVISAN, fn: pProforma },
   { id: 'ajustes', sec: 'prom', t: 'Ajustes por tienda', roles: REVISAN, fn: pAjustes },
   { id: 'aclaraciones', sec: 'prom', t: 'Aclaraciones', roles: REVISAN, fn: pAclaraciones },
   { id: 'nomina', sec: 'prom', t: 'Nómina', roles: ['admin', 'direccion', 'nomina'], fn: pNomina },
@@ -167,13 +165,16 @@ async function pResumen() {
   }
   $('#cards').innerHTML = cards.map(([l, v, s, c]) => `<div class="card"><div class="lbl">${l}</div><div class="val ${c}">${v}</div><div class="sub">${s}</div></div>`).join('');
   const d = document.createElement('div');
-  let html = `<p class="note" style="margin-top:0">Semana ${esc(SEM.semana)} · ${esc(SEM.rango)} · calculada con cuota <b>${esc(CUOTAS[SEM.cuota])}</b> · publicada ${fecha(SEM.publicado_en)} ${(SEM.publicado_en || '').slice(11, 16)}</p>`;
-  if (es('admin', 'direccion') && t.por_cuota) {
-    const fin = t.por_cuota.final || 0;
-    html += `<h3>Comisión de promotores con cada cuota</h3><div class="tablewrap" style="max-height:none"><table><thead><tr><th>Cuota</th><th>Total</th><th>vs final</th></tr></thead><tbody>
-      ${Object.entries(t.por_cuota).map(([m, v]) => `<tr${m === SEM.cuota ? ' style="font-weight:700"' : ''}><td>${CUOTAS[m]}${m === SEM.cuota ? ' ← usada' : ''}</td><td class="num">${dinero(v)}</td><td class="num">${m === 'final' ? '' : `<span class="${v - fin < 0 ? 'mal' : 'ambar'}">${dinero(v - fin)}</span>`}</td></tr>`).join('')}
+  let html = `<p class="note" style="margin-top:0">Semana ${esc(SEM.semana)} · ${esc(SEM.rango)} · se paga con cuota <b>${esc(CUOTAS[SEM.cuota])}</b> · publicada ${fecha(SEM.publicado_en)} ${(SEM.publicado_en || '').slice(11, 16)}${avisoVista()}</p>`;
+  if (t.cuotas && !es('nomina')) {
+    const b = t.cuotas.benber || {}, o = t.cuotas.original || {}, op = x => Object.values(x.operativos || {}).reduce((a, v) => a + v, 0);
+    const fila = (n, f) => `<tr><td>${n}</td><td class="num">${dinero(f(b))}</td><td class="num">${dinero(f(o))}</td><td class="num"><span class="${f(o) - f(b) < 0 ? 'mal' : 'ambar'}">${dinero(f(o) - f(b))}</span></td></tr>`;
+    html += `<h3>Comisión con cada cuota</h3><div class="tablewrap" style="max-height:none"><table><thead><tr><th></th><th>${CUOTAS.benber}${SEM.cuota === 'benber' ? ' ← paga' : ''}</th><th>${CUOTAS.original}${SEM.cuota === 'original' ? ' ← paga' : ''}</th><th>Diferencia</th></tr></thead><tbody>
+      ${fila('Promotores', x => x.comision_promotores || 0)}${fila('Operativos', op)}${fila('Total', x => (x.comision_promotores || 0) + op(x))}
       </tbody></table></div>
-      <p class="note">${t.proforma_mayor || 0} tiendas con cuota de proforma mayor a la oficial de Telefónica (ver Tiendas y cuota).${Object.keys(t.excepciones_cuota || {}).length ? ` ${Object.keys(t.excepciones_cuota).length} tiendas con cuota distinta a la general.` : ''}</p>`;
+      <p class="note">Benber: la cuota de Telefónica +1 Temm por tienda, Porta mínimo 1 y Total mayor o igual a Temm + Porta. Telefónica original: la cuota diaria del mes sumada por semana. El detalle por promotor y tienda está en "Comparativo de cuotas".</p>`;
+    const pd = t.proforma_diferente || {};
+    if (typeof pd === 'object') html += `<p class="note">Proforma contra cuota de Telefónica: ${entero(pd['Igual'] || 0)} tiendas iguales · <b class="${pd['Diferente'] ? 'mal' : ''}">${entero(pd['Diferente'] || 0)} diferentes</b> · ${entero(pd['No viene en proforma'] || 0)} no vienen · ${entero(pd['Sin Temm en proforma'] || 0)} sin Temm (ver "Cuota proforma vs Telefónica").</p>`;
   }
   if (SEM.estado === 'previo') html += `<p class="note ambar">Semana en PREVIO: los montos pueden cambiar hasta que se marque como Final.</p>`;
   d.innerHTML = html; return d;
@@ -259,18 +260,18 @@ async function pLineas() {
 async function pTiendas() {
   const ti = (await cargar('tiendas')).map(f => Object.assign({}, f.datos || {}, f));
   return tabla({
-    filas: ti, filtros: ['gerente', 'supervisor', 'cadena'], exportar: 'Tiendas',
-    nota: 'Altas contra registros y contra la proforma de Telefónica, y las tres cuotas. "Proforma > original": Telefónica pagó con una cuota más alta que la oficial; revisar para aclaración.',
+    filas: ti, filtros: ['gerente', 'supervisor', 'cadena', 'ProformaDiferente'], exportar: 'Tiendas',
+    nota: 'Altas contra registros y contra la proforma, la cuota Benber, la de Telefónica y la de la proforma (solo para comparar).' + avisoVista(),
     cols: [
       { k: 'idpdv', t: 'IDPDV' }, { k: 'tienda', t: 'Tienda' }, { k: 'cadena', t: 'Cadena' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' },
       { k: 'RegistrosTotales', t: 'Registros', tipo: 'n' }, { k: 'AltasTotales', t: 'Altas', tipo: 'n' }, { k: 'AltasProforma', t: 'Altas proforma', tipo: 'n' },
       { k: 'DifProforma', t: 'Dif. vs proforma', tipo: 'n' }, { k: 'AltasNaturales', t: 'Altas nat.', tipo: 'n' },
       { k: 'ModoCuota', t: 'Cuota usada' }, { k: 'CuotaTotalBenber', t: 'Cuota usada (total)', tipo: 'n' },
-      { k: 'CuotaTotalOriginal', t: 'Cuota original', tipo: 'n' }, { k: 'CuotaTotalAgencia', t: 'Cuota Benber', tipo: 'n' }, { k: 'CuotaTotalProforma', t: 'Cuota proforma', tipo: 'n' },
-      { k: 'CuotaTemmBenber', t: 'Temm usada', tipo: 'n' }, { k: 'CuotaTemmOriginal', t: 'Temm original', tipo: 'n' }, { k: 'CuotaTemmAgencia', t: 'Temm Benber', tipo: 'n' }, { k: 'CuotaTemmProforma', t: 'Temm proforma', tipo: 'n' },
-      { k: 'ProformaMayor', t: 'Proforma > original', html: f => f.ProformaMayor ? '<span class="badge b-no">Sí</span>' : '' },
+      { k: 'CuotaTotalAgencia', t: 'Cuota Benber', tipo: 'n' }, { k: 'CuotaTotalOriginal', t: 'Cuota Telefónica', tipo: 'n' }, { k: 'CuotaTotalProforma', t: 'Cuota proforma', tipo: 'n' },
+      { k: 'CuotaTemmBenber', t: 'Temm usada', tipo: 'n' }, { k: 'CuotaTemmAgencia', t: 'Temm Benber', tipo: 'n' }, { k: 'CuotaTemmOriginal', t: 'Temm Telefónica', tipo: 'n' }, { k: 'CuotaTemmProforma', t: 'Temm proforma', tipo: 'n' },
+      { k: 'ProformaDiferente', t: 'Proforma vs Telefónica', html: f => f.ProformaDiferente ? `<span class="badge ${f.ProformaDiferente === 'Igual' ? 'b-ok' : f.ProformaDiferente === 'Diferente' ? 'b-no' : 'b-gr'}">${esc(f.ProformaDiferente)}</span>` : '' },
       { k: 'AlcanceTotalBenber', t: '% Alcance', tipo: '%' }, { k: 'AlcanceTemmBenber', t: '% Alcance Temm', tipo: '%' },
-      { k: 'Comision final', t: 'Com. cuota final', tipo: '$' }, { k: 'Comision original', t: 'Com. cuota original', tipo: '$' }, { k: 'Comision benber', t: 'Com. cuota Benber', tipo: '$' },
+      { k: 'Comision benber', t: 'Com. cuota Benber', tipo: '$' }, { k: 'Comision original', t: 'Com. cuota Telefónica', tipo: '$' },
       { k: 'Observaciones', t: 'Observaciones' },
     ],
   });
@@ -332,7 +333,7 @@ async function pNomina() {
   const total = filas.reduce((a, f) => a + f.comision, 0);
   const t = tabla({
     filas, filtros: ['tipo', 'gerente'], exportar: 'Nomina comisiones',
-    nota: `Monto a pagar por persona (suma de todas sus tiendas). Total ${dinero(total)}.` + (SEM.estado === 'previo' ? ' <b class="ambar">La semana sigue en PREVIO.</b>' : ''),
+    nota: `Monto a pagar por persona (suma de todas sus tiendas). Total ${dinero(total)}.` + (SEM.estado === 'previo' ? ' <b class="ambar">La semana sigue en PREVIO.</b>' : '') + avisoVista(),
     cols: [{ k: 'tipo', t: 'Tipo' }, { k: 'nombre', t: 'Nombre' }, { k: 'usuario_fw', t: 'Usuario FW' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' },
       { k: 'tiendas', t: 'Tiendas', tipo: 'n' }, { k: 'comision', t: 'A pagar', tipo: '$' }],
   });
@@ -351,7 +352,7 @@ async function pLayoutProm() {
   const tot = filas.reduce((a, f) => a + f.total, 0);
   $('#cards').innerHTML = `<div class="card"><div class="lbl">Layout promotores</div><div class="val nar">${dinero(tot)}</div><div class="sub">${entero(filas.length)} promotores con pago</div></div>`;
   return tabla({ filas, filtros: ['gerente', 'supervisor'], exportar: 'Layout promotores',
-    nota: 'Lo que se paga a cada promotor esta semana (suma de sus tiendas).' + (SEM.estado === 'previo' ? ' <b class="ambar">La semana sigue en PREVIO.</b>' : ''),
+    nota: 'Lo que se paga a cada promotor esta semana (suma de sus tiendas).' + (SEM.estado === 'previo' ? ' <b class="ambar">La semana sigue en PREVIO.</b>' : '') + avisoVista(),
     cols: [{ k: 'usuario', t: 'Usuario' }, { k: 'nombre', t: 'Nombre' }, { k: 'temm', t: 'Comisión alcance Temm', tipo: '$' },
       { k: 'total_alc', t: 'Comisión alcance Total', tipo: '$' }, { k: 'total', t: 'Comisión total', tipo: '$' },
       { k: 'gerente', t: 'Gerente', soloPantalla: true }, { k: 'supervisor', t: 'Supervisor', soloPantalla: true }] });
@@ -379,6 +380,157 @@ async function pAjustes() {
     ${aj.map(a => `<tr><td>${esc(a.idpdv)}</td><td>${esc(a.tienda)}</td><td>${esc(a.gerente)}</td><td>${esc(a.supervisor)}</td><td class="num">${v(a.AltasNaturales)}</td><td class="num">${v(a.CuotaTotal)}</td><td class="num">${v(a.AltasNaturalesTemm)}</td><td class="num">${v(a.CuotaTemm)}</td><td class="num">${a.comision != null ? dinero(a.comision) : ''}</td><td>${esc(a.nota)}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="vacio">Sin ajustes manuales esta semana.</div>'}`;
   return d;
+}
+
+/* ---------- comparativos de cuota ---------- */
+async function pCompara() {
+  const cs = cuotasSem();
+  if (!cs.includes('benber') || !cs.includes('original')) { const d = document.createElement('div'); d.innerHTML = '<div class="vacio">Esta semana se publicó con una sola cuota.</div>'; return d; }
+  const b = await cargar('promotores', 'benber'), o = await cargar('promotores', 'original'), m = new Map();
+  const llave = f => f.usuario_fw + '|' + f.idpdv;
+  b.forEach(f => m.set(llave(f), { promotor: f.promotor, usuario_fw: f.usuario_fw, tienda: f.tienda, idpdv: f.idpdv, gerente: f.gerente, supervisor: f.supervisor,
+    cb: f.cuota_total, ab: f.alcance_total, tb: f.alcance_temm, benber: f.comision || 0, original: 0 }));
+  o.forEach(f => { const x = m.get(llave(f)) || { promotor: f.promotor, usuario_fw: f.usuario_fw, tienda: f.tienda, idpdv: f.idpdv, gerente: f.gerente, supervisor: f.supervisor, benber: 0 };
+    Object.assign(x, { co: f.cuota_total, ao: f.alcance_total, to: f.alcance_temm, original: f.comision || 0 }); m.set(llave(f), x); });
+  const filas = [...m.values()].map(x => Object.assign(x, { dif: Math.round((x.original - x.benber) * 100) / 100 }));
+  const sb_ = filas.reduce((a, f) => a + f.benber, 0), so = filas.reduce((a, f) => a + f.original, 0), cambia = filas.filter(f => Math.abs(f.dif) > 0.005).length;
+  $('#cards').innerHTML = [[CUOTAS.benber + (SEM.cuota === 'benber' ? ' (paga)' : ''), dinero(sb_), ''], [CUOTAS.original + (SEM.cuota === 'original' ? ' (paga)' : ''), dinero(so), ''], ['Diferencia', dinero(so - sb_), `${entero(cambia)} filas cambian`]]
+    .map(([l, v, x], i) => `<div class="card"><div class="lbl">${l}</div><div class="val ${i === 2 ? (so - sb_ < 0 ? 'mal' : 'ambar') : 'nar'}">${v}</div><div class="sub">${x}</div></div>`).join('');
+  const t = tabla({ filas, filtros: ['gerente', 'supervisor'], exportar: 'Comparativo cuotas',
+    extra: '<label style="font-size:13px"><input type="checkbox" class="soloCambia"> Solo los que cambian</label>',
+    nota: 'Comisión de cada promotor por tienda con la cuota Benber y con la de Telefónica. Diferencia = Telefónica menos Benber.',
+    cols: [{ k: 'promotor', t: 'Promotor' }, { k: 'usuario_fw', t: 'Usuario FW' }, { k: 'tienda', t: 'Tienda' }, { k: 'idpdv', t: 'IDPDV' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' },
+      { k: 'cb', t: 'Cuota Benber', tipo: 'n' }, { k: 'co', t: 'Cuota Telefónica', tipo: 'n' }, { k: 'ab', t: '% Alcance Benber', tipo: '%' }, { k: 'ao', t: '% Alcance Telefónica', tipo: '%' },
+      { k: 'tb', t: '% Temm Benber', tipo: '%' }, { k: 'to', t: '% Temm Telefónica', tipo: '%' },
+      { k: 'benber', t: 'Comisión Benber', tipo: '$' }, { k: 'original', t: 'Comisión Telefónica', tipo: '$' }, { k: 'dif', t: 'Diferencia', tipo: '$' }] });
+  const todas = filas.slice();
+  t.querySelector('.soloCambia').onchange = e => { filas.length = 0; filas.push(...(e.target.checked ? todas.filter(f => Math.abs(f.dif) > 0.005) : todas)); t.redibujar(); };
+  return t;
+}
+
+async function pProforma() {
+  const ti = (await cargar('tiendas')).map(f => Object.assign({}, f.datos || {}, f));
+  const por = {}; ti.forEach(f => por[f.ProformaDiferente || 'Sin dato'] = (por[f.ProformaDiferente || 'Sin dato'] || 0) + 1);
+  $('#cards').innerHTML = ['Igual', 'Diferente', 'No viene en proforma', 'Sin Temm en proforma'].map(k => `<div class="card"><div class="lbl">${k}</div><div class="val ${k === 'Diferente' && por[k] ? 'mal' : k === 'Igual' ? 'ok' : ''}">${entero(por[k] || 0)}</div><div class="sub">tiendas</div></div>`).join('');
+  return tabla({ filas: ti, filtros: ['ProformaDiferente', 'gerente', 'supervisor', 'cadena'], exportar: 'Cuota proforma vs Telefonica',
+    nota: 'La cuota de la proforma no paga: se compara contra la cuota diaria de Telefónica sumada por semana, y debe ser igual. Diferencia = proforma menos Telefónica.',
+    cols: [{ k: 'idpdv', t: 'IDPDV' }, { k: 'tienda', t: 'Tienda' }, { k: 'cadena', t: 'Cadena' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' },
+      { k: 'ProformaDiferente', t: 'Resultado', html: f => f.ProformaDiferente ? `<span class="badge ${f.ProformaDiferente === 'Igual' ? 'b-ok' : f.ProformaDiferente === 'Diferente' ? 'b-no' : 'b-gr'}">${esc(f.ProformaDiferente)}</span>` : '' },
+      { k: 'CuotaTotalOriginal', t: 'Total Telefónica', tipo: 'n' }, { k: 'CuotaTotalProforma', t: 'Total proforma', tipo: 'n' }, { k: 'DifProformaTotal', t: 'Dif. total', tipo: 'n' },
+      { k: 'CuotaTemmOriginal', t: 'Temm Telefónica', tipo: 'n' }, { k: 'CuotaTemmProforma', t: 'Temm proforma', tipo: 'n' }, { k: 'DifProformaTemm', t: 'Dif. Temm', tipo: 'n' }] });
+}
+
+/* ---------- desgloses en Excel con el formato de "Base Desglose GB" ---------- */
+const NAR = 'EE6602', OSC = '17191D', SUA = 'FCE3D0';
+function fmtCol(n) {
+  n = String(n).toLowerCase();
+  if (n.includes('comision') || ['pvp', 'montopagoalta', 'recargaacumulada'].includes(n)) return '"$"#,##0.00';
+  if (n.includes('alcance') || n.startsWith('%')) return '0.0%';
+  if (n.startsWith('fecha')) return 'dd/mm/yyyy';
+  return null;
+}
+const aFecha = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : v; };
+function hojaXls(cols, filas, { fh = 2, ft = 1, totales = [], ocultas = [], anchos = {} } = {}) {
+  const aoa = [];
+  for (let i = 1; i < fh; i++) aoa.push([]);
+  aoa.push(cols);
+  filas.forEach(f => aoa.push(cols.map(c => { const v = f[c]; return v == null ? null : (fmtCol(c) === 'dd/mm/yyyy' ? aFecha(v) : v); })));
+  const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+  const L = j => XLSX.utils.encode_col(j), n = filas.length;
+  cols.forEach((c, j) => {
+    const h = ws[L(j) + fh]; h.s = { fill: { fgColor: { rgb: NAR } }, font: { bold: true, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true } };
+    const z = fmtCol(c);
+    if (z) for (let r = fh + 1; r <= fh + n; r++) { const x = ws[L(j) + r]; if (x) x.z = z; }
+    if (totales.includes(c)) {
+      const sum = filas.reduce((a, f) => a + (Number(f[c]) || 0), 0);
+      ws[L(j) + ft] = { t: 'n', v: sum, z: z || '#,##0', s: { font: { bold: true }, fill: { fgColor: { rgb: SUA } } } };
+    }
+  });
+  ws['!cols'] = cols.map(c => ({ wch: anchos[c] || Math.min(Math.max(String(c).length + 3, 11), 34), hidden: ocultas.includes(c) }));
+  ws['!rows'] = []; ws['!rows'][fh - 1] = { hpt: 32 };
+  ws['!autofilter'] = { ref: `A${fh}:${L(cols.length - 1)}${fh + Math.max(n, 1)}` };
+  ws['!ref'] = `A1:${L(cols.length - 1)}${fh + Math.max(n, 1)}`;
+  ws['!protect'] = { password: 'CR7', autoFilter: false, sort: false, formatColumns: false, formatRows: false, selectLockedCells: false, selectUnlockedCells: false };
+  return ws;
+}
+const etiqueta = (ws, celda, v, s) => { ws[celda] = { t: typeof v === 'number' ? 'n' : 's', v, s }; };
+const numSem = () => +(/S(\d+)/.exec(SEM.semana) || [0, 0])[1];
+const modoArchivo = () => SEM.estado === 'previo' ? 'Previo' : 'Final';
+const sufCuota = () => VISTA !== SEM.cuota ? ` - cuota ${VISTA}` : '';
+const dns = dn => { const t = String(dn || ''); return t.length === 10 ? t.slice(0, 2) + '****' + t.slice(-4) : t; };
+
+async function desgloseProm() {
+  setEstado('Armando desglose...');
+  const pr = await cargar('promotores'), li = await cargar('lineas'), ti = await cargar('tiendas');
+  const wb = XLSX.utils.book_new();
+  // Resumen
+  const CR = ['Columna1', 'IDPDV', 'NOMBRE DE PUNTO DE VENTA', 'Usuario FW', 'Nombre Usuario FW', 'GERENTE / LIDER', 'SUPERVISOR', 'Temm Prom', 'Temm No Natural Prom', 'Temm Natural Prom',
+    'Altas Totales Prom', 'Altas No Natural Prom', 'Altas Natural Prom', 'Temm Total PDV', 'Temm No Natural PDV', 'Temm Natural PDV', 'Cuota Temm PDV', '% Alcance Temm',
+    'Altas Totales PDV', 'Altas No Natural PDV', 'Altas Natural PDV', 'Cuota Total PDV', '% Alcance Total', 'Comision Temm Prom', 'Comision Prepago Prom', 'Comision Total Prom'];
+  const fr = pr.map(f => Object.assign({}, f.datos || {}, { 'Columna1': `${f.idpdv}${f.usuario_fw}`, IDPDV: f.idpdv, 'NOMBRE DE PUNTO DE VENTA': f.tienda, 'Usuario FW': f.usuario_fw,
+    'Nombre Usuario FW': f.promotor, 'GERENTE / LIDER': f.gerente, SUPERVISOR: f.supervisor, 'Temm Prom': f.temm, 'Temm Natural Prom': f.temm_nat, 'Altas Totales Prom': f.altas,
+    'Altas Natural Prom': f.altas_nat, 'Cuota Temm PDV': f.cuota_temm, '% Alcance Temm': f.alcance_temm, 'Cuota Total PDV': f.cuota_total, '% Alcance Total': f.alcance_total,
+    'Comision Temm Prom': f.comision_temm, 'Comision Prepago Prom': f.comision_prepago, 'Comision Total Prom': f.comision }))
+    .sort((a, b) => String(a['GERENTE / LIDER']).localeCompare(String(b['GERENTE / LIDER'])) || String(a.SUPERVISOR).localeCompare(String(b.SUPERVISOR)) || String(a['NOMBRE DE PUNTO DE VENTA']).localeCompare(String(b['NOMBRE DE PUNTO DE VENTA'])));
+  const w1 = hojaXls(CR, fr, { fh: 7, ft: 6, ocultas: ['Columna1'], totales: CR.slice(7, 13).concat(CR.slice(23)),
+    anchos: { 'NOMBRE DE PUNTO DE VENTA': 36, 'Nombre Usuario FW': 34, 'GERENTE / LIDER': 30, SUPERVISOR: 30 } });
+  for (let r = 1; r <= 4; r++) for (let j = 0; j < CR.length; j++) { const c = XLSX.utils.encode_col(j) + r; w1[c] = w1[c] || { t: 's', v: '' }; w1[c].s = { fill: { fgColor: { rgb: NAR } } }; }
+  etiqueta(w1, 'C1', 'DESGLOSE PROMOTORES (COMISIONES)', { font: { bold: true, sz: 22, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: NAR } } });
+  etiqueta(w1, 'C3', `Sem ${numSem()}  (${SEM.rango})${sufCuota()}`, { font: { bold: true, sz: 16, color: { rgb: OSC } }, fill: { fgColor: { rgb: NAR } } });
+  [[7, 6, 'ALTAS TEMM Y TOTALES PROMOTOR'], [13, 10, 'ALCANCES TEMM Y TOTALES PDV'], [23, 3, 'COMISION PROMOTOR']].forEach(([j0, k, txt]) => {
+    for (let j = j0; j < j0 + k; j++) { const c = XLSX.utils.encode_col(j) + 5; w1[c] = { t: 's', v: j === j0 ? txt : '', s: { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: OSC } } } }; }
+  });
+  w1['!merges'] = [{ s: { r: 0, c: 2 }, e: { r: 1, c: 7 } }, { s: { r: 2, c: 2 }, e: { r: 3, c: 7 } }];
+  XLSX.utils.book_append_sheet(wb, w1, 'Resumen');
+  // Desglose Comisiones (por DN)
+  const CD = ['Semana Año', 'IDPDV', 'NombrePDV', 'Cadena', 'Region', 'Gerente', 'Supervisor', 'Lider', 'DNS', 'DN', 'UsuarioRegistro', 'Promotor', 'IDPDVRegistro', 'FechaRegistro',
+    'HoraRegistro', 'MontoRecargaRegistro', 'MontoEquipoRegistro', 'ProductoRegistro', 'FechaEnvioDNI', 'HoraEnvioDNI', 'NumeroRecargas', 'RecargaAcumulada', 'DetalleRecargas',
+    'VinculacionSemanaVencida', 'VinculacionActual', 'IDPDVAlta', 'SemanaAlta', 'FechaAlta', 'SerieICC', 'ICC', 'SerieIMEI', 'IMEI', 'Modelo', 'MontoPagoAlta', 'PVP', 'Producto_Alta',
+    'FechaAltaTelefonica', 'EstatusTelefonica', 'EstatusComision', 'Fuente_Origen', 'Altas Total', 'Altas Naturales', 'Cuota Total', 'Alcance Total', 'Temm Total', 'Temm Naturales',
+    'Cuota Temm', 'Alcance Temm', 'Comision Temm', 'Comision Prepago', 'Comision Total'];
+  const fd = li.filter(f => f.idpdv).map(f => { const d = f.datos || {}, icc = String(d.ICC || ''), imei = d.IMEI ? String(Math.round(Number(d.IMEI)) || d.IMEI) : '';
+    return Object.assign({}, d, { IDPDV: f.idpdv, NombrePDV: f.tienda, Cadena: f.cadena, Gerente: f.gerente, Supervisor: f.supervisor, DNS: dns(f.dn), DN: f.dn,
+      UsuarioRegistro: f.usuario_fw || 'NO REGISTRO', Promotor: f.promotor || 'NO REGISTRO', FechaRegistro: f.fecha_registro, FechaAlta: f.fecha_alta,
+      SerieICC: icc.length >= 5 ? '***************' + icc.slice(-5) : null, SerieIMEI: imei.length >= 8 ? imei.slice(0, 4) + '*******' + imei.slice(-4) : null,
+      MontoPagoAlta: f.monto, PVP: f.pvp, Producto_Alta: f.producto, EstatusComision: f.estatus, 'Comision Temm': f.comision_temm, 'Comision Prepago': f.comision_prepago, 'Comision Total': f.comision });
+  });
+  const w2 = hojaXls(CD, fd, { fh: 2, ft: 1, totales: ['Comision Temm', 'Comision Prepago', 'Comision Total'],
+    anchos: { NombrePDV: 32, Gerente: 28, Supervisor: 28, Lider: 26, Promotor: 30, DetalleRecargas: 28, Modelo: 28 } });
+  [[10, 'REGISTROS FIELDWY'], [18, "DNI'S"], [25, 'ALTAS PROFORMA'], [36, 'ESTATUS'], [40, 'ALCANCES']].forEach(([j, t]) => etiqueta(w2, XLSX.utils.encode_col(j) + 1, t, { font: { bold: true, color: { rgb: NAR } } }));
+  const prom = k => { const v = fd.map(f => Number(f[k])).filter(x => x > 0); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : 0; };
+  etiqueta(w2, 'AG1', 'Ticket Promedio:', { font: { bold: true } });
+  w2.AH1 = { t: 'n', v: prom('MontoPagoAlta'), z: '0' }; w2.AI1 = { t: 'n', v: prom('PVP'), z: '"$"#,##0.00' };
+  XLSX.utils.book_append_sheet(wb, w2, 'Desglose Comisiones');
+  // Alcances PDV
+  const CA = ['IDPDV', 'NombrePDV', 'Cadena', 'Region', 'Gerente', 'Supervisor', 'RegistrosTotales', 'AltasTotales', 'Natural', 'RegistroDestiempo', 'RegistroSemAnterior', 'RegistroSemPosterior',
+    'Impulso', 'Dni', 'NoRegistro', 'NoProforma', 'AltaSemanaDiferente', 'NoAsignacionPDV', 'AltasNoNaturales', 'AltasNaturales', 'CuotaTotalBenber', 'AlcanceTotalBenber', 'GapTotalBenber',
+    'RegistrosTemm', 'AltasTotalesTemm', 'NaturalTemm', 'RegistroDestiempoTemm', 'RegistroSemAnteriorTemm', 'RegistroSemPosteriorTemm', 'ImpulsoTemm', 'DniTemm', 'NoRegistroTemm',
+    'NoProformaTemm', 'AltaSemanaDiferenteTemm', 'NoAsignacionPDVTemm', 'AltasNoNaturalesTemm', 'AltasNaturalesTemm', 'CuotaTemmBenber', 'AlcanceTemmBenber', 'GapTemmBenber'];
+  const fa = ti.map(f => Object.assign({}, f.datos || {}, { IDPDV: f.idpdv, NombrePDV: f.tienda, Cadena: f.cadena, Gerente: f.gerente, Supervisor: f.supervisor }));
+  XLSX.utils.book_append_sheet(wb, hojaXls(CA, fa, { fh: 2, ft: 1, totales: CA.slice(6).filter(c => !c.startsWith('Alcance')), anchos: { NombrePDV: 32, Gerente: 28, Supervisor: 28 } }), 'Alcances PDV');
+  wb.Workbook = { WBProps: {} };
+  XLSX.writeFile(wb, `Desglose Comisiones Promotoria - Sem ${numSem()} (${SEM.rango}) - ${modoArchivo()}${sufCuota()}.xlsx`);
+  setEstado('');
+}
+
+async function desgloseOper() {
+  setEstado('Armando desglose...');
+  const op = await cargar('operativos'), wb = XLSX.utils.book_new();
+  const T = ['Altas', 'Cuota', 'Comision', 'Gap', 'No Natural', 'Temm', 'Porta', 'Checks', 'Piso', 'Tiendas'];
+  const BASE = ['Altas Totales', 'No Natural Total', 'Altas Totales Naturales', 'Cuota Total Sem', 'Altas Temm', 'Temm No Natural', 'Temm Natural', 'Cuota Temm Sem', 'Altas Porta',
+    'Porta No Natural', 'Porta Natural', 'Cuota Porta Sem', 'Altas Pospago', 'Cuota Pospago Sem', '% Alcance Total', '% Alcance Temm', '% Alcance Porta', '% Alcance Pospago',
+    'Gap Total', 'Gap Temm', 'Gap Porta', 'Gap Pospago', 'Candado Comision', 'Comision General', 'Comision Temm', 'Comision Porta', 'Comision Final'];
+  [['Desglose Supervisor', 'supervisor', ['Semana Año', 'REGION', 'SUBDIRECCION GB', 'GERENTE / LIDER', 'SUPERVISOR', ...BASE], { SUPERVISOR: 34, 'GERENTE / LIDER': 30 }],
+   ['Desglose Gerente', 'gerente', ['Semana Año', 'GERENTE / LIDER', ...BASE], { 'GERENTE / LIDER': 34 }],
+   ['Desglose Subdirector', 'subdirector', ['Semana Año', 'SUBDIRECCION GB', ...BASE], { 'SUBDIRECCION GB': 28 }],
+   ['Desglose Piso Semanal', 'piso', ['GERENTE / LIDER', 'Tiendas Totales', 'Tiendas Cumplen', '% Tiendas Cumplen', 'Cumple Gerente', 'IDPDV', 'NOMBRE PDV', 'CADENA', 'REGION',
+     'SUPERVISOR', 'CATEGORIA', 'Checks A Pago', 'Piso Total', 'Altas Totales', '% Alcance Piso'], { 'GERENTE / LIDER': 32, 'NOMBRE PDV': 34, SUPERVISOR: 32 }]]
+    .forEach(([nombre, nivel, cols, anchos]) => {
+      const filas = op.filter(f => f.nivel === nivel).map(f => f.datos || {});
+      XLSX.utils.book_append_sheet(wb, hojaXls(cols, filas, { fh: 2, ft: 1, totales: cols.filter(c => T.some(p => c.startsWith(p))), anchos }), nombre);
+    });
+  XLSX.writeFile(wb, `Comisiones Operativos - Sem ${numSem()} (${SEM.rango})- ${modoArchivo().toLowerCase()}${sufCuota()}.xlsx`);
+  setEstado('');
 }
 
 /* ---------- operativos: layout ---------- */
@@ -578,6 +730,7 @@ async function seccion(s) {
   SEC = s; try { localStorage.setItem('gb_com_portal_sec', s); } catch (e) { }
   document.querySelectorAll('#secciones button').forEach(b => b.classList.toggle('active', b.dataset.s === s));
   $('#barPos').classList.toggle('oculto', s !== 'pos'); $('#barSem').classList.toggle('oculto', s === 'pos');
+  $('#desgProm').classList.toggle('oculto', s !== 'prom' || es('nomina')); $('#desgOper').classList.toggle('oculto', s !== 'oper');
   $('#cards').innerHTML = '';
   if (s === 'pos') elegirCorte(CORTE ? CORTE.corte : (CORTES[0] || {}).corte);
   else if (SEM) $('#sub').textContent = `Semana ${SEM.semana} · ${SEM.rango}`;
@@ -586,11 +739,17 @@ async function seccion(s) {
 }
 
 /* ---------- arranque ---------- */
+function botonPagar() { $('#pagarCon').classList.toggle('oculto', !es('admin') || !SEM || VISTA === SEM.cuota || SEM.estado === 'pagada'); }
 async function elegirSemana(s) {
-  SEM = SEMANAS.find(x => x.semana === s); DATOS = {};
+  SEM = SEMANAS.find(x => x.semana === s); DATOS = {}; VISTA = SEM.cuota;
   try { localStorage.setItem('gb_com_portal_semana', s); } catch (e) { }
   const [t, c] = ESTADOS_SEM[SEM.estado];
-  $('#semInfo').innerHTML = `${esc(SEM.rango)} · <span class="badge ${c}">${t}</span> · cuota ${esc(CUOTAS[SEM.cuota])}`;
+  $('#semInfo').innerHTML = `${esc(SEM.rango)} · <span class="badge ${c}">${t}</span> · se paga con cuota ${esc(CUOTAS[SEM.cuota])}`;
+  $('#cuotaVer').innerHTML = cuotasSem().map(m => `<option value="${m}">${esc(CUOTAS[m] || m)}${m === SEM.cuota ? ' (paga)' : ''}</option>`).join('');
+  $('#cuotaVer').value = VISTA;
+  $('#lblCuota').classList.toggle('oculto', es('nomina') || cuotasSem().length < 2);
+  botonPagar();
+  $('#desgProm').classList.toggle('oculto', SEC !== 'prom' || es('nomina')); $('#desgOper').classList.toggle('oculto', SEC !== 'oper');
   $('#estadoSem').value = SEM.estado;
   $('#sub').textContent = `Semana ${SEM.semana} · ${SEM.rango}`;
   $('#cards').innerHTML = '';
@@ -635,6 +794,19 @@ async function entrar() {
   const ini = SEMANAS.some(s => s.semana === g) ? g : SEMANAS[0].semana;
   $('#semana').value = ini;
   $('#semana').onchange = e => elegirSemana(e.target.value);
+  $('#cuotaVer').onchange = e => { VISTA = e.target.value; botonPagar(); abrirTab(activa); };
+  $('#desgProm').onclick = () => desgloseProm().catch(x => setEstado(x.message, true));
+  $('#desgOper').onclick = () => desgloseOper().catch(x => setEstado(x.message, true));
+  $('#pagarCon').onclick = async () => {
+    const c = (SEM.totales.cuotas || {})[VISTA] || {}, op = Object.values(c.operativos || {}).reduce((a, v) => a + v, 0);
+    if (!confirm(`¿Pagar la semana ${SEM.semana} con la cuota ${CUOTAS[VISTA]}?
+Promotores ${dinero(c.comision_promotores)} · Operativos ${dinero(op)}.
+Layouts y nómina quedan con esta cuota.`)) return;
+    const tot = Object.assign({}, SEM.totales, { comision_promotores: c.comision_promotores, operativos: c.operativos });
+    const { error } = await sb.from('com_semanas').update({ cuota: VISTA, totales: tot }).eq('semana', SEM.semana);
+    if (error) { setEstado(error.message, true); return; }
+    SEM.cuota = VISTA; SEM.totales = tot; const ds = DATOS; await elegirSemana(SEM.semana); DATOS = ds; setEstado('La semana se paga ahora con ' + CUOTAS[VISTA]);
+  };
   $('#estadoSem').onchange = async e => {
     const nuevo = e.target.value;
     if (!confirm(`¿Marcar la semana ${SEM.semana} como ${ESTADOS_SEM[nuevo][0]}?`)) { e.target.value = SEM.estado; return; }
