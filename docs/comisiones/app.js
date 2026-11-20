@@ -478,6 +478,7 @@ async function pPosDesglose(porDN) {
   const hoy = new Set(todas.filter(f => (f._hoy || 0) > 0).map(f => f.DN));
   const sem = CORTE.semana_pago || CORTE.corte;
   const cols = (porDN ? COLS_RES : COLS_DES).map(k => ({ k, t: k, tipo: /^FECHA|Fecha registro/.test(k) ? 'f' : k === 'Comision Total' || k === 'MONTO_FACTURA' || k === 'SALDO_PENDIENTE' ? '$' : '' }));
+  cols.push({ k: '_hoy', t: 'Pago ' + sem, tipo: '$' });   // solo lo de esta semana: su suma = layout de promotores
   const d = document.createElement('div');
   d.innerHTML = `<div class="toolbar"><label class="note"><input type="radio" name="vdes" value="hoy" checked> Solo lo que se paga en ${esc(sem)} (${entero(hoy.size)} DN)</label>
     <label class="note"><input type="radio" name="vdes" value="todo"> Todo el detalle (${entero(new Set(todas.map(f => f.DN)).size)} DN)</label></div>`;
