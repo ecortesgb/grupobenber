@@ -46,7 +46,8 @@ async function cargar(clave, cuota = VISTA) {   // cada conjunto se baja una sol
   setEstado('');
   return DATOS[k];
 }
-const avisoVista = () => VISTA !== SEM.cuota ? ` <b class="ambar">Estás viendo la cuota ${esc(CUOTAS[VISTA])}; la semana se paga con ${esc(CUOTAS[SEM.cuota])}.</b>` : '';
+const pagaCon = (sec = SEC) => sec === 'oper' ? (SEM.cuota_oper || SEM.cuota) : SEM.cuota;   // cuota de pago de cada sección
+const avisoVista = () => VISTA !== pagaCon() ? ` <b class="ambar">Estás viendo la cuota ${esc(CUOTAS[VISTA])}; ${SEC === 'oper' ? 'operativos se pagan' : 'promotores se pagan'} con ${esc(CUOTAS[pagaCon()])}.</b>` : '';
 
 /* ---------- tabla genérica: búsqueda, filtros, orden, páginas, Excel ---------- */
 function tabla({ cols, filas, filtros = [], nota = '', exportar = null, extra = '', alPintar = null }) {
@@ -112,11 +113,12 @@ const PESTANAS = [
   { id: 'compara', sec: 'prom', t: 'Comparativo de cuotas', roles: ['admin', 'direccion', 'gerente', 'supervisor'], fn: pCompara },
   { id: 'tiendas', sec: 'prom', t: 'Tiendas y cuota', roles: REVISAN, fn: pTiendas },
   { id: 'proforma', sec: 'prom', t: 'Cuota proforma vs Telefónica', roles: REVISAN, fn: pProforma },
-  { id: 'ajustes', sec: 'prom', t: 'Ajustes por tienda', roles: REVISAN, fn: pAjustes },
+  { id: 'alcP', sec: 'prom', t: 'Alcances por tienda', roles: ['admin', 'direccion', 'gerente', 'supervisor'], fn: pAlcances },
   { id: 'aclaraciones', sec: 'prom', t: 'Aclaraciones', roles: REVISAN, fn: pAclaraciones },
   { id: 'nomina', sec: 'prom', t: 'Nómina', roles: ['admin', 'direccion', 'nomina'], fn: pNomina },
   { id: 'layoutO', sec: 'oper', t: 'Resumen y layout', roles: TODOS, fn: pLayoutOper },
   { id: 'operativos', sec: 'oper', t: 'Desglose', roles: TODOS, fn: pOperativos },
+  { id: 'alcO', sec: 'oper', t: 'Alcances por tienda', roles: ['admin', 'direccion', 'gerente', 'supervisor'], fn: pAlcances },
   { id: 'posRes', sec: 'pos', t: 'Resumen', roles: TODOS, fn: pPosResumen },
   { id: 'posD', sec: 'pos', t: 'Desglose promotores', roles: TODOS, fn: pPosDesglose },
   { id: 'posR', sec: 'pos', t: 'Resumen por DN', roles: TODOS, fn: () => pPosDesglose(true) },
@@ -146,7 +148,7 @@ async function abrirTab(id) {
 }
 
 async function pResumen() {
-  const pr = await cargar('promotores'), op = await cargar('operativos');
+  const pr = await cargar('promotores', pagaCon('prom')), op = await cargar('operativos', pagaCon('oper'));
   const t = SEM.totales || {}, alcance = es('admin', 'direccion', 'nomina') ? 'toda la operación' : (YO.rol === 'gerente' ? YO.gerente : YO.supervisor);
   const comProm = pr.reduce((a, f) => a + (f.comision || 0), 0);
   const conPago = new Set(pr.filter(f => f.comision > 0).map(f => f.usuario_fw)).size;
@@ -156,7 +158,7 @@ async function pResumen() {
   const pend = acl.filter(a => a.estado === 'Pendiente' || a.estado === 'Enviada');
   const cards = [
     ['Comisión promotores', dinero(comProm), `${entero(conPago)} promotores con pago · ${esc(alcance)}`, 'nar'],
-    ['Operativos', dinero(oper), 'supervisores, gerentes y subdirección', 'nar'],
+    ['Operativos', dinero(oper), `supervisores, gerentes y subdirección · cuota ${esc(CUOTAS[pagaCon('oper')])}`, 'nar'],
   ];
   if (!es('nomina')) {
     const est = pend.reduce((a, x) => a + (x.monto || 0), 0), por = {};
@@ -165,11 +167,11 @@ async function pResumen() {
   }
   $('#cards').innerHTML = cards.map(([l, v, s, c]) => `<div class="card"><div class="lbl">${l}</div><div class="val ${c}">${v}</div><div class="sub">${s}</div></div>`).join('');
   const d = document.createElement('div');
-  let html = `<p class="note" style="margin-top:0">Semana ${esc(SEM.semana)} · ${esc(SEM.rango)} · se paga con cuota <b>${esc(CUOTAS[SEM.cuota])}</b> · publicada ${fecha(SEM.publicado_en)} ${(SEM.publicado_en || '').slice(11, 16)}${avisoVista()}</p>`;
+  let html = `<p class="note" style="margin-top:0">Semana ${esc(SEM.semana)} · ${esc(SEM.rango)} · promotores se pagan con cuota <b>${esc(CUOTAS[pagaCon('prom')])}</b> y operativos con <b>${esc(CUOTAS[pagaCon('oper')])}</b> · publicada ${fecha(SEM.publicado_en)} ${(SEM.publicado_en || '').slice(11, 16)}${avisoVista()}</p>`;
   if (t.cuotas && !es('nomina')) {
     const b = t.cuotas.benber || {}, o = t.cuotas.original || {}, op = x => Object.values(x.operativos || {}).reduce((a, v) => a + v, 0);
     const fila = (n, f) => `<tr><td>${n}</td><td class="num">${dinero(f(b))}</td><td class="num">${dinero(f(o))}</td><td class="num"><span class="${f(o) - f(b) < 0 ? 'mal' : 'ambar'}">${dinero(f(o) - f(b))}</span></td></tr>`;
-    html += `<h3>Comisión con cada cuota</h3><div class="tablewrap" style="max-height:none"><table><thead><tr><th></th><th>${CUOTAS.benber}${SEM.cuota === 'benber' ? ' ← paga' : ''}</th><th>${CUOTAS.original}${SEM.cuota === 'original' ? ' ← paga' : ''}</th><th>Diferencia</th></tr></thead><tbody>
+    html += `<h3>Comisión con cada cuota</h3><div class="tablewrap" style="max-height:none"><table><thead><tr><th></th><th>${CUOTAS.benber}</th><th>${CUOTAS.original}</th><th>Diferencia</th></tr></thead><tbody>
       ${fila('Promotores', x => x.comision_promotores || 0)}${fila('Operativos', op)}${fila('Total', x => (x.comision_promotores || 0) + op(x))}
       </tbody></table></div>
       <p class="note">Benber: la cuota de Telefónica +1 Temm por tienda, Porta mínimo 1 y Total mayor o igual a Temm + Porta. Telefónica original: la cuota diaria del mes sumada por semana. El detalle por promotor y tienda está en "Comparativo de cuotas".</p>`;
@@ -322,7 +324,7 @@ async function pOperativos() {
 }
 
 async function pNomina() {
-  const pr = await cargar('promotores'), op = await cargar('operativos');
+  const pr = await cargar('promotores', pagaCon('prom')), op = await cargar('operativos', pagaCon('oper'));
   const m = new Map();
   pr.filter(f => f.usuario_fw && f.usuario_fw !== 'NO REGISTRO').forEach(f => {
     const k = 'P|' + f.usuario_fw, x = m.get(k) || { tipo: 'Promotor', nombre: f.promotor, usuario_fw: f.usuario_fw, gerente: f.gerente, supervisor: f.supervisor, tiendas: 0, comision: 0 };
@@ -333,7 +335,7 @@ async function pNomina() {
   const total = filas.reduce((a, f) => a + f.comision, 0);
   const t = tabla({
     filas, filtros: ['tipo', 'gerente'], exportar: 'Nomina comisiones',
-    nota: `Monto a pagar por persona (suma de todas sus tiendas). Total ${dinero(total)}.` + (SEM.estado === 'previo' ? ' <b class="ambar">La semana sigue en PREVIO.</b>' : '') + avisoVista(),
+    nota: `Monto a pagar por persona (suma de todas sus tiendas). Total ${dinero(total)}. Promotores con cuota ${esc(CUOTAS[pagaCon('prom')])}, operativos con ${esc(CUOTAS[pagaCon('oper')])}.` + (SEM.estado === 'previo' ? ' <b class="ambar">La semana sigue en PREVIO.</b>' : ''),
     cols: [{ k: 'tipo', t: 'Tipo' }, { k: 'nombre', t: 'Nombre' }, { k: 'usuario_fw', t: 'Usuario FW' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' },
       { k: 'tiendas', t: 'Tiendas', tipo: 'n' }, { k: 'comision', t: 'A pagar', tipo: '$' }],
   });
@@ -371,14 +373,92 @@ async function pDiferencias() {
       { k: 'fecha_registro', t: 'Fecha registro', tipo: 'f' }, { k: 'potencial', t: 'Habría pagado', tipo: '$' }] });
 }
 
-async function pAjustes() {
-  const aj = (SEM.totales || {}).ajustes || [];
+/* ---------- alcances por tienda y apoyos manuales (com_ajustes) ---------- */
+const PRODS = [['Total', 'altas_nat', 'cuota_total'], ['Temm', 'temm_nat', 'cuota_temm'], ['Porta', 'porta_nat', 'cuota_porta'], ['Pospago', 'pospago', 'cuota_pospago']];
+const APOYO_CLASE = { 'Aplicado': 'b-ok', 'Pendiente de aplicar': 'b-am', 'Quitado, falta aplicar': 'b-no' };
+async function pAlcances() {
+  const ti = (await cargar('tiendas')).map(f => Object.assign({}, f.datos || {}, f));
+  const r = await sb.from('com_ajustes').select('*').eq('semana', SEM.semana);
+  if (r.error) throw new Error(r.error.message);
+  const aj = new Map(r.data.map(a => [String(a.idpdv), a]));
+  const admin = es('admin') && SEM.estado !== 'pagada', pub = new Date(SEM.publicado_en || 0);
+  const estado = f => { const a = aj.get(String(f.idpdv)); return a ? (new Date(a.actualizado_en) > pub ? 'Pendiente de aplicar' : 'Aplicado') : (f.AjusteManual ? 'Quitado, falta aplicar' : ''); };
+  const marcar = f => { f.apoyo = estado(f); const a = aj.get(String(f.idpdv)); f.nota_apoyo = a ? a.nota : (f.AjusteManual || ''); };
+  ti.forEach(marcar);
   const d = document.createElement('div');
-  const v = (o) => o && o.ajuste != null ? `${o.real == null ? '' : entero(o.real)} → <b>${entero(o.ajuste)}</b>` : (o && o.real != null ? entero(o.real) : '');
-  d.innerHTML = `<p class="note" style="margin-top:0">Apoyos especiales de esta semana: tiendas a las que se les cambió la cuota o se les contaron más altas para que su alcance llegara a pago. Se capturan en el tablero de Comisiones y ya están incluidos en los montos. Solo afectan la comisión de promotores.</p>
-    ${aj.length ? `<div class="tablewrap" style="max-height:none"><table><thead><tr><th>IDPDV</th><th>Tienda</th><th>Gerente</th><th>Supervisor</th><th>Altas nat.</th><th>Cuota Total</th><th>Temm nat.</th><th>Cuota Temm</th><th>Comisión tienda</th><th>Nota</th></tr></thead><tbody>
-    ${aj.map(a => `<tr><td>${esc(a.idpdv)}</td><td>${esc(a.tienda)}</td><td>${esc(a.gerente)}</td><td>${esc(a.supervisor)}</td><td class="num">${v(a.AltasNaturales)}</td><td class="num">${v(a.CuotaTotal)}</td><td class="num">${v(a.AltasNaturalesTemm)}</td><td class="num">${v(a.CuotaTemm)}</td><td class="num">${a.comision != null ? dinero(a.comision) : ''}</td><td>${esc(a.nota)}</td></tr>`).join('')}
-    </tbody></table></div>` : '<div class="vacio">Sin ajustes manuales esta semana.</div>'}`;
+  const pintarCards = () => {
+    const n = k => ti.filter(f => f.apoyo === k).length;
+    $('#cards').innerHTML = [['Tiendas con apoyo aplicado', n('Aplicado'), 'ok'], ['Pendientes de aplicar', n('Pendiente de aplicar') + n('Quitado, falta aplicar'), 'ambar'], ['Tiendas', ti.length, '']]
+      .map(([l, v, c]) => `<div class="card"><div class="lbl">${l}</div><div class="val ${v && c ? c : ''}">${entero(v)}</div><div class="sub"></div></div>`).join('');
+  };
+  pintarCards();
+  const ed = document.createElement('div'); ed.className = 'card oculto'; ed.style.cssText = 'box-shadow:none;border:1px solid var(--line);margin-bottom:12px';
+  d.appendChild(ed);
+  const cols = [{ k: 'idpdv', t: 'IDPDV' }, { k: 'tienda', t: 'Tienda' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' }];
+  PRODS.forEach(([p]) => cols.push({ k: p + 'Nat', t: `${p} nat.`, tipo: 'n' }, { k: p + 'Cuota', t: `Cuota ${p}`, tipo: 'n' }, { k: p + 'Alcance', t: `% ${p}`, tipo: '%' }));
+  cols.push({ k: 'apoyo', t: 'Apoyo', html: f => f.apoyo ? `<span class="badge ${APOYO_CLASE[f.apoyo]}">${esc(f.apoyo)}</span>` : '' }, { k: 'nota_apoyo', t: 'Nota' });
+  if (admin) cols.push({ k: '_ed', t: '', soloPantalla: true, html: f => `<button class="mini" data-ed="${esc(f.idpdv)}">${aj.has(String(f.idpdv)) ? 'Editar apoyo' : 'Ajustar'}</button>` });
+  const t = tabla({ filas: ti, filtros: ['gerente', 'supervisor', 'cadena', 'apoyo'], exportar: 'Alcances por tienda',
+    nota: `Altas naturales, cuota y alcance de cada tienda por producto con la cuota ${esc(CUOTAS[VISTA])} (ya con los apoyos aplicados). `
+      + (admin ? 'Con "Ajustar" capturas un apoyo: cambia altas naturales, cuota o alcance de la tienda. Se guarda aquí y se aplica a los desgloses y layouts de promotores y operativos al dar "Aplicar ajustes del portal y republicar" en el tablero local.'
+        : 'Los apoyos los captura administración.'),
+    cols, alPintar: tb => tb.querySelectorAll('button[data-ed]').forEach(b => b.onclick = () => abrir(ti.find(f => String(f.idpdv) === b.dataset.ed))) });
+  d.appendChild(t);
+
+  function abrir(f) {
+    const a = aj.get(String(f.idpdv)) || {}, v = x => x == null ? '' : x;
+    ed.classList.remove('oculto');
+    ed.innerHTML = `<div class="lbl">Apoyo manual · ${esc(f.idpdv)} ${esc(f.tienda)} · ${esc(f.supervisor || '')}</div>
+      <p class="note" style="margin:6px 0">Deja vacío lo que no cambia. Si escribes un alcance, se calculan las altas naturales que lo dan. La cuota que captures aplica igual con cuota Benber y con cuota Telefónica.</p>
+      <div class="tablewrap" style="max-height:none"><table><thead><tr><th>Producto</th><th>Nat. real</th><th>Cuota real</th><th>% real</th><th>Altas nat. apoyo</th><th>Cuota apoyo</th><th>% alcance deseado</th><th>% queda</th></tr></thead><tbody>
+      ${PRODS.map(([p, kn, kc]) => { const nr = f[p + 'NatReal'], cr = f[p + 'CuotaReal'];
+        return `<tr data-p="${p}"><td>${p}</td><td class="num">${entero(nr)}</td><td class="num">${entero(cr)}</td><td class="num">${cr ? pct(nr / cr) : ''}</td>
+          <td><input data-k="${kn}" type="number" min="0" step="1" value="${v(a[kn])}" style="width:80px"></td>
+          <td><input data-k="${kc}" type="number" min="0" step="1" value="${v(a[kc])}" style="width:80px"></td>
+          <td><input data-alc type="number" min="0" step="0.1" style="width:80px"></td><td class="num" data-queda></td></tr>`; }).join('')}
+      </tbody></table></div>
+      <div class="toolbar" style="margin-top:8px"><input data-nota placeholder="Motivo del apoyo (obligatorio)" value="${esc(a.nota || '')}" style="width:360px">
+        <button class="pri" data-g>Guardar apoyo</button>${aj.has(String(f.idpdv)) ? '<button data-q>Quitar apoyo</button>' : ''}<button data-c>Cancelar</button><span class="info" data-msg></span></div>`;
+    const fila = p => ed.querySelector(`tr[data-p="${p}"]`);
+    const recalc = () => PRODS.forEach(([p, kn, kc]) => {
+      const tr = fila(p), n = tr.querySelector(`[data-k="${kn}"]`).value, c = tr.querySelector(`[data-k="${kc}"]`).value;
+      const nat = n !== '' ? +n : (f[p + 'NatReal'] || 0), cuo = c !== '' ? +c : (f[p + 'CuotaReal'] || 0);
+      tr.querySelector('[data-queda]').textContent = cuo ? pct(nat / cuo) : '';
+    });
+    PRODS.forEach(([p, kn, kc]) => {
+      const tr = fila(p);
+      tr.querySelectorAll('[data-k]').forEach(i => i.oninput = recalc);
+      tr.querySelector('[data-alc]').oninput = e => {
+        if (e.target.value === '') return recalc();
+        const c = tr.querySelector(`[data-k="${kc}"]`).value, cuo = c !== '' ? +c : (f[p + 'CuotaReal'] || 0);
+        tr.querySelector(`[data-k="${kn}"]`).value = Math.ceil(+e.target.value / 100 * cuo - 1e-9); recalc();
+      };
+    });
+    recalc();
+    ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const msg = t => ed.querySelector('[data-msg]').textContent = t;
+    const listo = () => { marcar(f); t.redibujar(); pintarCards(); ed.classList.add('oculto'); };
+    ed.querySelector('[data-c]').onclick = () => ed.classList.add('oculto');
+    ed.querySelector('[data-g]').onclick = async () => {
+      const nota = ed.querySelector('[data-nota]').value.trim();
+      if (!nota) return msg('Escribe el motivo del apoyo');
+      const fila_ = { semana: SEM.semana, idpdv: f.idpdv, nota, usuario: YO.nombre || '', actualizado_en: new Date().toISOString() };
+      let algo = false;
+      PRODS.forEach(([p, kn, kc]) => [kn, kc].forEach(k => { const x = ed.querySelector(`[data-k="${k}"]`).value; fila_[k] = x === '' ? null : +x; if (x !== '') algo = true; }));
+      if (!algo) return msg('No capturaste ningún cambio');
+      const { error } = await sb.from('com_ajustes').upsert(fila_, { onConflict: 'semana,idpdv' });
+      if (error) return msg(error.message);
+      aj.set(String(f.idpdv), fila_); listo();
+      setEstado('Apoyo guardado. Se aplica al dar "Aplicar ajustes del portal y republicar" en el tablero local.');
+    };
+    const q = ed.querySelector('[data-q]');
+    if (q) q.onclick = async () => {
+      if (!confirm(`¿Quitar el apoyo de ${f.tienda}?`)) return;
+      const { error } = await sb.from('com_ajustes').delete().eq('semana', SEM.semana).eq('idpdv', f.idpdv);
+      if (error) return msg(error.message);
+      aj.delete(String(f.idpdv)); listo(); setEstado('Apoyo quitado. Se refleja al republicar desde el tablero local.');
+    };
+  }
   return d;
 }
 
@@ -394,7 +474,7 @@ async function pCompara() {
     Object.assign(x, { co: f.cuota_total, ao: f.alcance_total, to: f.alcance_temm, original: f.comision || 0 }); m.set(llave(f), x); });
   const filas = [...m.values()].map(x => Object.assign(x, { dif: Math.round((x.original - x.benber) * 100) / 100 }));
   const sb_ = filas.reduce((a, f) => a + f.benber, 0), so = filas.reduce((a, f) => a + f.original, 0), cambia = filas.filter(f => Math.abs(f.dif) > 0.005).length;
-  $('#cards').innerHTML = [[CUOTAS.benber + (SEM.cuota === 'benber' ? ' (paga)' : ''), dinero(sb_), ''], [CUOTAS.original + (SEM.cuota === 'original' ? ' (paga)' : ''), dinero(so), ''], ['Diferencia', dinero(so - sb_), `${entero(cambia)} filas cambian`]]
+  $('#cards').innerHTML = [[CUOTAS.benber + (pagaCon('prom') === 'benber' ? ' (paga)' : ''), dinero(sb_), ''], [CUOTAS.original + (pagaCon('prom') === 'original' ? ' (paga)' : ''), dinero(so), ''], ['Diferencia', dinero(so - sb_), `${entero(cambia)} filas cambian`]]
     .map(([l, v, x], i) => `<div class="card"><div class="lbl">${l}</div><div class="val ${i === 2 ? (so - sb_ < 0 ? 'mal' : 'ambar') : 'nar'}">${v}</div><div class="sub">${x}</div></div>`).join('');
   const t = tabla({ filas, filtros: ['gerente', 'supervisor'], exportar: 'Comparativo cuotas',
     extra: '<label style="font-size:13px"><input type="checkbox" class="soloCambia"> Solo los que cambian</label>',
@@ -456,7 +536,7 @@ function hojaXls(cols, filas, { fh = 2, ft = 1, totales = [], ocultas = [], anch
 const etiqueta = (ws, celda, v, s) => { ws[celda] = { t: typeof v === 'number' ? 'n' : 's', v, s }; };
 const numSem = () => +(/S(\d+)/.exec(SEM.semana) || [0, 0])[1];
 const modoArchivo = () => SEM.estado === 'previo' ? 'Previo' : 'Final';
-const sufCuota = () => VISTA !== SEM.cuota ? ` - cuota ${VISTA}` : '';
+const sufCuota = () => VISTA !== pagaCon() ? ` - cuota ${VISTA}` : '';
 const dns = dn => { const t = String(dn || ''); return t.length === 10 ? t.slice(0, 2) + '****' + t.slice(-4) : t; };
 
 async function desgloseProm() {
@@ -731,6 +811,7 @@ async function seccion(s) {
   document.querySelectorAll('#secciones button').forEach(b => b.classList.toggle('active', b.dataset.s === s));
   $('#barPos').classList.toggle('oculto', s !== 'pos'); $('#barSem').classList.toggle('oculto', s === 'pos');
   $('#desgProm').classList.toggle('oculto', s !== 'prom' || es('nomina')); $('#desgOper').classList.toggle('oculto', s !== 'oper');
+  if (SEM && s !== 'pos') { VISTA = pagaCon(s); pintarCuotaVer(); }
   $('#cards').innerHTML = '';
   if (s === 'pos') elegirCorte(CORTE ? CORTE.corte : (CORTES[0] || {}).corte);
   else if (SEM) $('#sub').textContent = `Semana ${SEM.semana} · ${SEM.rango}`;
@@ -739,14 +820,17 @@ async function seccion(s) {
 }
 
 /* ---------- arranque ---------- */
-function botonPagar() { $('#pagarCon').classList.toggle('oculto', !es('admin') || !SEM || VISTA === SEM.cuota || SEM.estado === 'pagada'); }
+function botonPagar() { $('#pagarCon').classList.toggle('oculto', !es('admin') || !SEM || SEC === 'pos' || VISTA === pagaCon() || SEM.estado === 'pagada'); $('#pagarCon').textContent = `Pagar ${SEC === 'oper' ? 'operativos' : 'promotores'} con esta cuota`; }
+function pintarCuotaVer() {
+  $('#cuotaVer').innerHTML = cuotasSem().map(m => `<option value="${m}">${esc(CUOTAS[m] || m)}${m === pagaCon() ? ' (paga)' : ''}</option>`).join('');
+  $('#cuotaVer').value = VISTA; botonPagar();
+}
 async function elegirSemana(s) {
-  SEM = SEMANAS.find(x => x.semana === s); DATOS = {}; VISTA = SEM.cuota;
+  SEM = SEMANAS.find(x => x.semana === s); DATOS = {}; VISTA = pagaCon();
   try { localStorage.setItem('gb_com_portal_semana', s); } catch (e) { }
   const [t, c] = ESTADOS_SEM[SEM.estado];
-  $('#semInfo').innerHTML = `${esc(SEM.rango)} · <span class="badge ${c}">${t}</span> · se paga con cuota ${esc(CUOTAS[SEM.cuota])}`;
-  $('#cuotaVer').innerHTML = cuotasSem().map(m => `<option value="${m}">${esc(CUOTAS[m] || m)}${m === SEM.cuota ? ' (paga)' : ''}</option>`).join('');
-  $('#cuotaVer').value = VISTA;
+  $('#semInfo').innerHTML = `${esc(SEM.rango)} · <span class="badge ${c}">${t}</span> · promotores con cuota ${esc(CUOTAS[pagaCon('prom')])} · operativos con ${esc(CUOTAS[pagaCon('oper')])}`;
+  pintarCuotaVer();
   $('#lblCuota').classList.toggle('oculto', es('nomina') || cuotasSem().length < 2);
   botonPagar();
   $('#desgProm').classList.toggle('oculto', SEC !== 'prom' || es('nomina')); $('#desgOper').classList.toggle('oculto', SEC !== 'oper');
@@ -798,14 +882,14 @@ async function entrar() {
   $('#desgProm').onclick = () => desgloseProm().catch(x => setEstado(x.message, true));
   $('#desgOper').onclick = () => desgloseOper().catch(x => setEstado(x.message, true));
   $('#pagarCon').onclick = async () => {
-    const c = (SEM.totales.cuotas || {})[VISTA] || {}, op = Object.values(c.operativos || {}).reduce((a, v) => a + v, 0);
-    if (!confirm(`¿Pagar la semana ${SEM.semana} con la cuota ${CUOTAS[VISTA]}?
-Promotores ${dinero(c.comision_promotores)} · Operativos ${dinero(op)}.
-Layouts y nómina quedan con esta cuota.`)) return;
-    const tot = Object.assign({}, SEM.totales, { comision_promotores: c.comision_promotores, operativos: c.operativos });
-    const { error } = await sb.from('com_semanas').update({ cuota: VISTA, totales: tot }).eq('semana', SEM.semana);
+    const c = (SEM.totales.cuotas || {})[VISTA] || {}, oper = SEC === 'oper';
+    const monto = oper ? Object.values(c.operativos || {}).reduce((a, v) => a + v, 0) : c.comision_promotores;
+    if (!confirm(`¿Pagar ${oper ? 'OPERATIVOS' : 'PROMOTORES'} de la semana ${SEM.semana} con la cuota ${CUOTAS[VISTA]} (${dinero(monto)})? Layout y nómina de ${oper ? 'operativos' : 'promotores'} quedan con esta cuota.`)) return;
+    const tot = Object.assign({}, SEM.totales, oper ? { operativos: c.operativos } : { comision_promotores: c.comision_promotores });
+    const cambio = Object.assign({ totales: tot }, oper ? { cuota_oper: VISTA } : { cuota: VISTA });
+    const { error } = await sb.from('com_semanas').update(cambio).eq('semana', SEM.semana);
     if (error) { setEstado(error.message, true); return; }
-    SEM.cuota = VISTA; SEM.totales = tot; const ds = DATOS; await elegirSemana(SEM.semana); DATOS = ds; setEstado('La semana se paga ahora con ' + CUOTAS[VISTA]);
+    Object.assign(SEM, cambio); const ds = DATOS; await elegirSemana(SEM.semana); DATOS = ds; setEstado(`${oper ? 'Operativos' : 'Promotores'} se pagan ahora con ${CUOTAS[VISTA]}`);
   };
   $('#estadoSem').onchange = async e => {
     const nuevo = e.target.value;
