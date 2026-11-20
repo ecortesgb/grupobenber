@@ -571,7 +571,7 @@ function elegirCorte(c) {
   CORTE = CORTES.find(x => x.corte === c); POS = null;
   if (!CORTE) return;
   $('#corteInfo').innerHTML = `proformas ${esc(mesesTxt(CORTE))} · <span class="badge ${CORTE.estado === 'pagada' ? 'b-ok' : 'b-am'}">${CORTE.estado === 'pagada' ? 'Pagada' : 'Previo'}</span>`;
-  $('#estadoCorte').value = CORTE.estado;
+  $('#posPagado').classList.toggle('oculto', !es('admin', 'nomina') || CORTE.estado === 'pagada');
   $('#sub').textContent = `Pospago · pago ${CORTE.semana_pago || CORTE.corte} · proformas ${mesesTxt(CORTE)}`;
 }
 async function seccion(s) {
@@ -615,13 +615,17 @@ async function entrar() {
   $('#corte').innerHTML = CORTES.map(c => `<option value="${esc(c.corte)}">${esc((c.semana_pago || c.corte) + ' (' + mesesTxt(c) + ')')}</option>`).join('');
   $('#posXls').onclick = () => excelPagoCompleto().catch(e => { $('#estadoPos').textContent = e.message; });
   $('#corte').onchange = e => { elegirCorte(e.target.value); abrirTab(activa); };
-  $('#admCorte').classList.toggle('oculto', YO.rol !== 'admin');
-  $('#estadoCorte').onchange = async e => {
-    const nuevo = e.target.value;
-    if (!confirm(`¿Marcar el pago de pospago ${CORTE.corte} como ${nuevo === 'pagada' ? 'Pagado' : 'Previo'}?`)) { e.target.value = CORTE.estado; return; }
-    const { error } = await sb.from('com_pos_cortes').update({ estado: nuevo }).eq('corte', CORTE.corte);
-    if (error) { setEstado(error.message, true); e.target.value = CORTE.estado; return; }
-    CORTE.estado = nuevo; elegirCorte(CORTE.corte);
+  $('#posPagado').onclick = async () => {
+    if (!CORTE || CORTE.estado === 'pagada') return;
+    const t = CORTE.totales || {}, hoy = new Date().toISOString().slice(0, 10);
+    const f = prompt(`Marcar como PAGADO el pago ${CORTE.semana_pago || CORTE.corte} (${dinero(t.total)}).\nQueda registrado en el libro de pagos y esas facturas ya no vuelven a salir como pendientes.\n\nFecha de pago (AAAA-MM-DD):`, hoy);
+    if (!f) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.trim())) { setEstado('Fecha inválida: usa AAAA-MM-DD', true); return; }
+    $('#estadoPos').textContent = 'Registrando...';
+    const { data, error } = await sb.rpc('com_pos_marcar_pagado', { p_corte: CORTE.corte, p_fecha: f.trim() });
+    if (error) { $('#estadoPos').textContent = error.message; return; }
+    CORTE.estado = 'pagada'; elegirCorte(CORTE.corte);
+    $('#estadoPos').textContent = `Pago registrado: ${entero(data.lineas)} líneas · P ${dinero(data.totales.P)} · S ${dinero(data.totales.S)} · G ${dinero(data.totales.G)}`;
   };
   document.querySelectorAll('#secciones button').forEach(b => b.onclick = () => seccion(b.dataset.s));
   try { const g = localStorage.getItem('gb_com_portal_sec'); if (['prom', 'oper', 'pos'].includes(g)) SEC = g; } catch (e) { }
