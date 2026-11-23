@@ -375,20 +375,20 @@ async function pDiferencias() {
 
 /* ---------- alcances por tienda y apoyos manuales (com_ajustes) ---------- */
 const PRODS = [['Total', 'altas_nat', 'cuota_total'], ['Temm', 'temm_nat', 'cuota_temm'], ['Porta', 'porta_nat', 'cuota_porta'], ['Pospago', 'pospago', 'cuota_pospago']];
-const APOYO_CLASE = { 'Aplicado': 'b-ok', 'Pendiente de aplicar': 'b-am', 'Quitado, falta aplicar': 'b-no' };
+const APOYO_CLASE = { 'Aplicado': 'b-ok', 'Aprobado, falta aplicar': 'b-am', 'Pendiente de aprobar': 'b-am', 'Quitado, falta aplicar': 'b-no' };
 async function pAlcances() {
   const ti = (await cargar('tiendas')).map(f => Object.assign({}, f.datos || {}, f));
   const r = await sb.from('com_ajustes').select('*').eq('semana', SEM.semana);
   if (r.error) throw new Error(r.error.message);
   const aj = new Map(r.data.map(a => [String(a.idpdv), a]));
   const admin = es('admin') && SEM.estado !== 'pagada', pub = new Date(SEM.publicado_en || 0);
-  const estado = f => { const a = aj.get(String(f.idpdv)); return a ? (new Date(a.actualizado_en) > pub ? 'Pendiente de aplicar' : 'Aplicado') : (f.AjusteManual ? 'Quitado, falta aplicar' : ''); };
+  const estado = f => { const a = aj.get(String(f.idpdv)); if (!a) return f.AjusteManual ? 'Quitado, falta aplicar' : ''; if (!a.aprobado) return 'Pendiente de aprobar'; return new Date(a.aprobado_en || a.actualizado_en) > pub ? 'Aprobado, falta aplicar' : 'Aplicado'; };
   const marcar = f => { f.apoyo = estado(f); const a = aj.get(String(f.idpdv)); f.nota_apoyo = a ? a.nota : (f.AjusteManual || ''); };
   ti.forEach(marcar);
   const d = document.createElement('div');
   const pintarCards = () => {
     const n = k => ti.filter(f => f.apoyo === k).length;
-    $('#cards').innerHTML = [['Tiendas con apoyo aplicado', n('Aplicado'), 'ok'], ['Pendientes de aplicar', n('Pendiente de aplicar') + n('Quitado, falta aplicar'), 'ambar'], ['Tiendas', ti.length, '']]
+    $('#cards').innerHTML = [['Tiendas con apoyo aplicado', n('Aplicado'), 'ok'], ['Pendientes de aprobar o aplicar', n('Pendiente de aprobar') + n('Aprobado, falta aplicar') + n('Quitado, falta aplicar'), 'ambar'], ['Tiendas', ti.length, '']]
       .map(([l, v, c]) => `<div class="card"><div class="lbl">${l}</div><div class="val ${v && c ? c : ''}">${entero(v)}</div><div class="sub"></div></div>`).join('');
   };
   pintarCards();
@@ -397,13 +397,27 @@ async function pAlcances() {
   const cols = [{ k: 'idpdv', t: 'IDPDV' }, { k: 'tienda', t: 'Tienda' }, { k: 'gerente', t: 'Gerente' }, { k: 'supervisor', t: 'Supervisor' }];
   PRODS.forEach(([p]) => cols.push({ k: p + 'Nat', t: `${p} nat.`, tipo: 'n' }, { k: p + 'Cuota', t: `Cuota ${p}`, tipo: 'n' }, { k: p + 'Alcance', t: `% ${p}`, tipo: '%' }));
   cols.push({ k: 'apoyo', t: 'Apoyo', html: f => f.apoyo ? `<span class="badge ${APOYO_CLASE[f.apoyo]}">${esc(f.apoyo)}</span>` : '' }, { k: 'nota_apoyo', t: 'Nota' });
-  if (admin) cols.push({ k: '_ed', t: '', soloPantalla: true, html: f => `<button class="mini" data-ed="${esc(f.idpdv)}">${aj.has(String(f.idpdv)) ? 'Editar apoyo' : 'Ajustar'}</button>` });
+  if (admin) cols.push({ k: '_ed', t: '', soloPantalla: true, html: f => `<button class="mini" data-ed="${esc(f.idpdv)}">${aj.has(String(f.idpdv)) ? 'Editar apoyo' : 'Ajustar'}</button>` + (f.apoyo === 'Pendiente de aprobar' ? ` <button class="mini pri" data-ap="${esc(f.idpdv)}">Aprobar</button>` : '') });
   const t = tabla({ filas: ti, filtros: ['gerente', 'supervisor', 'cadena', 'apoyo'], exportar: 'Alcances por tienda',
     nota: `Altas naturales, cuota y alcance de cada tienda por producto con la cuota ${esc(CUOTAS[VISTA])} (ya con los apoyos aplicados). `
-      + (admin ? 'Con "Ajustar" capturas un apoyo: cambia altas naturales, cuota o alcance de la tienda. Se guarda aquí y se aplica a los desgloses y layouts de promotores y operativos al dar "Aplicar ajustes del portal y republicar" en el tablero local.'
+      + (admin ? 'Con "Ajustar" capturas un apoyo: cambia altas naturales, cuota o alcance de la tienda. Se guarda como Pendiente de aprobar; al aprobarlo (botón Aprobar) queda listo y se aplica a desgloses y layouts de promotores y operativos al dar "Aplicar ajustes del portal y republicar" en el tablero local.'
         : 'Los apoyos los captura administración.'),
-    cols, alPintar: tb => tb.querySelectorAll('button[data-ed]').forEach(b => b.onclick = () => abrir(ti.find(f => String(f.idpdv) === b.dataset.ed))) });
+    cols, alPintar: tb => {
+      tb.querySelectorAll('button[data-ed]').forEach(b => b.onclick = () => abrir(ti.find(f => String(f.idpdv) === b.dataset.ed)));
+      tb.querySelectorAll('button[data-ap]').forEach(b => b.onclick = () => aprobar(ti.find(f => String(f.idpdv) === b.dataset.ap)));
+    } });
   d.appendChild(t);
+
+  async function aprobar(f) {
+    const a = aj.get(String(f.idpdv));
+    if (!a) return;
+    if (!confirm(`¿Aprobar el apoyo de ${f.tienda} (${f.idpdv})? Se aplica a desgloses y layouts al republicar desde el tablero local.`)) return;
+    const cambio = { aprobado: true, aprobado_por: YO.nombre || '', aprobado_en: new Date().toISOString() };
+    const { error } = await sb.from('com_ajustes').update(cambio).eq('semana', SEM.semana).eq('idpdv', f.idpdv);
+    if (error) return setEstado(error.message, true);
+    Object.assign(a, cambio); marcar(f); t.redibujar(); pintarCards();
+    setEstado('Apoyo aprobado. Aplícalo al republicar desde el tablero local.');
+  }
 
   function abrir(f) {
     const a = aj.get(String(f.idpdv)) || {}, v = x => x == null ? '' : x;
@@ -442,14 +456,14 @@ async function pAlcances() {
     ed.querySelector('[data-g]').onclick = async () => {
       const nota = ed.querySelector('[data-nota]').value.trim();
       if (!nota) return msg('Escribe el motivo del apoyo');
-      const fila_ = { semana: SEM.semana, idpdv: f.idpdv, nota, usuario: YO.nombre || '', actualizado_en: new Date().toISOString() };
+      const fila_ = { semana: SEM.semana, idpdv: f.idpdv, nota, usuario: YO.nombre || '', actualizado_en: new Date().toISOString(), aprobado: false, aprobado_por: null, aprobado_en: null };
       let algo = false;
       PRODS.forEach(([p, kn, kc]) => [kn, kc].forEach(k => { const x = ed.querySelector(`[data-k="${k}"]`).value; fila_[k] = x === '' ? null : +x; if (x !== '') algo = true; }));
       if (!algo) return msg('No capturaste ningún cambio');
       const { error } = await sb.from('com_ajustes').upsert(fila_, { onConflict: 'semana,idpdv' });
       if (error) return msg(error.message);
       aj.set(String(f.idpdv), fila_); listo();
-      setEstado('Apoyo guardado. Se aplica al dar "Aplicar ajustes del portal y republicar" en el tablero local.');
+      setEstado('Apoyo guardado. Falta aprobarlo: después se aplica al republicar desde el tablero local.');
     };
     const q = ed.querySelector('[data-q]');
     if (q) q.onclick = async () => {
