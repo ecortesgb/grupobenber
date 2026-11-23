@@ -864,6 +864,7 @@ async function entrar() {
   if (!acc) return ver('sinAcceso');
   YO = acc; ver('portal');
   $('#admEstado').classList.toggle('oculto', YO.rol !== 'admin');
+  $('#trab').classList.toggle('oculto', YO.rol !== 'admin');
   const { data, error } = await sb.from('com_semanas').select('*').order('semana', { ascending: false });
   if (error) return setEstado(error.message, true);
   SEMANAS = data;
@@ -893,6 +894,9 @@ async function entrar() {
   $('#semana').value = ini;
   $('#semana').onchange = e => elegirSemana(e.target.value);
   $('#cuotaVer').onchange = e => { VISTA = e.target.value; botonPagar(); abrirTab(activa); };
+  $('#tCalc').onclick = () => pedirTrabajo('calcular');
+  $('#tRecalc').onclick = () => pedirTrabajo('recalcular');
+  $('#tPub').onclick = () => pedirTrabajo('publicar');
   $('#desgProm').onclick = () => desgloseProm().catch(x => setEstado(x.message, true));
   $('#desgOper').onclick = () => desgloseOper().catch(x => setEstado(x.message, true));
   $('#pagarCon').onclick = async () => {
@@ -915,6 +919,28 @@ async function entrar() {
   SEM = SEMANAS.find(x => x.semana === ini);
   await elegirSemana(ini);
   if (SEC !== 'prom') await seccion(SEC); else document.querySelectorAll('#secciones button').forEach(b => b.classList.toggle('active', b.dataset.s === 'prom'));
+}
+
+/* ---------- pedidos de cálculo al trabajador (cola com_trabajos; corre en el PC) ---------- */
+async function pedirTrabajo(tipo) {
+  const s = ($('#semNueva').value.trim().toUpperCase()) || (SEM && SEM.semana);
+  if (!/^26-S\d{2}$/.test(s || '')) return setEstado('Semana inválida: usa el formato 26-S46', true);
+  if (tipo === 'publicar' && !confirm(`¿Publicar o republicar ${s} en el portal? Recalcula con las dos cuotas (unos minutos); conserva cuotas de pago y estado.`)) return;
+  const { data, error } = await sb.from('com_trabajos').insert({ tipo, semana: s, pedido_por: YO.nombre || '' }).select().single();
+  if (error) return setEstado(error.message, true);
+  seguirTrabajo(data.id, tipo, s);
+}
+function seguirTrabajo(id, tipo, s) {
+  setEstado(`${tipo} ${s}: pedido. Espera a que el trabajador lo tome...`);
+  const t = setInterval(async () => {
+    const { data } = await sb.from('com_trabajos').select('*').eq('id', id).single();
+    if (!data) return;
+    if (data.estado === 'pendiente') return setEstado(`${tipo} ${s}: esperando al trabajador (¿está corriendo en el PC?)...`);
+    if (data.estado === 'en_proceso') return setEstado(`${tipo} ${s}: en proceso...`);
+    clearInterval(t);
+    if (data.estado === 'listo') { setEstado(`${tipo} ${s} listo: ${data.mensaje}. Recargando...`); setTimeout(() => location.reload(), 2000); }
+    else setEstado(`Error en ${tipo} ${s}: ${data.mensaje}`, true);
+  }, 5000);
 }
 
 (async () => {
